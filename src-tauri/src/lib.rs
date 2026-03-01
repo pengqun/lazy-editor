@@ -5,6 +5,7 @@ mod web;
 
 use knowledge::db::Database;
 use knowledge::embedder::Embedder;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -12,6 +13,7 @@ pub struct AppState {
     pub db: Arc<Mutex<Database>>,
     pub embedder: Arc<Mutex<Embedder>>,
     pub workspace_path: Arc<Mutex<Option<String>>>,
+    pub cancel_stream: Arc<AtomicBool>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -39,6 +41,7 @@ pub fn run() {
                 db: Arc::new(Mutex::new(db)),
                 embedder: Arc::new(Mutex::new(embedder)),
                 workspace_path: Arc::new(Mutex::new(None)),
+                cancel_stream: Arc::new(AtomicBool::new(false)),
             };
 
             app.manage(state);
@@ -58,6 +61,8 @@ pub fn run() {
             commands::kb::list_kb_documents,
             commands::kb::search_knowledge_base,
             commands::kb::remove_kb_document,
+            // Web commands
+            commands::web::fetch_url,
             // AI commands
             commands::ai::ai_draft,
             commands::ai::ai_expand,

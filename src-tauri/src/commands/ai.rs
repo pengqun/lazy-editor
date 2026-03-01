@@ -3,6 +3,7 @@ use crate::ai::provider::{create_provider, GenerateRequest, Message};
 use crate::knowledge::search;
 use crate::AppState;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
 
@@ -88,12 +89,18 @@ async fn run_ai_action(
     };
 
     // 5. Stream the response
+    state.cancel_stream.store(false, Ordering::SeqCst);
+    let cancel_flag = state.cancel_stream.clone();
+
     let (tx, mut rx) = mpsc::channel::<String>(100);
     let app_handle = app.clone();
 
     // Spawn a task to forward stream chunks to frontend
     let forward_handle = tokio::spawn(async move {
         while let Some(chunk) = rx.recv().await {
+            if cancel_flag.load(Ordering::SeqCst) {
+                break;
+            }
             let _ = app_handle.emit("ai-stream-chunk", &chunk);
         }
         let _ = app_handle.emit("ai-stream-done", ());
@@ -217,8 +224,8 @@ pub async fn ai_summarize(
 }
 
 #[tauri::command]
-pub async fn ai_cancel_stream() -> Result<(), String> {
-    // Cancellation is handled by dropping the stream on the frontend side
+pub async fn ai_cancel_stream(state: State<'_, AppState>) -> Result<(), String> {
+    state.cancel_stream.store(true, Ordering::SeqCst);
     Ok(())
 }
 

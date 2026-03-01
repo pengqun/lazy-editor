@@ -46,7 +46,7 @@ export function Editor() {
     content: "",
     onUpdate: ({ editor }) => {
       if (activeFilePath) {
-        const content = editor.getText();
+        const content = editor.getHTML();
         setActiveFile(activeFilePath, content);
         setDirty(true);
       }
@@ -74,7 +74,7 @@ export function Editor() {
   // Load content when active file changes
   useEffect(() => {
     if (editor && activeFileContent !== undefined) {
-      const currentContent = editor.getText();
+      const currentContent = editor.getHTML();
       if (currentContent !== activeFileContent) {
         editor.commands.setContent(activeFileContent || "");
       }
