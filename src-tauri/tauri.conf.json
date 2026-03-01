@@ -1,0 +1,52 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
+  "productName": "Lazy Editor",
+  "version": "0.1.0",
+  "identifier": "com.lazy-editor.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Lazy Editor",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "decorations": true,
+        "transparent": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "fs": {
+      "scope": {
+        "allow": ["**"],
+        "deny": []
+      }
+    },
+    "dialog": {
+      "all": true
+    },
+    "http": {
+      "scope": {
+        "allow": [
+          { "url": "https://api.anthropic.com/**" },
+          { "url": "https://api.openai.com/**" },
+          { "url": "http://localhost:11434/**" },
+          { "url": "http://127.0.0.1:11434/**" },
+          { "url": "https://**" },
+          { "url": "http://**" }
+        ]
+      }
+    },
+    "store": {}
+  }
+}
