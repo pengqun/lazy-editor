@@ -24,6 +24,7 @@ interface KnowledgeState {
   searchResults: SearchResult[];
   pinnedDocIds: Set<number>;
 
+  setIngestProgress: (msg: string) => void;
   loadDocuments: () => Promise<void>;
   ingestFile: (path: string) => Promise<void>;
   ingestText: (title: string, text: string) => Promise<void>;
@@ -38,6 +39,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   ingestProgress: "",
   searchResults: [],
   pinnedDocIds: new Set(),
+
+  setIngestProgress: (msg) => set({ ingestProgress: msg }),
 
   loadDocuments: async () => {
     try {
