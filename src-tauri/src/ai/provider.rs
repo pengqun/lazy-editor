@@ -18,7 +18,12 @@ pub struct GenerateRequest {
 }
 
 /// Unified trait for all AI providers.
+///
+/// Note: the app currently uses the streaming path (`generate_stream`) end-to-end.
+/// The non-streaming helpers (`name`, `generate`) are intentionally kept for future UI/actions
+/// (e.g. one-shot generation, provider badges, logging).
 #[async_trait]
+#[allow(dead_code)]
 pub trait AiProvider: Send + Sync {
     fn name(&self) -> &str;
 
@@ -52,6 +57,7 @@ impl ClaudeProvider {
 }
 
 #[async_trait]
+#[allow(dead_code)]
 impl AiProvider for ClaudeProvider {
     fn name(&self) -> &str {
         "claude"
@@ -175,6 +181,7 @@ impl OpenAiProvider {
 }
 
 #[async_trait]
+#[allow(dead_code)]
 impl AiProvider for OpenAiProvider {
     fn name(&self) -> &str {
         "openai"
@@ -305,6 +312,7 @@ impl OllamaProvider {
 }
 
 #[async_trait]
+#[allow(dead_code)]
 impl AiProvider for OllamaProvider {
     fn name(&self) -> &str {
         "ollama"

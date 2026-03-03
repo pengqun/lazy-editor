@@ -22,6 +22,9 @@ pub struct KBDocument {
 }
 
 #[derive(Debug, Serialize, Clone)]
+///
+/// Note: kept intentionally for future features (e.g. listing chunks, debug views, editing KB).
+#[allow(dead_code)]
 pub struct Chunk {
     pub id: i64,
     pub document_id: i64,
