@@ -7,6 +7,7 @@ use knowledge::db::Database;
 use knowledge::embedder::Embedder;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::path::PathBuf;
 use tokio::sync::Mutex;
 use tauri::Manager;
 
@@ -15,6 +16,23 @@ pub struct AppState {
     pub embedder: Arc<Mutex<Embedder>>,
     pub workspace_path: Arc<Mutex<Option<String>>>,
     pub cancel_stream: Arc<AtomicBool>,
+}
+
+fn parse_workspace_arg() -> Option<String> {
+    // Accept: --workspace <path> or --workspace=<path>
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--workspace" {
+            if let Some(p) = args.next() {
+                return Some(p);
+            }
+        } else if let Some(rest) = arg.strip_prefix("--workspace=") {
+            if !rest.is_empty() {
+                return Some(rest.to_string());
+            }
+        }
+    }
+    None
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -44,6 +62,16 @@ pub fn run() {
                 workspace_path: Arc::new(Mutex::new(None)),
                 cancel_stream: Arc::new(AtomicBool::new(false)),
             };
+
+            // CLI: allow setting workspace without UI interaction
+            if let Some(ws) = parse_workspace_arg() {
+                let ws_path = PathBuf::from(&ws);
+                if ws_path.is_dir() {
+                    *state.workspace_path.blocking_lock() = Some(ws);
+                } else {
+                    eprintln!("--workspace is not a directory: {}", ws);
+                }
+            }
 
             app.manage(state);
             Ok(())
