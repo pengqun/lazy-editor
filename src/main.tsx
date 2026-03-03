@@ -57,10 +57,9 @@ async function runSelfTestFromCli() {
 
 if (import.meta.env.DEV) installTestHarness();
 if (import.meta.env.DEV) {
-  // Delay to allow the editor/store to initialize before running the self-test
-  window.addEventListener("load", () => {
-    setTimeout(() => runSelfTestFromCli(), 300);
-  });
+  const schedule = () => setTimeout(() => runSelfTestFromCli(), 300);
+  if (document.readyState === "complete") schedule();
+  else window.addEventListener("load", schedule, { once: true });
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
