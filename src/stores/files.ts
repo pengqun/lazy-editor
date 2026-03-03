@@ -24,6 +24,7 @@ interface FilesState {
   setDirty: (dirty: boolean) => void;
 
   openFile: (path: string) => Promise<void>;
+  openFileByPath: (path: string) => Promise<void>;
   saveFile: () => Promise<void>;
   createFile: (name: string) => Promise<void>;
 }
@@ -64,6 +65,15 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       });
     } catch (err) {
       console.error("Failed to open file:", err);
+    }
+  },
+
+  openFileByPath: async (path) => {
+    try {
+      const content = await invoke<string>("open_file_by_path", { path });
+      set({ activeFilePath: path, activeFileContent: content, isDirty: false });
+    } catch (err) {
+      console.error("Failed to open file by path:", err);
     }
   },
 

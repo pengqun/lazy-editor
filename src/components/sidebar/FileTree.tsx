@@ -9,6 +9,7 @@ export function FileTree() {
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
   const openFile = useFilesStore((s) => s.openFile);
   const createFile = useFilesStore((s) => s.createFile);
+  const openFileByPath = useFilesStore((s) => s.openFileByPath);
   const loadWorkspace = useFilesStore((s) => s.loadWorkspace);
   const workspacePath = useFilesStore((s) => s.workspacePath);
 
@@ -21,6 +22,12 @@ export function FileTree() {
       await setWorkspacePath(path);
       await loadWorkspace();
     }
+  };
+
+  const handleOpenByPath = async () => {
+    const input = window.prompt("Open file by path (must be inside current workspace):");
+    if (!input) return;
+    await openFileByPath(input);
   };
 
   const handleCreate = () => {
@@ -55,13 +62,22 @@ export function FileTree() {
         <span className="text-xs text-text-tertiary uppercase tracking-wider">
           Files
         </span>
-        <button
-          onClick={() => setIsCreating(true)}
-          className="p-0.5 hover:bg-surface-3 rounded transition-colors"
-          title="New Document"
-        >
-          <Plus size={14} className="text-text-tertiary" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleOpenByPath}
+            className="p-0.5 hover:bg-surface-3 rounded transition-colors"
+            title="Open by path"
+          >
+            <FolderOpen size={14} className="text-text-tertiary" />
+          </button>
+          <button
+            onClick={() => setIsCreating(true)}
+            className="p-0.5 hover:bg-surface-3 rounded transition-colors"
+            title="New Document"
+          >
+            <Plus size={14} className="text-text-tertiary" />
+          </button>
+        </div>
       </div>
 
       {isCreating && (

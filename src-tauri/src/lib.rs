@@ -51,6 +51,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // File commands
             commands::files::open_file,
+            commands::files::open_file_by_path,
             commands::files::save_file,
             commands::files::get_workspace,
             commands::files::open_file_dialog,

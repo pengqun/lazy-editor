@@ -25,6 +25,21 @@ pub async fn open_file(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn open_file_by_path(path: String, state: State<'_ , AppState>) -> Result<String, String> {
+    // Optional safety: if a workspace is set, only allow files inside it.
+    if let Some(workspace) = state.workspace_path.lock().await.clone() {
+        let ws = PathBuf::from(workspace);
+        let candidate = PathBuf::from(&path);
+        let ws_canon = ws.canonicalize().map_err(|e| format!("Invalid workspace path: {}", e))?;
+        let cand_canon = candidate.canonicalize().map_err(|e| format!("Invalid file path: {}", e))?;
+        if !cand_canon.starts_with(&ws_canon) {
+            return Err("Path is outside current workspace".to_string());
+        }
+    }
+    fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+#[tauri::command]
 pub async fn save_file(path: String, content: String) -> Result<(), String> {
     // Ensure parent directory exists
     if let Some(parent) = PathBuf::from(&path).parent() {
