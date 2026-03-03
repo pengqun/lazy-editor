@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileText, Plus, FolderOpen } from "lucide-react";
+import { FileText, Plus, FolderOpen, Link2 } from "lucide-react";
 import { useFilesStore } from "../../stores/files";
 import { openFolderDialog, setWorkspacePath } from "../../lib/tauri";
 import { cn } from "../../lib/cn";
@@ -66,9 +66,9 @@ export function FileTree() {
           <button
             onClick={handleOpenByPath}
             className="p-0.5 hover:bg-surface-3 rounded transition-colors"
-            title="Open by path"
+            title="Open by path…"
           >
-            <FolderOpen size={14} className="text-text-tertiary" />
+            <Link2 size={14} className="text-text-tertiary" />
           </button>
           <button
             onClick={() => setIsCreating(true)}
