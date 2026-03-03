@@ -15,6 +15,14 @@ async function runSelfTestFromCli() {
     const api = (window as any).__LAZY_TEST__ as any;
     if (!api) throw new Error("__LAZY_TEST__ not installed");
 
+    // Wait until the TipTap editor instance is ready (installed into the store)
+    const start = Date.now();
+    while (Date.now() - start < 10_000) {
+      const html = api.getHtml?.();
+      if (typeof html === "string") break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+
     // Ensure workspace is set and create a smoke file path
     const ws = params.workspace;
     if (!ws) throw new Error("workspace not set (pass --workspace)");
@@ -48,7 +56,12 @@ async function runSelfTestFromCli() {
 
 
 if (import.meta.env.DEV) installTestHarness();
-if (import.meta.env.DEV) runSelfTestFromCli();
+if (import.meta.env.DEV) {
+  // Delay to allow the editor/store to initialize before running the self-test
+  window.addEventListener("load", () => {
+    setTimeout(() => runSelfTestFromCli(), 300);
+  });
+}
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
