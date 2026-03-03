@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  smoke-desktop-editor:
+    name: Desktop smoke test (Tauri self-test)
+    runs-on: macos-14
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Build (tsc + vite)
+        run: npm run build
+
+      - name: Run Tauri self-test (editor)
+        env:
+          RUST_BACKTRACE: "1"
+          # Reduce interactive prompts in CI
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor
