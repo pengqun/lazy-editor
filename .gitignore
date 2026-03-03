@@ -23,3 +23,6 @@ Thumbs.db
 # Tauri
 src-tauri/WixTools/
 src-tauri/gen/
+
+# Caches
+src-tauri/.fastembed_cache/

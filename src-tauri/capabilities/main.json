@@ -1,0 +1,30 @@
+{
+  "identifier": "main",
+  "description": "Default capability for the main window (fs/http/dialog/store + core).",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+
+    "dialog:default",
+    "store:default",
+
+    {
+      "identifier": "fs:default",
+      "allow": [{ "path": "$HOME/**" }],
+      "deny": []
+    },
+
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.anthropic.com/**" },
+        { "url": "https://api.openai.com/**" },
+        { "url": "http://localhost:11434/**" },
+        { "url": "http://127.0.0.1:11434/**" },
+        { "url": "https://**" },
+        { "url": "http://**" }
+      ],
+      "deny": []
+    }
+  ]
+}

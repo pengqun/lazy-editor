@@ -25,28 +25,5 @@
       "csp": null
     }
   },
-  "plugins": {
-    "fs": {
-      "scope": {
-        "allow": ["**"],
-        "deny": []
-      }
-    },
-    "dialog": {
-      "all": true
-    },
-    "http": {
-      "scope": {
-        "allow": [
-          { "url": "https://api.anthropic.com/**" },
-          { "url": "https://api.openai.com/**" },
-          { "url": "http://localhost:11434/**" },
-          { "url": "http://127.0.0.1:11434/**" },
-          { "url": "https://**" },
-          { "url": "http://**" }
-        ]
-      }
-    },
-    "store": {}
-  }
+  "plugins": {}
 }

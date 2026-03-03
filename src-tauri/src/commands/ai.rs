@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
+use tauri::Manager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiSettings {
@@ -127,7 +128,7 @@ fn load_settings_from_store(app: &AppHandle) -> AiSettings {
         .path()
         .app_data_dir()
         .ok()
-        .map(|p| p.join("settings.json"));
+        .map(|p: std::path::PathBuf| p.join("settings.json"));
 
     if let Some(path) = store_path {
         if let Ok(content) = std::fs::read_to_string(&path) {

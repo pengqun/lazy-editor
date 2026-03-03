@@ -8,6 +8,7 @@ use knowledge::embedder::Embedder;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tauri::Manager;
 
 pub struct AppState {
     pub db: Arc<Mutex<Database>>,
