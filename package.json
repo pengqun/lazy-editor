@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:dev:ws": "tauri dev -- -- --workspace"
+    "tauri:dev:ws": "tauri dev -- -- --workspace",
+    "tauri:self-test:editor": "tauri dev -- -- --workspace"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",
