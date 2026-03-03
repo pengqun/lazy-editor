@@ -29,3 +29,6 @@ src-tauri/.fastembed_cache/
 
 # Local tooling
 tools/
+
+# Self-test artifacts
+__smoke__/
