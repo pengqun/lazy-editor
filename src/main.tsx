@@ -5,8 +5,6 @@ import { installTestHarness } from "./lib/testHarness";
 import "./index.css";
 
 async function runSelfTestFromCli() {
-  // Only relevant in desktop (Tauri) runtime
-  if (!(window as any).__TAURI__) return;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     const params = await invoke<{ workspace: string | null; self_test: string | null }>("get_startup_params");
