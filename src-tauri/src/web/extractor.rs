@@ -35,8 +35,8 @@ pub async fn fetch_and_extract(url: &str) -> Result<ArticleContent> {
 fn strip_html_tags(html: &str) -> String {
     let mut result = String::new();
     let mut in_tag = false;
-    let mut in_script = false;
-    let mut in_style = false;
+    let in_script = false;
+    let in_style = false;
 
     for c in html.chars() {
         if c == '<' {

@@ -54,7 +54,7 @@ pub async fn set_workspace_path(path: String, state: State<'_, AppState>) -> Res
 
 #[tauri::command]
 pub async fn open_file_dialog() -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
+    
     // For now, return None — the frontend uses @tauri-apps/plugin-dialog directly
     // This is a placeholder for file dialog integration
     Ok(None)
