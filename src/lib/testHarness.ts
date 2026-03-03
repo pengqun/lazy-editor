@@ -7,6 +7,7 @@ export type LazyTestApi = {
   setHtml: (html: string) => void;
   getHtml: () => string;
   toggleBold: () => void;
+  selectAll: () => void;
   toggleHeading: (level: 1 | 2 | 3) => void;
 };
 
@@ -36,6 +37,10 @@ export function installTestHarness() {
     getHtml: () => {
       const editor = useEditorStore.getState().editor;
       return editor?.getHTML() ?? "";
+    },
+    selectAll: () => {
+      const editor = useEditorStore.getState().editor;
+      editor?.commands.selectAll();
     },
     toggleBold: () => {
       const editor = useEditorStore.getState().editor;

@@ -16,6 +16,7 @@ pub struct AppState {
     pub embedder: Arc<Mutex<Embedder>>,
     pub workspace_path: Arc<Mutex<Option<String>>>,
     pub cancel_stream: Arc<AtomicBool>,
+    pub self_test: Arc<Mutex<Option<String>>>,
 }
 
 fn parse_workspace_arg() -> Option<String> {
@@ -34,6 +35,23 @@ fn parse_workspace_arg() -> Option<String> {
     }
     None
 }
+fn parse_self_test_arg() -> Option<String> {
+    // Accept: --self-test <name> or --self-test=<name>
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--self-test" {
+            if let Some(v) = args.next() {
+                return Some(v);
+            }
+        } else if let Some(rest) = arg.strip_prefix("--self-test=") {
+            if !rest.is_empty() {
+                return Some(rest.to_string());
+            }
+        }
+    }
+    None
+}
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -61,6 +79,7 @@ pub fn run() {
                 embedder: Arc::new(Mutex::new(embedder)),
                 workspace_path: Arc::new(Mutex::new(None)),
                 cancel_stream: Arc::new(AtomicBool::new(false)),
+                self_test: Arc::new(Mutex::new(None)),
             };
 
             // CLI: allow setting workspace without UI interaction
@@ -71,6 +90,10 @@ pub fn run() {
                 } else {
                     eprintln!("--workspace is not a directory: {}", ws);
                 }
+            }
+
+            if let Some(t) = parse_self_test_arg() {
+                *state.self_test.blocking_lock() = Some(t);
             }
 
             app.manage(state);
@@ -102,6 +125,9 @@ pub fn run() {
             commands::ai::ai_cancel_stream,
             commands::ai::save_ai_settings,
             commands::ai::load_ai_settings,
+            // Utility (testing / startup)
+            commands::util::get_startup_params,
+            commands::util::exit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
