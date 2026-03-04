@@ -45,7 +45,8 @@ jobs:
           RUST_BACKTRACE: "1"
           GIT_TERMINAL_PROMPT: "0"
         run: |
+          set -euo pipefail
           npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-basic
           npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor
-npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-undo-redo
-npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-formatting
+          npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-undo-redo
+          npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-formatting
