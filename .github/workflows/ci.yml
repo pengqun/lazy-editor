@@ -46,5 +46,6 @@ jobs:
           GIT_TERMINAL_PROMPT: "0"
         run: |
           npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-basic
+          npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor
 npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-undo-redo
 npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-formatting
