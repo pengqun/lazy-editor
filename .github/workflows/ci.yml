@@ -45,4 +45,4 @@ jobs:
           RUST_BACKTRACE: "1"
           GIT_TERMINAL_PROMPT: "0"
         run: |
-          npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor
+          npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-basic
