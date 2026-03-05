@@ -37,16 +37,19 @@ jobs:
       - name: Install JS deps
         run: npm ci
 
-      - name: Build (tsc + vite)
-        run: npm run build
+      - name: Build frontend (selftest mode)
+        run: npm run build:selftest
 
-      - name: Run Tauri self-test (editor)
+      - name: Build selftest binary
+        run: cd src-tauri && cargo build --bin lazy-editor-selftest
+
+      - name: Run self-tests
         env:
           RUST_BACKTRACE: "1"
           GIT_TERMINAL_PROMPT: "0"
         run: |
           set -euo pipefail
-          npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-basic
-          npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor
-          npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-undo-redo
-          npm run tauri:dev:ws -- "$GITHUB_WORKSPACE" --self-test editor-formatting
+          BIN=src-tauri/target/debug/lazy-editor-selftest
+          $BIN --workspace "$GITHUB_WORKSPACE" --self-test editor-basic
+          $BIN --workspace "$GITHUB_WORKSPACE" --self-test editor-undo-redo
+          $BIN --workspace "$GITHUB_WORKSPACE" --self-test editor-formatting

@@ -4,8 +4,10 @@ import App from "./App";
 import { installTestHarness } from "./lib/testHarness";
 import "./index.css";
 
-if (import.meta.env.DEV) installTestHarness();
-if (import.meta.env.DEV) {
+const isSelfTest = import.meta.env.DEV || import.meta.env.VITE_SELFTEST === "true";
+
+if (isSelfTest) installTestHarness();
+if (isSelfTest) {
   const schedule = async () => {
     const { runSelfTest } = await import("./selfTests");
     setTimeout(() => runSelfTest(), 300);

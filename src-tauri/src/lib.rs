@@ -55,6 +55,10 @@ fn parse_self_test_arg() -> Option<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    run_with_context(tauri::generate_context!());
+}
+
+pub fn run_with_context(context: tauri::Context) {
     env_logger::init();
 
     tauri::Builder::default()
@@ -129,6 +133,6 @@ pub fn run() {
             commands::util::get_startup_params,
             commands::util::exit_app,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
