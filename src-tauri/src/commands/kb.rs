@@ -5,6 +5,9 @@ use crate::AppState;
 use std::fs;
 use tauri::{AppHandle, Emitter, State};
 
+/// Maximum file size for KB ingestion: 10 MB.
+const MAX_INGEST_BYTES: u64 = 10 * 1024 * 1024;
+
 #[tauri::command]
 pub async fn ingest_file(
     path: String,
@@ -13,8 +16,30 @@ pub async fn ingest_file(
 ) -> Result<(), String> {
     let _ = app.emit("ingest-progress", "Reading file...");
 
+    // File size guard
+    let metadata =
+        fs::metadata(&path).map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    if metadata.len() > MAX_INGEST_BYTES {
+        let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
+        return Err(format!(
+            "File too large ({:.1} MB). Maximum allowed size is 10 MB.",
+            size_mb
+        ));
+    }
+
     let content =
         fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // Dedup check: reject if identical content already exists
+    {
+        let db = state.db.lock().await;
+        if let Ok(Some(existing_title)) = db.find_document_by_content_hash(&content) {
+            return Err(format!(
+                "Duplicate content: a document with identical content already exists (\"{}\")",
+                existing_title
+            ));
+        }
+    }
 
     let title = std::path::Path::new(&path)
         .file_stem()
@@ -80,6 +105,26 @@ pub async fn ingest_text(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
+    // Text size guard
+    if text.len() as u64 > MAX_INGEST_BYTES {
+        let size_mb = text.len() as f64 / (1024.0 * 1024.0);
+        return Err(format!(
+            "Text too large ({:.1} MB). Maximum allowed size is 10 MB.",
+            size_mb
+        ));
+    }
+
+    // Dedup check
+    {
+        let db = state.db.lock().await;
+        if let Ok(Some(existing_title)) = db.find_document_by_content_hash(&text) {
+            return Err(format!(
+                "Duplicate content: a document with identical content already exists (\"{}\")",
+                existing_title
+            ));
+        }
+    }
+
     let _ = app.emit("ingest-progress", "Chunking content...");
 
     let chunks = chunker::chunk_markdown(&text);

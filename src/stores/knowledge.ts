@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { toast } from "./toast";
 
 export interface KBDocument {
   id: number;
@@ -56,8 +57,11 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     try {
       await invoke("ingest_file", { path });
       await get().loadDocuments();
+      toast.success("Document added to knowledge base");
     } catch (err) {
-      console.error("Failed to ingest file:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Failed to ingest file:", message);
+      toast.error(message);
     } finally {
       set({ isIngesting: false, ingestProgress: "" });
     }
@@ -68,8 +72,11 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     try {
       await invoke("ingest_text", { title, text });
       await get().loadDocuments();
+      toast.success("Text added to knowledge base");
     } catch (err) {
-      console.error("Failed to ingest text:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Failed to ingest text:", message);
+      toast.error(message);
     } finally {
       set({ isIngesting: false, ingestProgress: "" });
     }

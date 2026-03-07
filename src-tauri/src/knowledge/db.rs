@@ -1,6 +1,7 @@
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::path::Path;
 
 pub struct Database {
@@ -60,6 +61,7 @@ impl Database {
                 source_type TEXT NOT NULL,
                 source_path TEXT,
                 content TEXT NOT NULL,
+                content_hash TEXT,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
             );
@@ -78,8 +80,22 @@ impl Database {
             );
 
             CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash);
             ",
         )?;
+
+        // Migration: add content_hash column if missing (existing databases)
+        let has_content_hash: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name='content_hash'")?
+            .query_row([], |row| row.get::<_, i64>(0))
+            .map(|c| c > 0)
+            .unwrap_or(false);
+        if !has_content_hash {
+            conn.execute_batch("ALTER TABLE documents ADD COLUMN content_hash TEXT")?;
+            conn.execute_batch(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash)",
+            )?;
+        }
 
         Ok(Database { conn })
     }
@@ -91,11 +107,24 @@ impl Database {
         source_path: Option<&str>,
         content: &str,
     ) -> Result<i64> {
+        let hash = content_hash(content);
         self.conn.execute(
-            "INSERT INTO documents (title, source_type, source_path, content) VALUES (?1, ?2, ?3, ?4)",
-            params![title, source_type, source_path, content],
+            "INSERT INTO documents (title, source_type, source_path, content, content_hash) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![title, source_type, source_path, content, hash],
         )?;
         Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Returns `Some(title)` if a document with the same content hash exists.
+    pub fn find_document_by_content_hash(&self, content: &str) -> Result<Option<String>> {
+        let hash = content_hash(content);
+        let mut stmt = self
+            .conn
+            .prepare("SELECT title FROM documents WHERE content_hash = ?1")?;
+        let title = stmt
+            .query_row(params![hash], |row| row.get::<_, String>(0))
+            .ok();
+        Ok(title)
     }
 
     pub fn insert_chunk(
@@ -182,6 +211,12 @@ impl Database {
 
         Ok(result)
     }
+}
+
+fn content_hash(content: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
 fn embedding_to_blob(embedding: &[f32]) -> Vec<u8> {
@@ -327,5 +362,51 @@ mod tests {
         // Ordered by created_at DESC — both created at same time,
         // but IDs should differ
         assert_ne!(docs[0].id, docs[1].id);
+    }
+
+    #[test]
+    fn find_document_by_content_hash_returns_none_when_empty() {
+        let db = test_db();
+        assert!(db
+            .find_document_by_content_hash("anything")
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn find_document_by_content_hash_finds_existing() {
+        let db = test_db();
+        db.insert_document("My Doc", "paste", None, "hello world")
+            .unwrap();
+        let found = db.find_document_by_content_hash("hello world").unwrap();
+        assert_eq!(found, Some("My Doc".to_string()));
+    }
+
+    #[test]
+    fn find_document_by_content_hash_no_match_for_different_content() {
+        let db = test_db();
+        db.insert_document("My Doc", "paste", None, "hello world")
+            .unwrap();
+        assert!(db
+            .find_document_by_content_hash("different content")
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn duplicate_content_hash_rejected_by_unique_index() {
+        let db = test_db();
+        db.insert_document("First", "paste", None, "same content")
+            .unwrap();
+        let result = db.insert_document("Second", "paste", None, "same content");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn content_hash_deterministic() {
+        let hash1 = content_hash("test content");
+        let hash2 = content_hash("test content");
+        assert_eq!(hash1, hash2);
+        assert_ne!(hash1, content_hash("different content"));
     }
 }
