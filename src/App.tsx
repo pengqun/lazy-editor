@@ -5,6 +5,7 @@ import { Toolbar } from "./components/editor/Toolbar";
 import { StatusBar } from "./components/editor/StatusBar";
 import { useEditorStore } from "./stores/editor";
 import { useFilesStore } from "./stores/files";
+import { exportEditorToMarkdown } from "./lib/export-markdown";
 
 const Editor = lazy(() =>
   import("./components/editor/Editor").then((m) => ({ default: m.Editor })),
@@ -44,6 +45,11 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setShowCommandPalette(!showCommandPalette);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "e") {
+        e.preventDefault();
+        const editor = useEditorStore.getState().editor;
+        if (editor) exportEditorToMarkdown(editor);
       }
     };
     window.addEventListener("keydown", handler);

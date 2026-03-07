@@ -14,9 +14,11 @@ import {
   Redo,
   BookOpen,
   Sparkles,
+  Download,
 } from "lucide-react";
 import { useEditorStore } from "../../stores/editor";
 import { cn } from "../../lib/cn";
+import { exportEditorToMarkdown } from "../../lib/export-markdown";
 
 interface ToolbarButtonProps {
   onClick: () => void;
@@ -177,6 +179,16 @@ export function Toolbar() {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Export */}
+      <ToolbarButton
+        onClick={() => exportEditorToMarkdown(editor)}
+        title="Export Markdown (Cmd+Shift+E)"
+      >
+        <Download size={iconSize} />
+      </ToolbarButton>
+
+      <Separator />
 
       {/* AI & KB toggles */}
       <ToolbarButton
