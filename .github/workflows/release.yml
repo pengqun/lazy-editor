@@ -42,15 +42,6 @@ jobs:
         run: npm run build
 
       - name: Build Tauri bundle (aarch64-apple-darwin)
-        env:
-          # Optional signing/notarization inputs.
-          # If unset, build remains unsigned (usable for internal testing).
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Collect release artifacts
