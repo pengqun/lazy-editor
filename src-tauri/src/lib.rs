@@ -90,12 +90,24 @@ pub fn run_with_context(context: tauri::Context) {
             let app_data_dir = app
                 .path()
                 .app_data_dir()
-                .expect("Failed to get app data dir");
-            std::fs::create_dir_all(&app_data_dir).ok();
+                .map_err(|e| {
+                    let msg = format!("Failed to get app data dir: {}", e);
+                    log::error!("{}", msg);
+                    Box::<dyn std::error::Error>::from(msg)
+                })?;
+            std::fs::create_dir_all(&app_data_dir).map_err(|e| {
+                let msg = format!("Failed to create app data dir: {}", e);
+                log::error!("{}", msg);
+                Box::<dyn std::error::Error>::from(msg)
+            })?;
 
             let db_path = app_data_dir.join("knowledge.db");
             eprintln!("[selftest] setup: initializing database...");
-            let db = Database::new(&db_path).expect("Failed to initialize database");
+            let db = Database::new(&db_path).map_err(|e| {
+                let msg = format!("Failed to initialize database: {}", e);
+                log::error!("{}", msg);
+                Box::<dyn std::error::Error>::from(msg)
+            })?;
             eprintln!("[selftest] setup: database ready");
 
             let embedder = if is_self_test.is_some() {
@@ -103,9 +115,17 @@ pub fn run_with_context(context: tauri::Context) {
                 None
             } else {
                 eprintln!("[selftest] setup: initializing embedder...");
-                let e = Embedder::new().expect("Failed to initialize embedder");
-                eprintln!("[selftest] setup: embedder ready");
-                Some(e)
+                match Embedder::new() {
+                    Ok(e) => {
+                        eprintln!("[selftest] setup: embedder ready");
+                        Some(e)
+                    }
+                    Err(e) => {
+                        log::error!("Failed to initialize embedder: {}. Knowledge base features will be unavailable.", e);
+                        eprintln!("Warning: embedder init failed ({}), KB features disabled", e);
+                        None
+                    }
+                }
             };
 
             let state = AppState {
@@ -205,5 +225,8 @@ pub fn run_with_context(context: tauri::Context) {
             commands::util::selftest_ping,
         ])
         .run(context)
-        .expect("error while running tauri application");
+        .unwrap_or_else(|e| {
+            log::error!("Tauri application error: {}", e);
+            eprintln!("Fatal: failed to run application: {}", e);
+        });
 }

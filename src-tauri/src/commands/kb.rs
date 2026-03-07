@@ -33,26 +33,29 @@ pub async fn ingest_file(
     // Extract chunk texts for batch embedding
     let chunk_texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
 
-    // Generate embeddings
-    let embedder_guard = state.embedder.lock().await;
-    let embedder = embedder_guard
-        .as_ref()
-        .ok_or("Embedder not available")?;
-    let embeddings = embedder
-        .embed_batch(&chunk_texts)
-        .map_err(|e| format!("Failed to generate embeddings: {}", e))?;
-    drop(embedder_guard);
+    // Generate embeddings — lock embedder only for the embed call
+    let embeddings = {
+        let embedder_guard = state.embedder.lock().await;
+        let embedder = embedder_guard
+            .as_ref()
+            .ok_or("Embedder not available")?;
+        embedder
+            .embed_batch(&chunk_texts)
+            .map_err(|e| format!("Failed to generate embeddings: {}", e))?
+    };
 
     let _ = app.emit("ingest-progress", "Storing in knowledge base...");
 
-    // Store in database
-    let db = state.db.lock().await;
+    // Insert document — lock DB briefly
+    let doc_id = {
+        let db = state.db.lock().await;
+        db.insert_document(&title, "file", Some(&path), &content)
+            .map_err(|e| format!("Failed to insert document: {}", e))?
+    };
 
-    let doc_id = db
-        .insert_document(&title, "file", Some(&path), &content)
-        .map_err(|e| format!("Failed to insert document: {}", e))?;
-
+    // Insert chunks and embeddings — lock DB per iteration to avoid long holds
     for (i, chunk) in chunks.iter().enumerate() {
+        let db = state.db.lock().await;
         let chunk_id = db
             .insert_chunk(
                 doc_id,
@@ -87,24 +90,29 @@ pub async fn ingest_text(
         format!("Embedding {} chunks...", chunks.len()),
     );
 
-    let embedder_guard = state.embedder.lock().await;
-    let embedder = embedder_guard
-        .as_ref()
-        .ok_or("Embedder not available")?;
-    let embeddings = embedder
-        .embed_batch(&chunk_texts)
-        .map_err(|e| format!("Failed to generate embeddings: {}", e))?;
-    drop(embedder_guard);
+    // Generate embeddings — lock embedder only for the embed call
+    let embeddings = {
+        let embedder_guard = state.embedder.lock().await;
+        let embedder = embedder_guard
+            .as_ref()
+            .ok_or("Embedder not available")?;
+        embedder
+            .embed_batch(&chunk_texts)
+            .map_err(|e| format!("Failed to generate embeddings: {}", e))?
+    };
 
     let _ = app.emit("ingest-progress", "Storing in knowledge base...");
 
-    let db = state.db.lock().await;
+    // Insert document — lock DB briefly
+    let doc_id = {
+        let db = state.db.lock().await;
+        db.insert_document(&title, "paste", None, &text)
+            .map_err(|e| format!("Failed to insert document: {}", e))?
+    };
 
-    let doc_id = db
-        .insert_document(&title, "paste", None, &text)
-        .map_err(|e| format!("Failed to insert document: {}", e))?;
-
+    // Insert chunks and embeddings — lock DB per iteration
     for (i, chunk) in chunks.iter().enumerate() {
+        let db = state.db.lock().await;
         let chunk_id = db
             .insert_chunk(
                 doc_id,
@@ -135,13 +143,20 @@ pub async fn search_knowledge_base(
     top_k: usize,
     state: State<'_, AppState>,
 ) -> Result<Vec<SearchResult>, String> {
-    let db = state.db.lock().await;
-    let embedder_guard = state.embedder.lock().await;
-    let embedder = embedder_guard
-        .as_ref()
-        .ok_or("Embedder not available")?;
+    // Embed the query — lock embedder only for embed call
+    let query_embedding = {
+        let embedder_guard = state.embedder.lock().await;
+        let embedder = embedder_guard
+            .as_ref()
+            .ok_or("Embedder not available")?;
+        embedder
+            .embed_text(&query)
+            .map_err(|e| format!("Failed to embed query: {}", e))?
+    };
 
-    search::search(&db, embedder, &query, top_k)
+    // Search the DB — lock DB only for the search
+    let db = state.db.lock().await;
+    search::search_with_embedding(&db, &query_embedding, top_k)
         .map_err(|e| format!("Failed to search KB: {}", e))
 }
 

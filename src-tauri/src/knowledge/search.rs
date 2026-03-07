@@ -13,9 +13,17 @@ pub fn search(
     query: &str,
     top_k: usize,
 ) -> Result<Vec<SearchResult>> {
-    // Embed the query
     let query_embedding = embedder.embed_text(query)?;
+    search_with_embedding(db, &query_embedding, top_k)
+}
 
+/// Search using a pre-computed query embedding. Allows callers to manage
+/// embedder and DB locks independently.
+pub fn search_with_embedding(
+    db: &Database,
+    query_embedding: &[f32],
+    top_k: usize,
+) -> Result<Vec<SearchResult>> {
     // Get all stored embeddings
     let all_embeddings = db.get_all_embeddings()?;
 
@@ -27,7 +35,7 @@ pub fn search(
     let mut scored: Vec<(i64, f64)> = all_embeddings
         .iter()
         .map(|(chunk_id, embedding)| {
-            let score = cosine_similarity(&query_embedding, embedding);
+            let score = cosine_similarity(query_embedding, embedding);
             (*chunk_id, score)
         })
         .collect();

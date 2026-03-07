@@ -20,7 +20,10 @@ impl Embedder {
     /// Embed a single text string. Returns a 384-dimensional vector.
     pub fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
         let embeddings = self.model.embed(vec![text.to_string()], None)?;
-        Ok(embeddings.into_iter().next().unwrap())
+        embeddings
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Embedding model returned no results"))
     }
 
     /// Embed a batch of text strings. More efficient than calling embed_text in a loop.

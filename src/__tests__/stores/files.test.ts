@@ -1,4 +1,5 @@
 import { useFilesStore } from "@/stores/files";
+import { useToastStore } from "@/stores/toast";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +13,7 @@ function resetStore() {
     activeFileContent: "",
     isDirty: false,
   });
+  useToastStore.setState({ toasts: [] });
 }
 
 describe("useFilesStore", () => {
@@ -96,6 +98,37 @@ describe("useFilesStore", () => {
   it("saveFile does nothing when no active file", async () => {
     await useFilesStore.getState().saveFile();
     expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
+  it("saveFile shows toast on failure and keeps isDirty true", async () => {
+    useFilesStore.setState({
+      activeFilePath: "/workspace/doc.md",
+      activeFileContent: "content",
+      isDirty: true,
+    });
+    mockedInvoke.mockRejectedValueOnce("disk full");
+
+    await useFilesStore.getState().saveFile();
+
+    expect(useFilesStore.getState().isDirty).toBe(true);
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts.length).toBeGreaterThanOrEqual(1);
+    expect(toasts.some((t) => t.type === "error" && t.message.includes("Failed to save"))).toBe(
+      true,
+    );
+  });
+
+  it("createFile shows toast on failure", async () => {
+    useFilesStore.setState({ workspacePath: "/workspace" });
+    mockedInvoke.mockRejectedValueOnce("permission denied");
+
+    await useFilesStore.getState().createFile("notes.md");
+
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts.length).toBeGreaterThanOrEqual(1);
+    expect(toasts.some((t) => t.type === "error" && t.message.includes("Failed to create"))).toBe(
+      true,
+    );
   });
 
   it("createFile saves, reloads workspace, and opens the new file", async () => {

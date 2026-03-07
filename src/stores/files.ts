@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { toast } from "@/stores/toast";
 
 export interface FileEntry {
   name: string;
@@ -86,6 +87,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       set({ isDirty: false });
     } catch (err) {
       console.error("Failed to save file:", err);
+      toast.error(`Failed to save file: ${err}`);
     }
   },
 
@@ -99,6 +101,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       await openFile(path);
     } catch (err) {
       console.error("Failed to create file:", err);
+      toast.error(`Failed to create file: ${err}`);
     }
   },
 }));

@@ -26,17 +26,21 @@ pub async fn open_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn open_file_by_path(path: String, state: State<'_ , AppState>) -> Result<String, String> {
-    // Optional safety: if a workspace is set, only allow files inside it.
+    // Canonicalize once and use the canonical path for both validation and reading
+    // to avoid TOCTOU race where a symlink is swapped between check and read.
+    let canonical = PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|e| format!("Invalid file path: {}", e))?;
+
     if let Some(workspace) = state.workspace_path.lock().await.clone() {
-        let ws = PathBuf::from(workspace);
-        let candidate = PathBuf::from(&path);
-        let ws_canon = ws.canonicalize().map_err(|e| format!("Invalid workspace path: {}", e))?;
-        let cand_canon = candidate.canonicalize().map_err(|e| format!("Invalid file path: {}", e))?;
-        if !cand_canon.starts_with(&ws_canon) {
+        let ws_canon = PathBuf::from(workspace)
+            .canonicalize()
+            .map_err(|e| format!("Invalid workspace path: {}", e))?;
+        if !canonical.starts_with(&ws_canon) {
             return Err("Path is outside current workspace".to_string());
         }
     }
-    fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
+    fs::read_to_string(&canonical).map_err(|e| format!("Failed to read file: {}", e))
 }
 
 #[tauri::command]
