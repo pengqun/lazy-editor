@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.lazy-editor.selftest",
   "build": {
-    "frontendDist": "dist",
+    "frontendDist": "../dist",
     "devUrl": null
   },
   "app": {

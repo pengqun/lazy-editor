@@ -44,6 +44,8 @@ jobs:
         run: touch src-tauri/src/bin/selftest.rs
 
       - name: Build selftest binary
+        env:
+          TAURI_CONFIG: '{"build":{"devUrl":null,"frontendDist":"../dist"},"productName":"Lazy Editor Selftest","identifier":"com.lazy-editor.selftest"}'
         run: cd src-tauri && cargo build --bin lazy-editor-selftest
 
       - name: "Self-test: editor-basic"
