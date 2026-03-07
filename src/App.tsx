@@ -1,11 +1,15 @@
-import { Suspense, lazy, useEffect, useState } from "react";
 import { Settings } from "lucide-react";
-import { FileTree } from "./components/sidebar/FileTree";
-import { Toolbar } from "./components/editor/Toolbar";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { ToastContainer } from "./components/Toast";
 import { StatusBar } from "./components/editor/StatusBar";
+import { Toolbar } from "./components/editor/Toolbar";
+import { FileTree } from "./components/sidebar/FileTree";
+import { exportEditorToMarkdown } from "./lib/export-markdown";
+import { openFolderDialog, setWorkspacePath } from "./lib/tauri";
+import { useAiStore } from "./stores/ai";
 import { useEditorStore } from "./stores/editor";
 import { useFilesStore } from "./stores/files";
-import { exportEditorToMarkdown } from "./lib/export-markdown";
+import { toast } from "./stores/toast";
 
 const Editor = lazy(() =>
   import("./components/editor/Editor").then((m) => ({ default: m.Editor })),
@@ -35,26 +39,124 @@ export default function App() {
   const rightPanel = useEditorStore((s) => s.rightPanel);
   const loadWorkspace = useFilesStore((s) => s.loadWorkspace);
   const [showSettings, setShowSettings] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
+  // Load workspace + AI settings on mount; detect first-run
   useEffect(() => {
-    loadWorkspace();
+    const init = async () => {
+      await loadWorkspace();
+      await useAiStore.getState().loadSettings();
+
+      const ws = useFilesStore.getState().workspacePath;
+      const { claudeApiKey, openaiApiKey, provider } = useAiStore.getState().settings;
+      const hasApiKey =
+        provider === "ollama" ||
+        (provider === "claude" && claudeApiKey.length > 0) ||
+        (provider === "openai" && openaiApiKey.length > 0);
+
+      if (!ws && !hasApiKey) {
+        setShowOnboarding(true);
+      }
+    };
+    init();
   }, [loadWorkspace]);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+  // Keyboard shortcuts
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      // Cmd+K — Command palette
+      if (e.key === "k") {
         e.preventDefault();
         setShowCommandPalette(!showCommandPalette);
+        return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "e") {
+
+      // Cmd+Shift+E — Export markdown
+      if (e.shiftKey && e.key === "e") {
         e.preventDefault();
         const editor = useEditorStore.getState().editor;
         if (editor) exportEditorToMarkdown(editor);
+        return;
       }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [showCommandPalette, setShowCommandPalette]);
+
+      // Cmd+S — Save file
+      if (e.key === "s" && !e.shiftKey) {
+        e.preventDefault();
+        const { activeFilePath, saveFile } = useFilesStore.getState();
+        if (activeFilePath) {
+          saveFile().then(() => toast.success("File saved"));
+        }
+        return;
+      }
+
+      // Cmd+N — New file
+      if (e.key === "n" && !e.shiftKey) {
+        e.preventDefault();
+        const ws = useFilesStore.getState().workspacePath;
+        if (!ws) {
+          toast.error("Open a workspace first");
+          return;
+        }
+        const name = window.prompt("New file name:", "untitled.md");
+        if (name) {
+          const fileName = name.endsWith(".md") ? name : `${name}.md`;
+          useFilesStore.getState().createFile(fileName);
+        }
+        return;
+      }
+
+      // Cmd+O — Open folder
+      if (e.key === "o" && !e.shiftKey) {
+        e.preventDefault();
+        openFolderDialog().then(async (path) => {
+          if (path) {
+            await setWorkspacePath(path);
+            await useFilesStore.getState().loadWorkspace();
+            toast.success("Workspace opened");
+          }
+        });
+        return;
+      }
+
+      // Cmd+, — Settings
+      if (e.key === ",") {
+        e.preventDefault();
+        setShowSettings(true);
+        return;
+      }
+    },
+    [showCommandPalette, setShowCommandPalette],
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+
+  // First-run onboarding
+  const handleOnboardingChooseFolder = async () => {
+    const path = await openFolderDialog();
+    if (path) {
+      await setWorkspacePath(path);
+      await useFilesStore.getState().loadWorkspace();
+      toast.success("Workspace opened");
+    }
+  };
+
+  const handleOnboardingFinish = () => {
+    setShowOnboarding(false);
+    const { claudeApiKey, openaiApiKey, provider } = useAiStore.getState().settings;
+    const hasApiKey =
+      provider === "ollama" ||
+      (provider === "claude" && claudeApiKey.length > 0) ||
+      (provider === "openai" && openaiApiKey.length > 0);
+    if (!hasApiKey) {
+      setShowSettings(true);
+    }
+  };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-surface-0">
@@ -65,9 +167,10 @@ export default function App() {
             LAZY EDITOR
           </span>
           <button
+            type="button"
             onClick={() => setShowSettings(true)}
             className="p-1 hover:bg-surface-3 rounded transition-colors"
-            title="AI Settings"
+            title="AI Settings (⌘,)"
           >
             <Settings size={14} className="text-text-tertiary" />
           </button>
@@ -121,6 +224,44 @@ export default function App() {
           <SettingsPanel onClose={() => setShowSettings(false)} />
         </Suspense>
       )}
+
+      {/* First-Run Onboarding Overlay */}
+      {showOnboarding && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="w-[420px] bg-surface-2 border border-border rounded-xl shadow-2xl overflow-hidden">
+            <div className="px-6 pt-6 pb-2">
+              <h2 className="text-lg font-semibold text-text-primary">Welcome to Lazy Editor</h2>
+              <p className="text-sm text-text-secondary mt-2">
+                Get started by choosing a workspace folder for your documents.
+              </p>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <button
+                type="button"
+                onClick={handleOnboardingChooseFolder}
+                className="w-full text-sm px-4 py-2.5 rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
+              >
+                Choose Workspace Folder
+              </button>
+              <p className="text-xs text-text-tertiary text-center">
+                You can configure your AI provider in Settings (⌘,) afterwards.
+              </p>
+            </div>
+            <div className="px-6 pb-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleOnboardingFinish}
+                className="text-xs px-3 py-1.5 rounded border border-border text-text-secondary hover:bg-surface-3 transition-colors"
+              >
+                Skip for now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notifications */}
+      <ToastContainer />
     </div>
   );
 }
