@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Sparkles, FileText, Expand, RefreshCw, Search, X } from "lucide-react";
 import { useAiStore, type AiAction } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
@@ -51,8 +51,11 @@ const COMMANDS: Command[] = [
 export function CommandPalette({ onClose }: CommandPaletteProps) {
   const [input, setInput] = useState("");
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
   const runAction = useAiStore((s) => s.runAction);
   const selectedText = useEditorStore((s) => s.selectedText);
+
+  const showCommandList = !selectedCommand;
 
   const filteredCommands = input
     ? COMMANDS.filter(
@@ -61,6 +64,11 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
           cmd.description.toLowerCase().includes(input.toLowerCase()),
       )
     : COMMANDS;
+
+  // Reset active index when filtered list changes
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [filteredCommands.length]);
 
   const handleSubmit = () => {
     if (!input.trim()) return;
@@ -100,6 +108,63 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
     setInput("");
   };
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+
+      // Arrow navigation and Enter selection only when command list is visible
+      if (showCommandList) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setActiveIndex((prev) =>
+            prev < filteredCommands.length - 1 ? prev + 1 : 0,
+          );
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setActiveIndex((prev) =>
+            prev > 0 ? prev - 1 : filteredCommands.length - 1,
+          );
+          return;
+        }
+
+        // Enter: select active command if input is empty, otherwise submit
+        if (e.key === "Enter") {
+          if (!input.trim() && filteredCommands[activeIndex]) {
+            e.preventDefault();
+            handleCommandClick(filteredCommands[activeIndex]);
+            return;
+          }
+          handleSubmit();
+          return;
+        }
+
+        // Ctrl/Cmd + 1..5 quick-select
+        const digit = parseInt(e.key, 10);
+        if (digit >= 1 && digit <= 5 && (e.ctrlKey || e.metaKey)) {
+          const idx = digit - 1;
+          if (idx < filteredCommands.length) {
+            e.preventDefault();
+            handleCommandClick(filteredCommands[idx]);
+          }
+          return;
+        }
+      } else {
+        // When a command is selected, Enter submits
+        if (e.key === "Enter") {
+          handleSubmit();
+          return;
+        }
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showCommandList, filteredCommands, activeIndex, input, selectedCommand],
+  );
+
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[20vh] z-50"
@@ -126,10 +191,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSubmit();
-              if (e.key === "Escape") onClose();
-            }}
+            onKeyDown={handleKeyDown}
             placeholder={
               selectedCommand
                 ? `Enter ${selectedCommand.label.toLowerCase()} instructions...`
@@ -144,24 +206,33 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
         </div>
 
         {/* Commands */}
-        {!selectedCommand && (
+        {showCommandList && (
           <div className="py-2 max-h-64 overflow-y-auto">
-            {filteredCommands.map((cmd) => (
+            {filteredCommands.map((cmd, idx) => (
               <button
                 key={cmd.id}
                 onClick={() => handleCommandClick(cmd)}
+                onMouseEnter={() => setActiveIndex(idx)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-4 py-2 text-left",
-                  "hover:bg-surface-3 transition-colors",
+                  "w-full flex items-center gap-3 px-4 py-2 text-left transition-colors",
+                  idx === activeIndex
+                    ? "bg-accent/15 border-l-2 border-l-accent"
+                    : "hover:bg-surface-3 border-l-2 border-l-transparent",
                 )}
               >
-                <span className="text-text-tertiary">{cmd.icon}</span>
-                <div>
+                <span className={cn(
+                  idx === activeIndex ? "text-accent" : "text-text-tertiary",
+                )}>{cmd.icon}</span>
+                <div className="flex-1">
                   <div className="text-sm text-text-primary">{cmd.label}</div>
                   <div className="text-xs text-text-tertiary">
                     {cmd.description}
                   </div>
                 </div>
+                <kbd className="text-[10px] text-text-tertiary bg-surface-3 px-1 py-0.5 rounded opacity-60">
+                  {navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}
+                  {idx + 1}
+                </kbd>
               </button>
             ))}
 
