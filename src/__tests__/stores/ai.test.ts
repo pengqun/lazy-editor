@@ -1,0 +1,106 @@
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { useAiStore } from "@/stores/ai";
+
+const mockedInvoke = vi.mocked(invoke);
+
+function resetStore() {
+  useAiStore.setState({
+    settings: {
+      provider: "claude",
+      claudeApiKey: "",
+      claudeModel: "claude-sonnet-4-20250514",
+      openaiApiKey: "",
+      openaiModel: "gpt-4o",
+      ollamaEndpoint: "http://localhost:11434",
+      ollamaModel: "llama3.2",
+      temperature: 0.7,
+      maxTokens: 4096,
+    },
+    isStreaming: false,
+    streamContent: "",
+    currentAction: null,
+  });
+}
+
+describe("useAiStore", () => {
+  beforeEach(() => {
+    resetStore();
+    vi.clearAllMocks();
+  });
+
+  it("has correct default settings", () => {
+    const { settings } = useAiStore.getState();
+    expect(settings.provider).toBe("claude");
+    expect(settings.temperature).toBe(0.7);
+    expect(settings.maxTokens).toBe(4096);
+    expect(settings.claudeModel).toBe("claude-sonnet-4-20250514");
+  });
+
+  it("setSettings merges partial settings", () => {
+    useAiStore.getState().setSettings({ provider: "openai", temperature: 0.5 });
+    const { settings } = useAiStore.getState();
+    expect(settings.provider).toBe("openai");
+    expect(settings.temperature).toBe(0.5);
+    // Other fields unchanged
+    expect(settings.maxTokens).toBe(4096);
+  });
+
+  it("saveSettings calls invoke with current settings", async () => {
+    mockedInvoke.mockResolvedValueOnce(undefined);
+    await useAiStore.getState().saveSettings();
+    expect(mockedInvoke).toHaveBeenCalledWith("save_ai_settings", {
+      settings: useAiStore.getState().settings,
+    });
+  });
+
+  it("loadSettings calls invoke and merges result", async () => {
+    mockedInvoke.mockResolvedValueOnce({
+      provider: "ollama",
+      ollamaModel: "mistral",
+    });
+    await useAiStore.getState().loadSettings();
+    const { settings } = useAiStore.getState();
+    expect(settings.provider).toBe("ollama");
+    expect(settings.ollamaModel).toBe("mistral");
+    // Defaults preserved
+    expect(settings.maxTokens).toBe(4096);
+  });
+
+  it("loadSettings handles error gracefully (uses defaults)", async () => {
+    mockedInvoke.mockRejectedValueOnce(new Error("first run"));
+    await useAiStore.getState().loadSettings();
+    expect(useAiStore.getState().settings.provider).toBe("claude");
+  });
+
+  it("runAction sets streaming state and calls invoke", async () => {
+    mockedInvoke.mockResolvedValueOnce(undefined);
+    const promise = useAiStore.getState().runAction("draft", { topic: "test" });
+
+    // During the action, streaming should be true
+    expect(useAiStore.getState().isStreaming).toBe(true);
+    expect(useAiStore.getState().currentAction).toBe("draft");
+
+    await promise;
+
+    expect(mockedInvoke).toHaveBeenCalledWith("ai_draft", { topic: "test" });
+    expect(useAiStore.getState().isStreaming).toBe(false);
+    expect(useAiStore.getState().currentAction).toBeNull();
+  });
+
+  it("runAction resets streaming on error", async () => {
+    mockedInvoke.mockRejectedValueOnce(new Error("API error"));
+    await useAiStore.getState().runAction("expand", { selectedText: "hello" });
+    expect(useAiStore.getState().isStreaming).toBe(false);
+    expect(useAiStore.getState().currentAction).toBeNull();
+  });
+
+  it("cancelStream calls invoke and resets state", () => {
+    mockedInvoke.mockResolvedValueOnce(undefined);
+    useAiStore.setState({ isStreaming: true, currentAction: "draft" });
+    useAiStore.getState().cancelStream();
+    expect(mockedInvoke).toHaveBeenCalledWith("ai_cancel_stream");
+    expect(useAiStore.getState().isStreaming).toBe(false);
+    expect(useAiStore.getState().currentAction).toBeNull();
+  });
+});

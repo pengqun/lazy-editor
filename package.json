@@ -11,7 +11,8 @@
     "tauri:dev": "tauri dev",
     "tauri:dev:ws": "tauri dev -- -- --workspace",
     "tauri:self-test:editor": "tauri dev -- -- --workspace",
-    "build:selftest": "tsc -b && vite build --mode selftest"
+    "build:selftest": "tsc -b && vite build --mode selftest",
+    "test": "vitest run"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",
@@ -37,13 +38,17 @@
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",
     "@tauri-apps/cli": "^2.2.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.0",
+    "jsdom": "^28.1.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.6.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^4.0.18"
   }
 }

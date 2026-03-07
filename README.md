@@ -86,6 +86,13 @@ Provider settings (API keys, endpoints, model choices) are stored via **Tauri pl
 
 Network access is typically scoped to provider endpoints + generic HTTP/HTTPS used by the built-in web extractor.
 
+## Testing
+
+```bash
+npm test                           # Frontend unit tests (Vitest)
+cd src-tauri && cargo test         # Rust unit tests
+```
+
 ## Development Notes
 
 Useful commands:
