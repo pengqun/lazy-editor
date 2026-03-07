@@ -64,3 +64,48 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
 
     (dot / (norm_a * norm_b)) as f64
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identical_vectors_have_similarity_one() {
+        let v = vec![1.0, 2.0, 3.0];
+        let sim = cosine_similarity(&v, &v);
+        assert!((sim - 1.0).abs() < 1e-6, "Expected ~1.0, got {}", sim);
+    }
+
+    #[test]
+    fn orthogonal_vectors_have_similarity_zero() {
+        let a = vec![1.0, 0.0];
+        let b = vec![0.0, 1.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!(sim.abs() < 1e-6, "Expected ~0.0, got {}", sim);
+    }
+
+    #[test]
+    fn opposite_vectors_have_similarity_negative_one() {
+        let a = vec![1.0, 0.0];
+        let b = vec![-1.0, 0.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!((sim + 1.0).abs() < 1e-6, "Expected ~-1.0, got {}", sim);
+    }
+
+    #[test]
+    fn zero_vector_returns_zero() {
+        let a = vec![0.0, 0.0, 0.0];
+        let b = vec![1.0, 2.0, 3.0];
+        assert_eq!(cosine_similarity(&a, &b), 0.0);
+        assert_eq!(cosine_similarity(&b, &a), 0.0);
+    }
+
+    #[test]
+    fn cosine_similarity_is_commutative() {
+        let a = vec![1.0, 3.0, -5.0];
+        let b = vec![4.0, -2.0, 1.0];
+        let ab = cosine_similarity(&a, &b);
+        let ba = cosine_similarity(&b, &a);
+        assert!((ab - ba).abs() < 1e-9);
+    }
+}

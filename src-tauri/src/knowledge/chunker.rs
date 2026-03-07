@@ -104,3 +104,112 @@ pub fn chunk_text(text: &str, options: &ChunkOptions) -> Vec<TextChunk> {
 pub fn chunk_markdown(text: &str) -> Vec<TextChunk> {
     chunk_text(text, &ChunkOptions::default())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_text_returns_no_chunks() {
+        let chunks = chunk_text("", &ChunkOptions::default());
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn whitespace_only_returns_no_chunks() {
+        let chunks = chunk_text("   \n\n   \n\n   ", &ChunkOptions::default());
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn single_paragraph_returns_one_chunk() {
+        let chunks = chunk_text("Hello world", &ChunkOptions::default());
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].content, "Hello world");
+        assert_eq!(chunks[0].index, 0);
+    }
+
+    #[test]
+    fn multiple_paragraphs_within_limit_stay_in_one_chunk() {
+        let text = "Paragraph one.\n\nParagraph two.\n\nParagraph three.";
+        let chunks = chunk_text(text, &ChunkOptions::default());
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].content.contains("Paragraph one."));
+        assert!(chunks[0].content.contains("Paragraph three."));
+    }
+
+    #[test]
+    fn text_exceeding_max_chars_splits_into_chunks() {
+        let opts = ChunkOptions {
+            max_chars: 50,
+            overlap_chars: 0,
+        };
+        let text = "This is paragraph number one.\n\nThis is paragraph number two.\n\nThis is paragraph number three.";
+        let chunks = chunk_text(text, &opts);
+        assert!(
+            chunks.len() >= 2,
+            "Expected at least 2 chunks, got {}",
+            chunks.len()
+        );
+        for chunk in &chunks {
+            assert!(!chunk.content.is_empty());
+        }
+    }
+
+    #[test]
+    fn chunk_indices_are_sequential() {
+        let opts = ChunkOptions {
+            max_chars: 30,
+            overlap_chars: 0,
+        };
+        let text = "Short para A.\n\nShort para B.\n\nShort para C.";
+        let chunks = chunk_text(text, &opts);
+        for (i, chunk) in chunks.iter().enumerate() {
+            assert_eq!(chunk.index, i);
+        }
+    }
+
+    #[test]
+    fn approx_tokens_is_quarter_of_chars() {
+        let chunks = chunk_text("Hello world! This is a test.", &ChunkOptions::default());
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].approx_tokens, chunks[0].content.len() / 4);
+    }
+
+    #[test]
+    fn heading_context_preserved_in_subsequent_chunks() {
+        let opts = ChunkOptions {
+            max_chars: 60,
+            overlap_chars: 0,
+        };
+        let text =
+            "# My Heading\n\nFirst paragraph under heading.\n\nSecond paragraph forces new chunk.";
+        let chunks = chunk_text(text, &opts);
+        if chunks.len() >= 2 {
+            assert!(
+                chunks[1].content.starts_with("# My Heading"),
+                "Expected heading context in chunk 1, got: {}",
+                chunks[1].content
+            );
+        }
+    }
+
+    #[test]
+    fn chunk_markdown_uses_default_options() {
+        let text = "Simple text for default chunking.";
+        let chunks = chunk_markdown(text);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].content, text);
+    }
+
+    #[test]
+    fn custom_small_max_chars() {
+        let opts = ChunkOptions {
+            max_chars: 20,
+            overlap_chars: 5,
+        };
+        let text = "AAAA AAAA AAAA\n\nBBBB BBBB BBBB\n\nCCCC CCCC CCCC";
+        let chunks = chunk_text(text, &opts);
+        assert!(chunks.len() >= 2);
+    }
+}

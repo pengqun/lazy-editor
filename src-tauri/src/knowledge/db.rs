@@ -199,3 +199,133 @@ fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn test_db() -> Database {
+        // Use in-memory SQLite for tests
+        Database::new(&PathBuf::from(":memory:")).unwrap()
+    }
+
+    #[test]
+    fn create_database_succeeds() {
+        let db = test_db();
+        let docs = db.list_documents().unwrap();
+        assert!(docs.is_empty());
+    }
+
+    #[test]
+    fn insert_and_list_document() {
+        let db = test_db();
+        let id = db
+            .insert_document("Test Doc", "paste", None, "Hello world")
+            .unwrap();
+        assert!(id > 0);
+
+        let docs = db.list_documents().unwrap();
+        assert_eq!(docs.len(), 1);
+        assert_eq!(docs[0].title, "Test Doc");
+        assert_eq!(docs[0].source_type, "paste");
+        assert!(docs[0].source_path.is_none());
+        assert_eq!(docs[0].chunk_count, 0); // No chunks inserted yet
+    }
+
+    #[test]
+    fn insert_document_with_source_path() {
+        let db = test_db();
+        db.insert_document("File Doc", "file", Some("/path/to/file.md"), "content")
+            .unwrap();
+
+        let docs = db.list_documents().unwrap();
+        assert_eq!(docs[0].source_path.as_deref(), Some("/path/to/file.md"));
+    }
+
+    #[test]
+    fn chunk_count_reflects_inserted_chunks() {
+        let db = test_db();
+        let doc_id = db
+            .insert_document("Doc", "paste", None, "content")
+            .unwrap();
+        db.insert_chunk(doc_id, "chunk 0", 0, Some(10)).unwrap();
+        db.insert_chunk(doc_id, "chunk 1", 1, Some(15)).unwrap();
+
+        let docs = db.list_documents().unwrap();
+        assert_eq!(docs[0].chunk_count, 2);
+    }
+
+    #[test]
+    fn remove_document_cascades() {
+        let db = test_db();
+        let doc_id = db.insert_document("D", "paste", None, "c").unwrap();
+        let chunk_id = db.insert_chunk(doc_id, "chunk text", 0, None).unwrap();
+        db.insert_embedding(chunk_id, &[1.0, 2.0, 3.0]).unwrap();
+
+        db.remove_document(doc_id).unwrap();
+
+        assert!(db.list_documents().unwrap().is_empty());
+        assert!(db.get_all_embeddings().unwrap().is_empty());
+        assert!(db.get_chunk_with_document(chunk_id).is_err());
+    }
+
+    #[test]
+    fn get_chunk_with_document_returns_correct_data() {
+        let db = test_db();
+        let doc_id = db
+            .insert_document("My Doc", "file", None, "full content")
+            .unwrap();
+        let chunk_id = db.insert_chunk(doc_id, "chunk content", 0, Some(5)).unwrap();
+
+        let (content, title, returned_doc_id) = db.get_chunk_with_document(chunk_id).unwrap();
+        assert_eq!(content, "chunk content");
+        assert_eq!(title, "My Doc");
+        assert_eq!(returned_doc_id, doc_id);
+    }
+
+    #[test]
+    fn embedding_blob_roundtrip() {
+        let original: Vec<f32> = vec![1.0, -0.5, 0.0, 3.14, f32::MIN, f32::MAX];
+        let blob = embedding_to_blob(&original);
+        let recovered = blob_to_embedding(&blob);
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn embedding_blob_empty() {
+        let empty: Vec<f32> = vec![];
+        let blob = embedding_to_blob(&empty);
+        assert!(blob.is_empty());
+        let recovered = blob_to_embedding(&blob);
+        assert!(recovered.is_empty());
+    }
+
+    #[test]
+    fn insert_and_retrieve_embedding() {
+        let db = test_db();
+        let doc_id = db.insert_document("D", "paste", None, "c").unwrap();
+        let chunk_id = db.insert_chunk(doc_id, "text", 0, None).unwrap();
+
+        let embedding = vec![0.1, 0.2, 0.3, 0.4];
+        db.insert_embedding(chunk_id, &embedding).unwrap();
+
+        let all = db.get_all_embeddings().unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].0, chunk_id);
+        assert_eq!(all[0].1, embedding);
+    }
+
+    #[test]
+    fn multiple_documents_list_order() {
+        let db = test_db();
+        db.insert_document("First", "paste", None, "a").unwrap();
+        db.insert_document("Second", "paste", None, "b").unwrap();
+
+        let docs = db.list_documents().unwrap();
+        assert_eq!(docs.len(), 2);
+        // Ordered by created_at DESC — both created at same time,
+        // but IDs should differ
+        assert_ne!(docs[0].id, docs[1].id);
+    }
+}
