@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "AI-native writing workspace"
 authors = ["Lazy Editor Team"]
 edition = "2021"
+default-run = "lazy-editor"
 
 [lib]
 name = "lazy_editor_lib"
