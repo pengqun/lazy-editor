@@ -21,6 +21,14 @@ export default defineConfig(async ({ command }) => ({
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
 
+          if (id.includes("highlight")) {
+            console.log(`[manualChunks] highlight id: ${id}`);
+          }
+          if (id.includes("highlight.js/lib/languages/") || id.includes("highlight.js/es/languages/")) {
+            if (id.includes("plaintext")) return "editor-highlight";
+            const m = id.match(/languages\/([^/.]+)/);
+            if (m) return `hljs-${m[1]}`;
+          }
           if (id.includes("lowlight") || id.includes("highlight.js")) {
             return "editor-highlight";
           }
