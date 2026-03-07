@@ -100,6 +100,39 @@ cd src-tauri && cargo check
 cd src-tauri && cargo build
 ```
 
+## CI Release Packaging (macOS Apple Silicon)
+
+This repo ships a dedicated workflow at `.github/workflows/release.yml`.
+
+### Recommended release flow (best practice)
+
+Use **version tags** as the source of truth for official releases:
+
+```bash
+git tag vX.Y.Z
+git push origin main --tags
+```
+
+When a tag matching `v*.*.*` is pushed, GitHub Actions will:
+
+- build the app for `aarch64-apple-darwin` on `macos-14`
+- collect `.dmg` / updater artifacts
+- publish a GitHub Release and attach bundles for download
+
+### Pre-release branch builds
+
+Push to `release/**` to build candidate packages without creating a GitHub Release.
+Artifacts are uploaded to the workflow run for QA/internal testing.
+
+### Manual builds
+
+`workflow_dispatch` is enabled, so you can trigger packaging manually from Actions.
+
+### Signing / notarization caveat
+
+By default, builds can be unsigned unless Apple signing/notarization secrets are configured.
+Unsigned apps are fine for internal testing but may show macOS security warnings on end-user machines.
+
 ## Privacy
 
 - Knowledge base data is stored locally (SQLite).
