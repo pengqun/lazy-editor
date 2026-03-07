@@ -40,16 +40,26 @@ jobs:
       - name: Build frontend (selftest mode)
         run: npm run build:selftest
 
+      - name: Force selftest rebuild (embed fresh dist/)
+        run: touch src-tauri/src/bin/selftest.rs
+
       - name: Build selftest binary
         run: cd src-tauri && cargo build --bin lazy-editor-selftest
 
-      - name: Run self-tests
+      - name: "Self-test: editor-basic"
+        timeout-minutes: 2
         env:
           RUST_BACKTRACE: "1"
-          GIT_TERMINAL_PROMPT: "0"
-        run: |
-          set -euo pipefail
-          BIN=src-tauri/target/debug/lazy-editor-selftest
-          $BIN --workspace "$GITHUB_WORKSPACE" --self-test editor-basic
-          $BIN --workspace "$GITHUB_WORKSPACE" --self-test editor-undo-redo
-          $BIN --workspace "$GITHUB_WORKSPACE" --self-test editor-formatting
+        run: src-tauri/target/debug/lazy-editor-selftest --workspace "$GITHUB_WORKSPACE" --self-test editor-basic
+
+      - name: "Self-test: editor-undo-redo"
+        timeout-minutes: 2
+        env:
+          RUST_BACKTRACE: "1"
+        run: src-tauri/target/debug/lazy-editor-selftest --workspace "$GITHUB_WORKSPACE" --self-test editor-undo-redo
+
+      - name: "Self-test: editor-formatting"
+        timeout-minutes: 2
+        env:
+          RUST_BACKTRACE: "1"
+        run: src-tauri/target/debug/lazy-editor-selftest --workspace "$GITHUB_WORKSPACE" --self-test editor-formatting

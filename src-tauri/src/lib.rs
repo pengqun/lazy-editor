@@ -13,7 +13,7 @@ use tauri::Manager;
 
 pub struct AppState {
     pub db: Arc<Mutex<Database>>,
-    pub embedder: Arc<Mutex<Embedder>>,
+    pub embedder: Arc<Mutex<Option<Embedder>>>,
     pub workspace_path: Arc<Mutex<Option<String>>>,
     pub cancel_stream: Arc<AtomicBool>,
     pub self_test: Arc<Mutex<Option<String>>>,
@@ -61,12 +61,32 @@ pub fn run() {
 pub fn run_with_context(context: tauri::Context) {
     env_logger::init();
 
-    tauri::Builder::default()
+    let is_self_test = parse_self_test_arg();
+
+    // Watchdog: kill process after 60s in selftest mode (fail fast, but allow UI boot)
+    if is_self_test.is_some() {
+        std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_secs(60));
+            eprintln!("[selftest] FATAL: watchdog timeout (60s)");
+            std::process::exit(2);
+        });
+    }
+
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_store::Builder::default().build())
-        .setup(|app| {
+        .plugin(tauri_plugin_store::Builder::default().build());
+
+    // NOTE: In self-test mode, avoid initializing the HTTP plugin. In CI / headless
+    // contexts it may fail with "Operation not permitted" and prevent tests from running.
+    if is_self_test.is_some() {
+        eprintln!("[selftest] setup: skipping tauri_plugin_http (selftest mode)");
+    } else {
+        builder = builder.plugin(tauri_plugin_http::init());
+    }
+
+    builder
+        .setup(move |app| {
             let app_data_dir = app
                 .path()
                 .app_data_dir()
@@ -74,16 +94,26 @@ pub fn run_with_context(context: tauri::Context) {
             std::fs::create_dir_all(&app_data_dir).ok();
 
             let db_path = app_data_dir.join("knowledge.db");
+            eprintln!("[selftest] setup: initializing database...");
             let db = Database::new(&db_path).expect("Failed to initialize database");
+            eprintln!("[selftest] setup: database ready");
 
-            let embedder = Embedder::new().expect("Failed to initialize embedder");
+            let embedder = if is_self_test.is_some() {
+                eprintln!("[selftest] setup: skipping embedder (selftest mode)");
+                None
+            } else {
+                eprintln!("[selftest] setup: initializing embedder...");
+                let e = Embedder::new().expect("Failed to initialize embedder");
+                eprintln!("[selftest] setup: embedder ready");
+                Some(e)
+            };
 
             let state = AppState {
                 db: Arc::new(Mutex::new(db)),
                 embedder: Arc::new(Mutex::new(embedder)),
                 workspace_path: Arc::new(Mutex::new(None)),
                 cancel_stream: Arc::new(AtomicBool::new(false)),
-                self_test: Arc::new(Mutex::new(None)),
+                self_test: Arc::new(Mutex::new(is_self_test.clone())),
             };
 
             // CLI: allow setting workspace without UI interaction
@@ -95,12 +125,52 @@ pub fn run_with_context(context: tauri::Context) {
                     eprintln!("--workspace is not a directory: {}", ws);
                 }
             }
-
-            if let Some(t) = parse_self_test_arg() {
-                *state.self_test.blocking_lock() = Some(t);
-            }
+            eprintln!("[selftest] setup: CLI args parsed");
 
             app.manage(state);
+
+            // Diagnostics: after startup, report whether a window/webview exists and attempt
+            // to invoke a Tauri command from JS via eval.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let labels: Vec<String> = handle
+                    .webview_windows()
+                    .keys()
+                    .cloned()
+                    .collect();
+                eprintln!("[selftest] diag: webview_windows labels={:?}", labels);
+
+                if let Some(w) = handle.get_webview_window("main") {
+                    let js = r#"
+                      (function(){
+                        const run = async () => {
+                          try {
+                            if (window.__TAURI__?.core?.invoke) {
+                              await window.__TAURI__.core.invoke('selftest_ping', { message: 'eval invoke ok' });
+                            } else {
+                              // leave a breadcrumb
+                              document.documentElement.setAttribute('data-selftest-tauri', 'missing');
+                            }
+                          } catch (e) {
+                            document.documentElement.setAttribute('data-selftest-tauri', 'threw');
+                          }
+                        };
+                        if (document.readyState === 'complete') run();
+                        else window.addEventListener('load', () => run(), { once: true });
+                      })();
+                    "#;
+                    if let Err(e) = w.eval(js) {
+                        eprintln!("[selftest] diag: window.eval failed: {}", e);
+                    } else {
+                        eprintln!("[selftest] diag: window.eval submitted");
+                    }
+                } else {
+                    eprintln!("[selftest] diag: could not find webview window 'main'");
+                }
+            });
+
+            eprintln!("[selftest] setup: app state managed, startup complete");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -132,6 +202,7 @@ pub fn run_with_context(context: tauri::Context) {
             // Utility (testing / startup)
             commands::util::get_startup_params,
             commands::util::exit_app,
+            commands::util::selftest_ping,
         ])
         .run(context)
         .expect("error while running tauri application");

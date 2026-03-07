@@ -34,11 +34,14 @@ pub async fn ingest_file(
     let chunk_texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
 
     // Generate embeddings
-    let embedder = state.embedder.lock().await;
+    let embedder_guard = state.embedder.lock().await;
+    let embedder = embedder_guard
+        .as_ref()
+        .ok_or("Embedder not available")?;
     let embeddings = embedder
         .embed_batch(&chunk_texts)
         .map_err(|e| format!("Failed to generate embeddings: {}", e))?;
-    drop(embedder);
+    drop(embedder_guard);
 
     let _ = app.emit("ingest-progress", "Storing in knowledge base...");
 
@@ -84,11 +87,14 @@ pub async fn ingest_text(
         format!("Embedding {} chunks...", chunks.len()),
     );
 
-    let embedder = state.embedder.lock().await;
+    let embedder_guard = state.embedder.lock().await;
+    let embedder = embedder_guard
+        .as_ref()
+        .ok_or("Embedder not available")?;
     let embeddings = embedder
         .embed_batch(&chunk_texts)
         .map_err(|e| format!("Failed to generate embeddings: {}", e))?;
-    drop(embedder);
+    drop(embedder_guard);
 
     let _ = app.emit("ingest-progress", "Storing in knowledge base...");
 
@@ -130,9 +136,12 @@ pub async fn search_knowledge_base(
     state: State<'_, AppState>,
 ) -> Result<Vec<SearchResult>, String> {
     let db = state.db.lock().await;
-    let embedder = state.embedder.lock().await;
+    let embedder_guard = state.embedder.lock().await;
+    let embedder = embedder_guard
+        .as_ref()
+        .ok_or("Embedder not available")?;
 
-    search::search(&db, &embedder, &query, top_k)
+    search::search(&db, embedder, &query, top_k)
         .map_err(|e| format!("Failed to search KB: {}", e))
 }
 

@@ -4,11 +4,14 @@
   "version": "0.1.0",
   "identifier": "com.lazy-editor.selftest",
   "build": {
-    "frontendDist": "../dist"
+    "frontendDist": "dist",
+    "devUrl": null
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "Lazy Editor Selftest",
         "width": 1280,
         "height": 800,

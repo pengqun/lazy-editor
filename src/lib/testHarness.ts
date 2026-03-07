@@ -6,7 +6,7 @@ export type LazyTestApi = {
   save: () => Promise<void>;
 
   setHtml: (html: string) => void;
-  getHtml: () => string;
+  getHtml: () => string | null;
 
   focus: () => void;
   selectAll: () => void;
@@ -55,7 +55,7 @@ export function installTestHarness() {
 
     getHtml: () => {
       const editor = getEditor();
-      return editor?.getHTML() ?? "";
+      return editor ? editor.getHTML() : null;
     },
 
     focus: () => {

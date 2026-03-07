@@ -48,8 +48,11 @@ async fn run_ai_action(
     // 1. Search KB for relevant context
     let kb_results = if let Some(query) = kb_query {
         let db = state.db.lock().await;
-        let embedder = state.embedder.lock().await;
-        search::search(&db, &embedder, query, 5).unwrap_or_default()
+        let embedder_guard = state.embedder.lock().await;
+        let Some(embedder) = embedder_guard.as_ref() else {
+            return Err("Embedder not available".to_string());
+        };
+        search::search(&db, embedder, query, 5).unwrap_or_default()
     } else {
         vec![]
     };
