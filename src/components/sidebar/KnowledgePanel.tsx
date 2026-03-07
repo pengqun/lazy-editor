@@ -1,18 +1,18 @@
-import { useEffect, useState } from "react";
 import {
   BookOpen,
-  Search,
-  Upload,
   ClipboardPaste,
-  Trash2,
+  Loader2,
   Pin,
   PinOff,
-  Loader2,
+  Search,
+  Trash2,
+  Upload,
   X,
 } from "lucide-react";
-import { useKnowledgeStore } from "../../stores/knowledge";
-import { openFileDialog, listenToIngestProgress } from "../../lib/tauri";
+import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
+import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
+import { useKnowledgeStore } from "../../stores/knowledge";
 
 export function KnowledgePanel() {
   const {
@@ -72,9 +72,7 @@ export function KnowledgePanel() {
       <div className="h-10 flex items-center justify-between px-4 border-b border-border">
         <div className="flex items-center gap-2">
           <BookOpen size={14} className="text-accent" />
-          <span className="text-sm font-medium text-text-secondary">
-            Knowledge Base
-          </span>
+          <span className="text-sm font-medium text-text-secondary">Knowledge Base</span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -98,9 +96,7 @@ export function KnowledgePanel() {
       {showTextInput && (
         <div className="p-3 border-b border-border space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-text-tertiary uppercase tracking-wider">
-              Paste Text
-            </span>
+            <span className="text-xs text-text-tertiary uppercase tracking-wider">Paste Text</span>
             <button
               onClick={() => setShowTextInput(false)}
               className="p-0.5 hover:bg-surface-3 rounded"
@@ -183,9 +179,7 @@ export function KnowledgePanel() {
                   {(result.score * 100).toFixed(0)}%
                 </span>
               </div>
-              <p className="text-xs text-text-secondary line-clamp-3">
-                {result.chunkContent}
-              </p>
+              <p className="text-xs text-text-secondary line-clamp-3">{result.chunkContent}</p>
             </div>
           ))}
         </div>
@@ -229,15 +223,17 @@ export function KnowledgePanel() {
               </div>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className={cn(
-                "text-xs px-1.5 py-0.5 rounded",
-                pinnedDocIds.has(doc.id) ? "bg-accent/20 text-accent" : "bg-surface-3 text-text-tertiary",
-              )}>
+              <span
+                className={cn(
+                  "text-xs px-1.5 py-0.5 rounded",
+                  pinnedDocIds.has(doc.id)
+                    ? "bg-accent/20 text-accent"
+                    : "bg-surface-3 text-text-tertiary",
+                )}
+              >
                 {doc.sourceType}
               </span>
-              <span className="text-xs text-text-tertiary">
-                {doc.chunkCount} chunks
-              </span>
+              <span className="text-xs text-text-tertiary">{doc.chunkCount} chunks</span>
             </div>
           </div>
         ))}

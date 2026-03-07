@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { invoke } from "@tauri-apps/api/core";
 import { useKnowledgeStore } from "@/stores/knowledge";
+import { invoke } from "@tauri-apps/api/core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -30,7 +30,14 @@ describe("useKnowledgeStore", () => {
 
   it("loadDocuments calls invoke and sets documents", async () => {
     const docs = [
-      { id: 1, title: "Doc 1", sourceType: "paste", sourcePath: null, createdAt: "2024-01-01", chunkCount: 3 },
+      {
+        id: 1,
+        title: "Doc 1",
+        sourceType: "paste",
+        sourcePath: null,
+        createdAt: "2024-01-01",
+        chunkCount: 3,
+      },
     ];
     mockedInvoke.mockResolvedValueOnce(docs);
 
@@ -42,14 +49,17 @@ describe("useKnowledgeStore", () => {
 
   it("ingestText sets ingesting state and reloads documents", async () => {
     mockedInvoke
-      .mockResolvedValueOnce(undefined)  // ingest_text
-      .mockResolvedValueOnce([]);         // list_kb_documents (reload)
+      .mockResolvedValueOnce(undefined) // ingest_text
+      .mockResolvedValueOnce([]); // list_kb_documents (reload)
 
     const promise = useKnowledgeStore.getState().ingestText("My Note", "some content");
     expect(useKnowledgeStore.getState().isIngesting).toBe(true);
 
     await promise;
-    expect(mockedInvoke).toHaveBeenCalledWith("ingest_text", { title: "My Note", text: "some content" });
+    expect(mockedInvoke).toHaveBeenCalledWith("ingest_text", {
+      title: "My Note",
+      text: "some content",
+    });
     expect(useKnowledgeStore.getState().isIngesting).toBe(false);
   });
 
@@ -61,7 +71,10 @@ describe("useKnowledgeStore", () => {
 
     const returned = await useKnowledgeStore.getState().searchKB("test query", 3);
 
-    expect(mockedInvoke).toHaveBeenCalledWith("search_knowledge_base", { query: "test query", topK: 3 });
+    expect(mockedInvoke).toHaveBeenCalledWith("search_knowledge_base", {
+      query: "test query",
+      topK: 3,
+    });
     expect(returned).toEqual(results);
     expect(useKnowledgeStore.getState().searchResults).toEqual(results);
   });
@@ -74,8 +87,8 @@ describe("useKnowledgeStore", () => {
 
   it("removeDocument calls invoke and reloads", async () => {
     mockedInvoke
-      .mockResolvedValueOnce(undefined)  // remove_kb_document
-      .mockResolvedValueOnce([]);         // list_kb_documents
+      .mockResolvedValueOnce(undefined) // remove_kb_document
+      .mockResolvedValueOnce([]); // list_kb_documents
 
     await useKnowledgeStore.getState().removeDocument(42);
     expect(mockedInvoke).toHaveBeenCalledWith("remove_kb_document", { id: 42 });

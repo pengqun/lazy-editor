@@ -1,15 +1,15 @@
-import { useEffect } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
-import Link from "@tiptap/extension-link";
-import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
-import { lowlight, loadLanguagesForDoc } from "../../lib/lowlight-loader";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { useEffect } from "react";
+import { useAIStream } from "../../hooks/useAI";
+import { useAutoSave } from "../../hooks/useAutoSave";
+import { loadLanguagesForDoc, lowlight } from "../../lib/lowlight-loader";
 import { useEditorStore } from "../../stores/editor";
 import { useFilesStore } from "../../stores/files";
-import { useAutoSave } from "../../hooks/useAutoSave";
-import { useAIStream } from "../../hooks/useAI";
 
 export function Editor() {
   const setEditor = useEditorStore((s) => s.setEditor);
@@ -88,8 +88,7 @@ export function Editor() {
           <p className="text-lg mb-2">No document open</p>
           <p className="text-sm">
             Select a file from the sidebar or press{" "}
-            <kbd className="px-2 py-0.5 bg-surface-2 rounded text-xs">Cmd+K</kbd>{" "}
-            to get started
+            <kbd className="px-2 py-0.5 bg-surface-2 rounded text-xs">Cmd+K</kbd> to get started
           </p>
         </div>
       </div>

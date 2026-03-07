@@ -29,8 +29,14 @@ export async function editorFormatting(ctx: TestContext) {
   const saved = await ctx.invoke<string>("open_file", { path });
 
   assert(saved.includes("<h1"), `expected <h1> in saved content; got: ${saved.slice(0, 200)}`);
-  assert(saved.includes("<ul") || saved.includes("<ol"), `expected list (<ul>/<ol>) in saved content; got: ${saved.slice(0, 200)}`);
-  assert(saved.includes("<blockquote"), `expected <blockquote> in saved content; got: ${saved.slice(0, 200)}`);
+  assert(
+    saved.includes("<ul") || saved.includes("<ol"),
+    `expected list (<ul>/<ol>) in saved content; got: ${saved.slice(0, 200)}`,
+  );
+  assert(
+    saved.includes("<blockquote"),
+    `expected <blockquote> in saved content; got: ${saved.slice(0, 200)}`,
+  );
   assert(saved.includes("<hr"), `expected <hr> in saved content; got: ${saved.slice(0, 200)}`);
 
   console.log("editor-formatting: PASS");

@@ -1,7 +1,7 @@
-import type { JSONContent } from "@tiptap/react";
-import type { Editor } from "@tiptap/react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import type { JSONContent } from "@tiptap/react";
+import type { Editor } from "@tiptap/react";
 
 /**
  * Export the current editor content as a Markdown file via a save dialog.
@@ -34,7 +34,9 @@ export async function exportEditorToMarkdown(
  */
 export function jsonToMarkdown(doc: JSONContent): string {
   if (!doc.content || doc.content.length === 0) return "";
-  const result = renderNodes(doc.content).replace(/\n{3,}/g, "\n\n").trim();
+  const result = renderNodes(doc.content)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   return result ? result + "\n" : "";
 }
 

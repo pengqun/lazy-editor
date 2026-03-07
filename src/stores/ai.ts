@@ -1,5 +1,5 @@
-import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { create } from "zustand";
 
 export type AiAction = "draft" | "expand" | "rewrite" | "research" | "summarize";
 export type AiProvider = "claude" | "openai" | "ollama";

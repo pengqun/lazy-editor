@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { invoke } from "@tauri-apps/api/core";
 import { useFilesStore } from "@/stores/files";
+import { invoke } from "@tauri-apps/api/core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -102,9 +102,9 @@ describe("useFilesStore", () => {
     useFilesStore.setState({ workspacePath: "/workspace" });
     // save_file, get_workspace, open_file
     mockedInvoke
-      .mockResolvedValueOnce(undefined)  // save_file
-      .mockResolvedValueOnce({ path: "/workspace", files: [] })  // get_workspace
-      .mockResolvedValueOnce("# notes\n\n");  // open_file
+      .mockResolvedValueOnce(undefined) // save_file
+      .mockResolvedValueOnce({ path: "/workspace", files: [] }) // get_workspace
+      .mockResolvedValueOnce("# notes\n\n"); // open_file
 
     await useFilesStore.getState().createFile("notes.md");
 

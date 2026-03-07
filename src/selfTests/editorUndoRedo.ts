@@ -22,7 +22,10 @@ export async function editorUndoRedo(ctx: TestContext) {
   ctx.api.undo();
   await ctx.api.save();
   saved = await ctx.invoke<string>("open_file", { path });
-  assert(!saved.includes("<strong"), `expected no <strong> after undo; got: ${saved.slice(0, 200)}`);
+  assert(
+    !saved.includes("<strong"),
+    `expected no <strong> after undo; got: ${saved.slice(0, 200)}`,
+  );
 
   // Redo bold
   ctx.api.redo();

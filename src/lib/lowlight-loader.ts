@@ -1,6 +1,6 @@
-import { createLowlight } from "lowlight";
-import plaintext from "highlight.js/lib/languages/plaintext";
 import type { Editor } from "@tiptap/core";
+import plaintext from "highlight.js/lib/languages/plaintext";
+import { createLowlight } from "lowlight";
 
 /** Lowlight instance – starts with only `plaintext` registered. */
 export const lowlight = createLowlight();
@@ -35,17 +35,28 @@ function canonical(lang: string): string {
 /** Dynamically import a highlight.js grammar by canonical name. */
 async function importGrammar(name: string) {
   switch (name) {
-    case "xml":        return (await import("highlight.js/lib/languages/xml")).default;
-    case "css":        return (await import("highlight.js/lib/languages/css")).default;
-    case "javascript": return (await import("highlight.js/lib/languages/javascript")).default;
-    case "typescript": return (await import("highlight.js/lib/languages/typescript")).default;
-    case "json":       return (await import("highlight.js/lib/languages/json")).default;
-    case "bash":       return (await import("highlight.js/lib/languages/bash")).default;
-    case "markdown":   return (await import("highlight.js/lib/languages/markdown")).default;
-    case "python":     return (await import("highlight.js/lib/languages/python")).default;
-    case "rust":       return (await import("highlight.js/lib/languages/rust")).default;
-    case "sql":        return (await import("highlight.js/lib/languages/sql")).default;
-    default:           return null;
+    case "xml":
+      return (await import("highlight.js/lib/languages/xml")).default;
+    case "css":
+      return (await import("highlight.js/lib/languages/css")).default;
+    case "javascript":
+      return (await import("highlight.js/lib/languages/javascript")).default;
+    case "typescript":
+      return (await import("highlight.js/lib/languages/typescript")).default;
+    case "json":
+      return (await import("highlight.js/lib/languages/json")).default;
+    case "bash":
+      return (await import("highlight.js/lib/languages/bash")).default;
+    case "markdown":
+      return (await import("highlight.js/lib/languages/markdown")).default;
+    case "python":
+      return (await import("highlight.js/lib/languages/python")).default;
+    case "rust":
+      return (await import("highlight.js/lib/languages/rust")).default;
+    case "sql":
+      return (await import("highlight.js/lib/languages/sql")).default;
+    default:
+      return null;
   }
 }
 

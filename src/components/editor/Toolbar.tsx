@@ -1,24 +1,24 @@
 import {
   Bold,
-  Italic,
-  Strikethrough,
+  BookOpen,
   Code,
+  Download,
   Heading1,
   Heading2,
   Heading3,
+  Italic,
   List,
   ListOrdered,
-  Quote,
   Minus,
-  Undo,
+  Quote,
   Redo,
-  BookOpen,
   Sparkles,
-  Download,
+  Strikethrough,
+  Undo,
 } from "lucide-react";
-import { useEditorStore } from "../../stores/editor";
 import { cn } from "../../lib/cn";
 import { exportEditorToMarkdown } from "../../lib/export-markdown";
+import { useEditorStore } from "../../stores/editor";
 
 interface ToolbarButtonProps {
   onClick: () => void;
@@ -28,13 +28,7 @@ interface ToolbarButtonProps {
   children: React.ReactNode;
 }
 
-function ToolbarButton({
-  onClick,
-  isActive,
-  disabled,
-  title,
-  children,
-}: ToolbarButtonProps) {
+function ToolbarButton({ onClick, isActive, disabled, title, children }: ToolbarButtonProps) {
   return (
     <button
       onClick={onClick}
@@ -62,9 +56,7 @@ export function Toolbar() {
   const setShowCommandPalette = useEditorStore((s) => s.setShowCommandPalette);
 
   if (!editor) {
-    return (
-      <div className="h-10 border-b border-border bg-surface-1 flex items-center px-2" />
-    );
+    return <div className="h-10 border-b border-border bg-surface-1 flex items-center px-2" />;
   }
 
   const iconSize = 16;
@@ -103,27 +95,21 @@ export function Toolbar() {
       <Separator />
 
       <ToolbarButton
-        onClick={() =>
-          editor.chain().focus().toggleHeading({ level: 1 }).run()
-        }
+        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
         isActive={editor.isActive("heading", { level: 1 })}
         title="Heading 1"
       >
         <Heading1 size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() =>
-          editor.chain().focus().toggleHeading({ level: 2 }).run()
-        }
+        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         isActive={editor.isActive("heading", { level: 2 })}
         title="Heading 2"
       >
         <Heading2 size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() =>
-          editor.chain().focus().toggleHeading({ level: 3 }).run()
-        }
+        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
         isActive={editor.isActive("heading", { level: 3 })}
         title="Heading 3"
       >
@@ -191,16 +177,11 @@ export function Toolbar() {
       <Separator />
 
       {/* AI & KB toggles */}
-      <ToolbarButton
-        onClick={() => setShowCommandPalette(true)}
-        title="AI Command Palette (Cmd+K)"
-      >
+      <ToolbarButton onClick={() => setShowCommandPalette(true)} title="AI Command Palette (Cmd+K)">
         <Sparkles size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
-        onClick={() =>
-          setRightPanel(rightPanel === "knowledge" ? null : "knowledge")
-        }
+        onClick={() => setRightPanel(rightPanel === "knowledge" ? null : "knowledge")}
         isActive={rightPanel === "knowledge"}
         title="Knowledge Base"
       >

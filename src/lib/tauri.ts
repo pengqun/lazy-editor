@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 
 export async function openFileDialog(): Promise<string | null> {
   return invoke<string | null>("open_file_dialog");
@@ -37,9 +37,7 @@ export function listenToAiStream(
   };
 }
 
-export function listenToIngestProgress(
-  onProgress: (msg: string) => void,
-): () => void {
+export function listenToIngestProgress(onProgress: (msg: string) => void): () => void {
   let unlisten: UnlistenFn | null = null;
   listen<string>("ingest-progress", (event) => {
     onProgress(event.payload);

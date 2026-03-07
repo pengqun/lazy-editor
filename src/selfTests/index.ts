@@ -1,8 +1,8 @@
-import type { LazyTestApi } from "../lib/testHarness";
 import type { InvokeArgs } from "@tauri-apps/api/core";
+import type { LazyTestApi } from "../lib/testHarness";
 import { editorBasic } from "./editorBasic";
-import { editorUndoRedo } from "./editorUndoRedo";
 import { editorFormatting } from "./editorFormatting";
+import { editorUndoRedo } from "./editorUndoRedo";
 
 export type TestContext = {
   api: LazyTestApi;
@@ -16,7 +16,7 @@ const tests: Record<string, TestFn> = {
   "editor-basic": editorBasic,
   "editor-undo-redo": editorUndoRedo,
   "editor-formatting": editorFormatting,
-  "editor": editorBasic, // backward-compat alias
+  editor: editorBasic, // backward-compat alias
 };
 
 export async function runSelfTest() {
@@ -24,7 +24,9 @@ export async function runSelfTest() {
 
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    const params = await invoke<{ workspace: string | null; self_test: string | null }>("get_startup_params");
+    const params = await invoke<{ workspace: string | null; self_test: string | null }>(
+      "get_startup_params",
+    );
     if (!params?.self_test) return;
 
     // JS-side deadline: exit after 60s no matter what

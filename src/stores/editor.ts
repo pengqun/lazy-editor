@@ -1,5 +1,5 @@
-import { create } from "zustand";
 import type { Editor } from "@tiptap/react";
+import { create } from "zustand";
 
 interface EditorState {
   editor: Editor | null;
@@ -36,8 +36,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   setAiStreaming: (streaming) => set({ isAiStreaming: streaming }),
 
   aiStreamContent: "",
-  appendAiStream: (chunk) =>
-    set((state) => ({ aiStreamContent: state.aiStreamContent + chunk })),
+  appendAiStream: (chunk) => set((state) => ({ aiStreamContent: state.aiStreamContent + chunk })),
   clearAiStream: () => set({ aiStreamContent: "" }),
 
   selectedText: "",

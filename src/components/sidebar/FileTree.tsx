@@ -1,8 +1,8 @@
+import { FileText, FolderOpen, Link2, Plus } from "lucide-react";
 import { useState } from "react";
-import { FileText, Plus, FolderOpen, Link2 } from "lucide-react";
-import { useFilesStore } from "../../stores/files";
-import { openFolderDialog, setWorkspacePath } from "../../lib/tauri";
 import { cn } from "../../lib/cn";
+import { openFolderDialog, setWorkspacePath } from "../../lib/tauri";
+import { useFilesStore } from "../../stores/files";
 
 export function FileTree() {
   const files = useFilesStore((s) => s.files);
@@ -59,9 +59,7 @@ export function FileTree() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="flex items-center justify-between px-3 py-2">
-        <span className="text-xs text-text-tertiary uppercase tracking-wider">
-          Files
-        </span>
+        <span className="text-xs text-text-tertiary uppercase tracking-wider">Files</span>
         <div className="flex items-center gap-1">
           <button
             onClick={handleOpenByPath}

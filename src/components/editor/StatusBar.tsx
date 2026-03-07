@@ -7,9 +7,7 @@ export function StatusBar() {
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
   const isDirty = useFilesStore((s) => s.isDirty);
 
-  const wordCount = editor
-    ? editor.state.doc.textContent.split(/\s+/).filter(Boolean).length
-    : 0;
+  const wordCount = editor ? editor.state.doc.textContent.split(/\s+/).filter(Boolean).length : 0;
   const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 
   return (
@@ -26,14 +24,10 @@ export function StatusBar() {
 
       <div className="flex-1" />
 
-      {isAiStreaming && (
-        <span className="text-accent animate-pulse">AI writing...</span>
-      )}
+      {isAiStreaming && <span className="text-accent animate-pulse">AI writing...</span>}
 
       <span className="text-text-tertiary">
-        {activeFilePath
-          ? activeFilePath.split("/").pop()
-          : "No file"}
+        {activeFilePath ? activeFilePath.split("/").pop() : "No file"}
       </span>
     </div>
   );

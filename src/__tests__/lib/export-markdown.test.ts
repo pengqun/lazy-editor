@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
 import { jsonToMarkdown } from "@/lib/export-markdown";
 import type { JSONContent } from "@tiptap/react";
+import { describe, expect, it } from "vitest";
 
 function doc(...content: JSONContent[]): JSONContent {
   return { type: "doc", content };
@@ -38,13 +38,7 @@ describe("jsonToMarkdown", () => {
 
   it("converts bold and italic marks", () => {
     const result = jsonToMarkdown(
-      doc(
-        p(
-          text("bold", [{ type: "bold" }]),
-          text(" and "),
-          text("italic", [{ type: "italic" }]),
-        ),
-      ),
+      doc(p(text("bold", [{ type: "bold" }]), text(" and "), text("italic", [{ type: "italic" }]))),
     );
     expect(result).toBe("**bold** and *italic*\n");
   });
@@ -52,11 +46,7 @@ describe("jsonToMarkdown", () => {
   it("converts strikethrough and inline code", () => {
     const result = jsonToMarkdown(
       doc(
-        p(
-          text("removed", [{ type: "strike" }]),
-          text(" and "),
-          text("code()", [{ type: "code" }]),
-        ),
+        p(text("removed", [{ type: "strike" }]), text(" and "), text("code()", [{ type: "code" }])),
       ),
     );
     expect(result).toBe("~~removed~~ and `code()`\n");

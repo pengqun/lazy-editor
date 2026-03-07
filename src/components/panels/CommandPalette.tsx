@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect } from "react";
-import { Sparkles, FileText, Expand, RefreshCw, Search, X } from "lucide-react";
-import { useAiStore, type AiAction } from "../../stores/ai";
-import { useEditorStore } from "../../stores/editor";
+import { Expand, FileText, RefreshCw, Search, Sparkles, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
+import { type AiAction, useAiStore } from "../../stores/ai";
+import { useEditorStore } from "../../stores/editor";
 
 interface CommandPaletteProps {
   onClose: () => void;
@@ -119,16 +119,12 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
       if (showCommandList) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
-          setActiveIndex((prev) =>
-            prev < filteredCommands.length - 1 ? prev + 1 : 0,
-          );
+          setActiveIndex((prev) => (prev < filteredCommands.length - 1 ? prev + 1 : 0));
           return;
         }
         if (e.key === "ArrowUp") {
           e.preventDefault();
-          setActiveIndex((prev) =>
-            prev > 0 ? prev - 1 : filteredCommands.length - 1,
-          );
+          setActiveIndex((prev) => (prev > 0 ? prev - 1 : filteredCommands.length - 1));
           return;
         }
 
@@ -144,7 +140,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
         }
 
         // Ctrl/Cmd + 1..5 quick-select
-        const digit = parseInt(e.key, 10);
+        const digit = Number.parseInt(e.key, 10);
         if (digit >= 1 && digit <= 5 && (e.ctrlKey || e.metaKey)) {
           const idx = digit - 1;
           if (idx < filteredCommands.length) {
@@ -179,10 +175,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
           {selectedCommand && (
             <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded flex items-center gap-1">
               {selectedCommand.label}
-              <button
-                onClick={() => setSelectedCommand(null)}
-                className="hover:text-white"
-              >
+              <button onClick={() => setSelectedCommand(null)} className="hover:text-white">
                 <X size={10} />
               </button>
             </span>
@@ -200,9 +193,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
             className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
             autoFocus
           />
-          <kbd className="text-xs text-text-tertiary bg-surface-3 px-1.5 py-0.5 rounded">
-            Esc
-          </kbd>
+          <kbd className="text-xs text-text-tertiary bg-surface-3 px-1.5 py-0.5 rounded">Esc</kbd>
         </div>
 
         {/* Commands */}
@@ -220,14 +211,12 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
                     : "hover:bg-surface-3 border-l-2 border-l-transparent",
                 )}
               >
-                <span className={cn(
-                  idx === activeIndex ? "text-accent" : "text-text-tertiary",
-                )}>{cmd.icon}</span>
+                <span className={cn(idx === activeIndex ? "text-accent" : "text-text-tertiary")}>
+                  {cmd.icon}
+                </span>
                 <div className="flex-1">
                   <div className="text-sm text-text-primary">{cmd.label}</div>
-                  <div className="text-xs text-text-tertiary">
-                    {cmd.description}
-                  </div>
+                  <div className="text-xs text-text-tertiary">{cmd.description}</div>
                 </div>
                 <kbd className="text-[10px] text-text-tertiary bg-surface-3 px-1 py-0.5 rounded opacity-60">
                   {navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}
@@ -243,9 +232,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
               >
                 <Sparkles size={16} className="text-accent" />
                 <div>
-                  <div className="text-sm text-accent">
-                    Ask AI: "{input}"
-                  </div>
+                  <div className="text-sm text-accent">Ask AI: "{input}"</div>
                   <div className="text-xs text-text-tertiary">
                     Free-form AI instruction with KB context
                   </div>

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
 import { useEditorStore } from "@/stores/editor";
+import { beforeEach, describe, expect, it } from "vitest";
 
 // Reset store between tests
 function resetStore() {

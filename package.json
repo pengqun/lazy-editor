@@ -12,7 +12,11 @@
     "tauri:dev:ws": "tauri dev -- -- --workspace",
     "tauri:self-test:editor": "tauri dev -- -- --workspace",
     "build:selftest": "tsc -b && vite build --mode selftest",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
+    "format": "biome format src/",
+    "format:fix": "biome format --write src/"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",
@@ -36,6 +40,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "1.9.4",
     "@tailwindcss/typography": "^0.5.15",
     "@tauri-apps/cli": "^2.2.0",
     "@testing-library/jest-dom": "^6.9.1",

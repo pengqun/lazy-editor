@@ -1,5 +1,5 @@
-import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { create } from "zustand";
 
 export interface FileEntry {
   name: string;
@@ -38,9 +38,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   loadWorkspace: async () => {
     try {
-      const result = await invoke<{ path: string; files: FileEntry[] }>(
-        "get_workspace",
-      );
+      const result = await invoke<{ path: string; files: FileEntry[] }>("get_workspace");
       set({ workspacePath: result.path, files: result.files });
     } catch {
       // Workspace not set yet — first run

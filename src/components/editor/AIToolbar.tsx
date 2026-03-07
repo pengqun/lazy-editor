@@ -1,8 +1,8 @@
+import { Expand, FileText, RefreshCw, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { Sparkles, Expand, RefreshCw, FileText } from "lucide-react";
-import { useEditorStore } from "../../stores/editor";
-import { useAiStore } from "../../stores/ai";
 import { cn } from "../../lib/cn";
+import { useAiStore } from "../../stores/ai";
+import { useEditorStore } from "../../stores/editor";
 
 export function AIToolbar() {
   const selectedText = useEditorStore((s) => s.selectedText);

@@ -1,6 +1,6 @@
-import { useEffect, useCallback } from "react";
-import { useEditorStore } from "../stores/editor";
+import { useCallback, useEffect } from "react";
 import { listenToAiStream } from "../lib/tauri";
+import { useEditorStore } from "../stores/editor";
 
 export function useAIStream() {
   const setAiStreaming = useEditorStore((s) => s.setAiStreaming);
