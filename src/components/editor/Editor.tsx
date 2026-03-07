@@ -5,13 +5,45 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import Link from "@tiptap/extension-link";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
-import { common, createLowlight } from "lowlight";
+import { createLowlight } from "lowlight";
+import xml from "highlight.js/lib/languages/xml";
+import css from "highlight.js/lib/languages/css";
+import javascript from "highlight.js/lib/languages/javascript";
+import typescript from "highlight.js/lib/languages/typescript";
+import json from "highlight.js/lib/languages/json";
+import bash from "highlight.js/lib/languages/bash";
+import markdown from "highlight.js/lib/languages/markdown";
+import python from "highlight.js/lib/languages/python";
+import rust from "highlight.js/lib/languages/rust";
+import sql from "highlight.js/lib/languages/sql";
+import plaintext from "highlight.js/lib/languages/plaintext";
 import { useEditorStore } from "../../stores/editor";
 import { useFilesStore } from "../../stores/files";
 import { useAutoSave } from "../../hooks/useAutoSave";
 import { useAIStream } from "../../hooks/useAI";
 
-const lowlight = createLowlight(common);
+const lowlight = createLowlight();
+lowlight.register({
+  xml,
+  html: xml,
+  css,
+  javascript,
+  js: javascript,
+  typescript,
+  ts: typescript,
+  json,
+  bash,
+  sh: bash,
+  markdown,
+  md: markdown,
+  python,
+  py: python,
+  rust,
+  rs: rust,
+  sql,
+  plaintext,
+  text: plaintext,
+});
 
 export function Editor() {
   const setEditor = useEditorStore((s) => s.setEditor);
