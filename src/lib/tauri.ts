@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { type UnlistenFn, listen } from "@tauri-apps/api/event";
+import type { AiPhase } from "../stores/ai";
 
 export async function openFileDialog(): Promise<string | null> {
   return invoke<string | null>("open_file_dialog");
@@ -35,6 +36,16 @@ export function listenToAiStream(
   return () => {
     unlisteners.forEach((fn) => fn());
   };
+}
+
+export function listenToAiPhase(onPhase: (phase: AiPhase) => void): () => void {
+  let unlisten: UnlistenFn | null = null;
+  listen<AiPhase>("ai-action-phase", (event) => {
+    onPhase(event.payload);
+  }).then((fn) => {
+    unlisten = fn;
+  });
+  return () => unlisten?.();
 }
 
 export function listenToIngestProgress(onProgress: (msg: string) => void): () => void {

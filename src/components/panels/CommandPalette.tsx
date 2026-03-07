@@ -1,4 +1,4 @@
-import { Expand, FileText, RefreshCw, Search, Sparkles, X } from "lucide-react";
+import { Expand, FileText, Loader2, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 import { type AiAction, useAiStore } from "../../stores/ai";
@@ -53,6 +53,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const runAction = useAiStore((s) => s.runAction);
+  const isStreaming = useAiStore((s) => s.isStreaming);
   const selectedText = useEditorStore((s) => s.selectedText);
 
   const showCommandList = !selectedCommand;
@@ -71,7 +72,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
   }, [filteredCommands.length]);
 
   const handleSubmit = () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isStreaming) return;
 
     if (selectedCommand) {
       const params: Record<string, string> = {};
@@ -239,6 +240,16 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
                 </div>
               </button>
             )}
+          </div>
+        )}
+
+        {/* AI busy indicator */}
+        {isStreaming && (
+          <div className="px-4 py-2 border-t border-border bg-accent/5">
+            <div className="flex items-center gap-2 text-xs text-accent">
+              <Loader2 size={12} className="animate-spin" />
+              AI is currently active — wait for it to finish
+            </div>
           </div>
         )}
 

@@ -47,6 +47,7 @@ async fn run_ai_action(
 ) -> Result<(), String> {
     // 1. Search KB for relevant context
     let kb_results = if let Some(query) = kb_query {
+        let _ = app.emit("ai-action-phase", "searching_kb");
         let db = state.db.lock().await;
         let embedder_guard = state.embedder.lock().await;
         let Some(embedder) = embedder_guard.as_ref() else {
@@ -93,6 +94,7 @@ async fn run_ai_action(
     };
 
     // 5. Stream the response
+    let _ = app.emit("ai-action-phase", "streaming");
     state.cancel_stream.store(false, Ordering::SeqCst);
     let cancel_flag = state.cancel_stream.clone();
 

@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { toast } from "./toast";
 
 export type AiAction = "draft" | "expand" | "rewrite" | "research" | "summarize";
 export type AiProvider = "claude" | "openai" | "ollama";
+export type AiPhase = "idle" | "searching_kb" | "streaming" | "done" | "error";
 
 export interface AiSettings {
   provider: AiProvider;
@@ -25,6 +27,9 @@ interface AiState {
   isStreaming: boolean;
   streamContent: string;
   currentAction: AiAction | null;
+  aiPhase: AiPhase;
+  aiError: string | null;
+  setAiPhase: (phase: AiPhase) => void;
 
   runAction: (action: AiAction, params: Record<string, string>) => Promise<void>;
   cancelStream: () => void;
@@ -70,13 +75,20 @@ export const useAiStore = create<AiState>((set, get) => ({
   isStreaming: false,
   streamContent: "",
   currentAction: null,
+  aiPhase: "idle",
+  aiError: null,
+  setAiPhase: (phase) => set({ aiPhase: phase }),
 
   runAction: async (action, params) => {
-    set({ isStreaming: true, streamContent: "", currentAction: action });
+    if (get().isStreaming) return; // prevent duplicate triggers
+    set({ isStreaming: true, streamContent: "", currentAction: action, aiPhase: "searching_kb", aiError: null });
     try {
       await invoke(`ai_${action}`, params);
     } catch (err) {
-      console.error(`AI ${action} failed:`, err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`AI ${action} failed:`, message);
+      set({ aiPhase: "error", aiError: message });
+      toast.error(`AI ${action} failed: ${message}`);
     } finally {
       set({ isStreaming: false, currentAction: null });
     }
@@ -84,6 +96,6 @@ export const useAiStore = create<AiState>((set, get) => ({
 
   cancelStream: () => {
     invoke("ai_cancel_stream").catch(console.error);
-    set({ isStreaming: false, currentAction: null });
+    set({ isStreaming: false, currentAction: null, aiPhase: "idle", aiError: null });
   },
 }));
