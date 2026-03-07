@@ -1,15 +1,32 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Settings } from "lucide-react";
 import { FileTree } from "./components/sidebar/FileTree";
-import { Editor } from "./components/editor/Editor";
 import { Toolbar } from "./components/editor/Toolbar";
 import { StatusBar } from "./components/editor/StatusBar";
-import { KnowledgePanel } from "./components/sidebar/KnowledgePanel";
-import { CommandPalette } from "./components/panels/CommandPalette";
-import { SettingsPanel } from "./components/panels/SettingsPanel";
-import { AIToolbar } from "./components/editor/AIToolbar";
 import { useEditorStore } from "./stores/editor";
 import { useFilesStore } from "./stores/files";
+
+const Editor = lazy(() =>
+  import("./components/editor/Editor").then((m) => ({ default: m.Editor })),
+);
+const AIToolbar = lazy(() =>
+  import("./components/editor/AIToolbar").then((m) => ({ default: m.AIToolbar })),
+);
+const KnowledgePanel = lazy(() =>
+  import("./components/sidebar/KnowledgePanel").then((m) => ({
+    default: m.KnowledgePanel,
+  })),
+);
+const CommandPalette = lazy(() =>
+  import("./components/panels/CommandPalette").then((m) => ({
+    default: m.CommandPalette,
+  })),
+);
+const SettingsPanel = lazy(() =>
+  import("./components/panels/SettingsPanel").then((m) => ({
+    default: m.SettingsPanel,
+  })),
+);
 
 export default function App() {
   const showCommandPalette = useEditorStore((s) => s.showCommandPalette);
@@ -56,8 +73,16 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0">
         <Toolbar />
         <div className="flex-1 overflow-y-auto relative">
-          <Editor />
-          <AIToolbar />
+          <Suspense
+            fallback={
+              <div className="h-full flex items-center justify-center text-text-tertiary text-sm">
+                Loading editor…
+              </div>
+            }
+          >
+            <Editor />
+            <AIToolbar />
+          </Suspense>
         </div>
         <StatusBar />
       </div>
@@ -65,18 +90,30 @@ export default function App() {
       {/* Right Sidebar — Knowledge / AI Context */}
       {rightPanel && (
         <div className="w-80 flex-shrink-0 border-l border-border bg-surface-1 flex flex-col">
-          <KnowledgePanel />
+          <Suspense
+            fallback={
+              <div className="h-full flex items-center justify-center text-text-tertiary text-sm">
+                Loading panel…
+              </div>
+            }
+          >
+            <KnowledgePanel />
+          </Suspense>
         </div>
       )}
 
       {/* Command Palette Overlay */}
       {showCommandPalette && (
-        <CommandPalette onClose={() => setShowCommandPalette(false)} />
+        <Suspense fallback={null}>
+          <CommandPalette onClose={() => setShowCommandPalette(false)} />
+        </Suspense>
       )}
 
       {/* Settings Panel Overlay */}
       {showSettings && (
-        <SettingsPanel onClose={() => setShowSettings(false)} />
+        <Suspense fallback={null}>
+          <SettingsPanel onClose={() => setShowSettings(false)} />
+        </Suspense>
       )}
     </div>
   );
