@@ -59,26 +59,33 @@ jobs:
           set -euo pipefail
           mkdir -p dist-release
 
-          # Use find instead of bash globstar for compatibility with macOS bash.
-          mapfile -t files < <(
-            find src-tauri/target/aarch64-apple-darwin/release/bundle -type f \( \
-              -name "*.dmg" -o \
-              -name "*.app.tar.gz" -o \
-              -name "*.sig" -o \
-              -name "*.zip" -o \
-              -name "*.tar.gz" -o \
-              -name "*.pkg" \
-            \)
-          )
+          # macOS runners use bash 3.x: avoid mapfile/globstar.
+          files=()
+
+          while IFS= read -r -d '' f; do
+            files+=("$f")
+          done < <(find src-tauri/target -type f -path '*/bundle/*' \( \
+            -name "*.dmg" -o \
+            -name "*.app.tar.gz" -o \
+            -name "*.sig" -o \
+            -name "*.zip" -o \
+            -name "*.tar.gz" -o \
+            -name "*.pkg" \
+          \) -print0 2>/dev/null || true)
+
+          # Some Tauri setups may only output raw .app bundles.
+          while IFS= read -r -d '' d; do
+            files+=("$d")
+          done < <(find src-tauri/target -type d -path '*/bundle/*' -name "*.app" -print0 2>/dev/null || true)
 
           if [ ${#files[@]} -eq 0 ]; then
             echo "No release artifacts found under target bundle path"
-            find src-tauri/target -maxdepth 6 -type f | head -n 200 || true
+            find src-tauri/target -maxdepth 8 -print | head -n 300 || true
             exit 1
           fi
 
           for f in "${files[@]}"; do
-            cp -v "$f" dist-release/
+            cp -Rv "$f" dist-release/
           done
 
           echo "Collected artifacts:"
