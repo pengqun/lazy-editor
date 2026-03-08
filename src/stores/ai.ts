@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
-import type { OutputPlacementMode } from "../lib/output-placement";
-import { resolveOutputPlacement } from "../lib/output-placement";
+import { type OutputPlacementMode, resolveOutputPlacement } from "../lib/output-placement";
 import { toast } from "./toast";
 
 export type AiAction = "draft" | "expand" | "rewrite" | "research" | "summarize";

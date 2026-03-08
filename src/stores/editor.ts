@@ -8,6 +8,9 @@ interface EditorState {
   showCommandPalette: boolean;
   setShowCommandPalette: (show: boolean) => void;
 
+  showShortcutHelp: boolean;
+  setShowShortcutHelp: (show: boolean) => void;
+
   rightPanel: "knowledge" | "research" | null;
   setRightPanel: (panel: "knowledge" | "research" | null) => void;
 
@@ -28,6 +31,9 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   showCommandPalette: false,
   setShowCommandPalette: (show) => set({ showCommandPalette: show }),
+
+  showShortcutHelp: false,
+  setShowShortcutHelp: (show) => set({ showShortcutHelp: show }),
 
   rightPanel: "knowledge",
   setRightPanel: (panel) => set({ rightPanel: panel }),

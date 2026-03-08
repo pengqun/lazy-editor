@@ -6,6 +6,7 @@ function resetStore() {
   useEditorStore.setState({
     editor: null,
     showCommandPalette: false,
+    showShortcutHelp: false,
     rightPanel: "knowledge",
     isAiStreaming: false,
     aiStreamContent: "",
@@ -20,6 +21,7 @@ describe("useEditorStore", () => {
     const state = useEditorStore.getState();
     expect(state.editor).toBeNull();
     expect(state.showCommandPalette).toBe(false);
+    expect(state.showShortcutHelp).toBe(false);
     expect(state.rightPanel).toBe("knowledge");
     expect(state.isAiStreaming).toBe(false);
     expect(state.aiStreamContent).toBe("");
@@ -32,6 +34,14 @@ describe("useEditorStore", () => {
 
     useEditorStore.getState().setShowCommandPalette(false);
     expect(useEditorStore.getState().showCommandPalette).toBe(false);
+  });
+
+  it("setShowShortcutHelp toggles visibility", () => {
+    useEditorStore.getState().setShowShortcutHelp(true);
+    expect(useEditorStore.getState().showShortcutHelp).toBe(true);
+
+    useEditorStore.getState().setShowShortcutHelp(false);
+    expect(useEditorStore.getState().showShortcutHelp).toBe(false);
   });
 
   it("setRightPanel switches panels", () => {

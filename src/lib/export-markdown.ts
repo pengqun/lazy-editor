@@ -1,7 +1,6 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
-import type { JSONContent } from "@tiptap/react";
-import type { Editor } from "@tiptap/react";
+import type { Editor, JSONContent } from "@tiptap/react";
 
 /**
  * Export the current editor content as a Markdown file via a save dialog.

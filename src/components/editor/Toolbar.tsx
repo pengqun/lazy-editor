@@ -10,6 +10,7 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  HelpCircle,
   Italic,
   List,
   ListOrdered,
@@ -138,6 +139,7 @@ export function Toolbar() {
   const rightPanel = useEditorStore((s) => s.rightPanel);
   const setRightPanel = useEditorStore((s) => s.setRightPanel);
   const setShowCommandPalette = useEditorStore((s) => s.setShowCommandPalette);
+  const setShowShortcutHelp = useEditorStore((s) => s.setShowShortcutHelp);
   const selectedText = useEditorStore((s) => s.selectedText);
 
   const isStreaming = useAiStore((s) => s.isStreaming);
@@ -383,6 +385,12 @@ export function Toolbar() {
         title="Knowledge Base"
       >
         <BookOpen size={iconSize} />
+      </ToolbarButton>
+      <ToolbarButton
+        onClick={() => setShowShortcutHelp(true)}
+        title={`Keyboard Shortcuts (${modKey}/)`}
+      >
+        <HelpCircle size={iconSize} />
       </ToolbarButton>
     </div>
   );

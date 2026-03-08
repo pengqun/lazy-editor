@@ -31,10 +31,17 @@ const SettingsPanel = lazy(() =>
     default: m.SettingsPanel,
   })),
 );
+const ShortcutHelpPanel = lazy(() =>
+  import("./components/panels/ShortcutHelpPanel").then((m) => ({
+    default: m.ShortcutHelpPanel,
+  })),
+);
 
 export default function App() {
   const showCommandPalette = useEditorStore((s) => s.showCommandPalette);
   const setShowCommandPalette = useEditorStore((s) => s.setShowCommandPalette);
+  const showShortcutHelp = useEditorStore((s) => s.showShortcutHelp);
+  const setShowShortcutHelp = useEditorStore((s) => s.setShowShortcutHelp);
   const rightPanel = useEditorStore((s) => s.rightPanel);
   const setRightPanel = useEditorStore((s) => s.setRightPanel);
   const loadWorkspace = useFilesStore((s) => s.loadWorkspace);
@@ -129,8 +136,15 @@ export default function App() {
         setShowSettings(true);
         return;
       }
+
+      // Cmd+/ — Shortcut help
+      if (e.key === "/") {
+        e.preventDefault();
+        setShowShortcutHelp(!showShortcutHelp);
+        return;
+      }
     },
-    [showCommandPalette, setShowCommandPalette],
+    [showCommandPalette, setShowCommandPalette, showShortcutHelp, setShowShortcutHelp],
   );
 
   useEffect(() => {
@@ -228,6 +242,13 @@ export default function App() {
       {showSettings && (
         <Suspense fallback={null}>
           <SettingsPanel onClose={() => setShowSettings(false)} />
+        </Suspense>
+      )}
+
+      {/* Shortcut Help Panel */}
+      {showShortcutHelp && (
+        <Suspense fallback={null}>
+          <ShortcutHelpPanel onClose={() => setShowShortcutHelp(false)} />
         </Suspense>
       )}
 
