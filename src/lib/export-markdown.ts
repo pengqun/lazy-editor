@@ -37,7 +37,7 @@ export function jsonToMarkdown(doc: JSONContent): string {
   const result = renderNodes(doc.content)
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  return result ? result + "\n" : "";
+  return result ? `${result}\n` : "";
 }
 
 function renderNodes(nodes: JSONContent[], joinWith = "\n\n"): string {
@@ -129,7 +129,7 @@ function renderList(node: JSONContent, ordered: boolean): string {
       // Indent continuation lines
       const indented = body
         .split("\n")
-        .map((line, li) => (li === 0 ? prefix + line : "  " + line))
+        .map((line, li) => (li === 0 ? `${prefix}${line}` : `  ${line}`))
         .join("\n");
       return indented;
     })
@@ -158,5 +158,5 @@ function renderBlockquote(node: JSONContent): string {
 function renderCodeBlock(node: JSONContent): string {
   const lang = (node.attrs?.language as string) ?? "";
   const code = node.content?.map((c) => c.text ?? "").join("") ?? "";
-  return "```" + lang + "\n" + code + "\n```";
+  return `\`\`\`${lang}\n${code}\n\`\`\``;
 }

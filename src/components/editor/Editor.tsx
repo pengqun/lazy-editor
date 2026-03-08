@@ -79,7 +79,8 @@ export function Editor() {
         loadLanguagesForDoc(editor);
       }
     }
-  }, [editor, activeFilePath]); // Only re-run when file path changes, not content
+    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional - only re-run when file path changes, not content
+  }, [editor, activeFilePath]);
 
   if (!activeFilePath) {
     return (

@@ -62,7 +62,11 @@ export function StatusBar() {
 
           <div className="w-20 h-1.5 bg-surface-3 rounded-full overflow-hidden">
             <div
-              className={aiPhase === "error" ? "h-full bg-red-400" : "h-full bg-accent transition-all duration-500"}
+              className={
+                aiPhase === "error"
+                  ? "h-full bg-red-400"
+                  : "h-full bg-accent transition-all duration-500"
+              }
               style={{ width: `${progress}%` }}
             />
           </div>

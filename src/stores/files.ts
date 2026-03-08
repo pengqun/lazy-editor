@@ -1,7 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
-import { create } from "zustand";
 import { criticalAlert } from "@/stores/alert";
 import { toast } from "@/stores/toast";
+import { invoke } from "@tauri-apps/api/core";
+import { create } from "zustand";
 
 export interface FileEntry {
   name: string;

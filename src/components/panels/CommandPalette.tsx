@@ -1,5 +1,5 @@
 import { Expand, FileText, Loader2, RefreshCw, Search, Sparkles, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
 import { modKey } from "../../lib/shortcuts";
 import { type AiAction, useAiStore } from "../../stores/ai";
@@ -53,6 +53,11 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
   const [input, setInput] = useState("");
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
   const runAction = useAiStore((s) => s.runAction);
   const isStreaming = useAiStore((s) => s.isStreaming);
   const selectedText = useEditorStore((s) => s.selectedText);
@@ -159,7 +164,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // biome-ignore lint/correctness/useExhaustiveDependencies: stable references from parent scope
     [showCommandList, filteredCommands, activeIndex, input, selectedCommand],
   );
 
@@ -177,7 +182,11 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
           {selectedCommand && (
             <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded flex items-center gap-1">
               {selectedCommand.label}
-              <button onClick={() => setSelectedCommand(null)} className="hover:text-white">
+              <button
+                type="button"
+                onClick={() => setSelectedCommand(null)}
+                className="hover:text-white"
+              >
                 <X size={10} />
               </button>
             </span>
@@ -192,8 +201,8 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
                 ? `Enter ${selectedCommand.label.toLowerCase()} instructions...`
                 : "Ask AI to write, research, or edit..."
             }
+            ref={inputRef}
             className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
-            autoFocus
           />
           <kbd className="text-xs text-text-tertiary bg-surface-3 px-1.5 py-0.5 rounded">Esc</kbd>
         </div>
@@ -203,6 +212,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
           <div className="py-2 max-h-64 overflow-y-auto">
             {filteredCommands.map((cmd, idx) => (
               <button
+                type="button"
                 key={cmd.id}
                 onClick={() => handleCommandClick(cmd)}
                 onMouseEnter={() => setActiveIndex(idx)}
@@ -221,13 +231,15 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
                   <div className="text-xs text-text-tertiary">{cmd.description}</div>
                 </div>
                 <kbd className="text-[10px] text-text-tertiary bg-surface-3 px-1 py-0.5 rounded opacity-60">
-                  {modKey}{idx + 1}
+                  {modKey}
+                  {idx + 1}
                 </kbd>
               </button>
             ))}
 
             {input && (
               <button
+                type="button"
                 onClick={handleSubmit}
                 className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-surface-3 transition-colors border-t border-border"
               >

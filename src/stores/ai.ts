@@ -81,7 +81,13 @@ export const useAiStore = create<AiState>((set, get) => ({
 
   runAction: async (action, params) => {
     if (get().isStreaming) return; // prevent duplicate triggers
-    set({ isStreaming: true, streamContent: "", currentAction: action, aiPhase: "searching_kb", aiError: null });
+    set({
+      isStreaming: true,
+      streamContent: "",
+      currentAction: action,
+      aiPhase: "searching_kb",
+      aiError: null,
+    });
     try {
       await invoke(`ai_${action}`, params);
     } catch (err) {

@@ -21,7 +21,7 @@ import {
   Strikethrough,
   Undo,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
 import { exportEditorToMarkdown } from "../../lib/export-markdown";
 import { altKey, modKey, shiftKey } from "../../lib/shortcuts";
@@ -39,6 +39,7 @@ interface ToolbarButtonProps {
 function ToolbarButton({ onClick, isActive, disabled, title, children }: ToolbarButtonProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       title={title}
@@ -70,6 +71,13 @@ export function Toolbar() {
 
   const [showRewriteInput, setShowRewriteInput] = useState(false);
   const [rewriteInstruction, setRewriteInstruction] = useState("");
+  const rewriteInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showRewriteInput) {
+      rewriteInputRef.current?.focus();
+    }
+  }, [showRewriteInput]);
 
   if (!editor) {
     return <div className="h-10 border-b border-border bg-surface-1 flex items-center px-2" />;
@@ -202,7 +210,11 @@ export function Toolbar() {
           disabled={aiDisabled}
           title={hasSelection ? "Expand with AI" : "Select text to expand"}
         >
-          {isActionActive("expand") ? <Loader2 size={iconSize} className="animate-spin" /> : <Expand size={iconSize} />}
+          {isActionActive("expand") ? (
+            <Loader2 size={iconSize} className="animate-spin" />
+          ) : (
+            <Expand size={iconSize} />
+          )}
         </ToolbarButton>
         <ToolbarButton
           onClick={() => !isStreaming && setShowRewriteInput(!showRewriteInput)}
@@ -210,21 +222,33 @@ export function Toolbar() {
           isActive={showRewriteInput}
           title={hasSelection ? "Rewrite with AI" : "Select text to rewrite"}
         >
-          {isActionActive("rewrite") ? <Loader2 size={iconSize} className="animate-spin" /> : <RefreshCw size={iconSize} />}
+          {isActionActive("rewrite") ? (
+            <Loader2 size={iconSize} className="animate-spin" />
+          ) : (
+            <RefreshCw size={iconSize} />
+          )}
         </ToolbarButton>
         <ToolbarButton
           onClick={() => runAction("summarize", { text: selectedText! })}
           disabled={aiDisabled}
           title={hasSelection ? "Summarize with AI" : "Select text to summarize"}
         >
-          {isActionActive("summarize") ? <Loader2 size={iconSize} className="animate-spin" /> : <FileText size={iconSize} />}
+          {isActionActive("summarize") ? (
+            <Loader2 size={iconSize} className="animate-spin" />
+          ) : (
+            <FileText size={iconSize} />
+          )}
         </ToolbarButton>
         <ToolbarButton
           onClick={() => runAction("research", { query: selectedText! })}
           disabled={aiDisabled}
           title={hasSelection ? "Research with AI" : "Select text to research"}
         >
-          {isActionActive("research") ? <Loader2 size={iconSize} className="animate-spin" /> : <Search size={iconSize} />}
+          {isActionActive("research") ? (
+            <Loader2 size={iconSize} className="animate-spin" />
+          ) : (
+            <Search size={iconSize} />
+          )}
         </ToolbarButton>
 
         {showRewriteInput && !isStreaming && hasSelection && (
@@ -239,8 +263,8 @@ export function Toolbar() {
               }}
               onBlur={() => setShowRewriteInput(false)}
               placeholder="How should I rewrite this?"
+              ref={rewriteInputRef}
               className="w-64 bg-surface-3 border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent"
-              autoFocus
             />
           </div>
         )}
@@ -259,7 +283,10 @@ export function Toolbar() {
       <Separator />
 
       {/* AI & KB toggles */}
-      <ToolbarButton onClick={() => setShowCommandPalette(true)} title={`AI Command Palette (${modKey}K)`}>
+      <ToolbarButton
+        onClick={() => setShowCommandPalette(true)}
+        title={`AI Command Palette (${modKey}K)`}
+      >
         <Sparkles size={iconSize} />
       </ToolbarButton>
       <ToolbarButton

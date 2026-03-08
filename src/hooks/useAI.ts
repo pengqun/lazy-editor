@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from "react";
-import { listenToAiStream, listenToAiPhase } from "../lib/tauri";
-import { useEditorStore } from "../stores/editor";
+import { listenToAiPhase, listenToAiStream } from "../lib/tauri";
 import { useAiStore } from "../stores/ai";
+import { useEditorStore } from "../stores/editor";
 import { toast } from "../stores/toast";
 
 export function useAIStream() {

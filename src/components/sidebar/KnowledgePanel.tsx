@@ -79,6 +79,7 @@ export function KnowledgePanel() {
         </div>
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={() => setShowTextInput(!showTextInput)}
             className="p-1 hover:bg-surface-3 rounded transition-colors"
             title="Paste text to KB"
@@ -86,6 +87,7 @@ export function KnowledgePanel() {
             <ClipboardPaste size={14} className="text-text-tertiary" />
           </button>
           <button
+            type="button"
             onClick={handleIngestFile}
             className="p-1 hover:bg-surface-3 rounded transition-colors"
             title="Add document to KB"
@@ -101,6 +103,7 @@ export function KnowledgePanel() {
           <div className="flex items-center justify-between">
             <span className="text-xs text-text-tertiary uppercase tracking-wider">Paste Text</span>
             <button
+              type="button"
               onClick={() => setShowTextInput(false)}
               className="p-0.5 hover:bg-surface-3 rounded"
             >
@@ -122,6 +125,7 @@ export function KnowledgePanel() {
             className="w-full bg-surface-2 border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent resize-none"
           />
           <button
+            type="button"
             onClick={handleIngestText}
             disabled={!textTitle.trim() || !textContent.trim()}
             className="w-full text-xs px-2 py-1 rounded bg-accent text-white hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -143,6 +147,7 @@ export function KnowledgePanel() {
             className="flex-1 bg-surface-2 border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent"
           />
           <button
+            type="button"
             onClick={handleSearch}
             className="p-1 bg-surface-2 border border-border rounded hover:bg-surface-3 transition-colors"
           >
@@ -174,12 +179,14 @@ export function KnowledgePanel() {
             </p>
             <div className="mt-3 flex flex-col gap-2">
               <button
+                type="button"
                 onClick={handleIngestFile}
                 className="w-full text-xs px-2 py-1.5 rounded bg-accent text-white hover:bg-accent/90 transition-colors"
               >
                 Import first document
               </button>
               <button
+                type="button"
                 onClick={() => setShowTextInput(true)}
                 className="w-full text-xs px-2 py-1.5 rounded border border-border hover:bg-surface-2 transition-colors text-text-secondary"
               >
@@ -198,9 +205,9 @@ export function KnowledgePanel() {
               Search Results
             </span>
           </div>
-          {searchResults.map((result, i) => (
+          {searchResults.map((result) => (
             <div
-              key={i}
+              key={`${result.documentId}-${result.score}`}
               className="px-3 py-2 border-t border-border/50 hover:bg-surface-2 transition-colors"
             >
               <div className="flex items-center justify-between mb-1">
@@ -236,6 +243,7 @@ export function KnowledgePanel() {
                 </span>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
+                    type="button"
                     onClick={() => togglePinDocument(doc.id)}
                     className="p-0.5 hover:bg-surface-3 rounded"
                     title={pinnedDocIds.has(doc.id) ? "Unpin" : "Pin for AI context"}
@@ -247,6 +255,7 @@ export function KnowledgePanel() {
                     )}
                   </button>
                   <button
+                    type="button"
                     onClick={() => removeDocument(doc.id)}
                     className="p-0.5 hover:bg-surface-3 rounded"
                     title="Remove from KB"

@@ -34,7 +34,7 @@ export function listenToAiStream(
   }).then((fn) => unlisteners.push(fn));
 
   return () => {
-    unlisteners.forEach((fn) => fn());
+    for (const fn of unlisteners) fn();
   };
 }
 
