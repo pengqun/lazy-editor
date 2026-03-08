@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { useAIStream } from "../../hooks/useAI";
 import { useAutoSave } from "../../hooks/useAutoSave";
 import { loadLanguagesForDoc, lowlight } from "../../lib/lowlight-loader";
+import { modKey } from "../../lib/shortcuts";
 import { useEditorStore } from "../../stores/editor";
 import { useFilesStore } from "../../stores/files";
 
@@ -31,7 +32,7 @@ export function Editor() {
         codeBlock: false,
       }),
       Placeholder.configure({
-        placeholder: "Start writing, or press Cmd+K to ask AI...",
+        placeholder: `Start writing, or press ${modKey}K to ask AI...`,
       }),
       Typography,
       Link.configure({
@@ -94,7 +95,7 @@ export function Editor() {
           <p className="text-lg mb-2">No document open</p>
           <p className="text-sm">
             Select a file from the sidebar or press{" "}
-            <kbd className="px-2 py-0.5 bg-surface-2 rounded text-xs">Cmd+K</kbd> to get started
+            <kbd className="px-2 py-0.5 bg-surface-2 rounded text-xs">{modKey}K</kbd> to get started
           </p>
         </div>
       </div>
