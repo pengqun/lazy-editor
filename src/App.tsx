@@ -14,9 +14,6 @@ import { toast } from "./stores/toast";
 const Editor = lazy(() =>
   import("./components/editor/Editor").then((m) => ({ default: m.Editor })),
 );
-const AIToolbar = lazy(() =>
-  import("./components/editor/AIToolbar").then((m) => ({ default: m.AIToolbar })),
-);
 const KnowledgePanel = lazy(() =>
   import("./components/sidebar/KnowledgePanel").then((m) => ({
     default: m.KnowledgePanel,
@@ -198,7 +195,6 @@ export default function App() {
             }
           >
             <Editor />
-            <AIToolbar />
           </Suspense>
         </div>
         <StatusBar />

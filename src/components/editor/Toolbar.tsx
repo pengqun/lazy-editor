@@ -3,21 +3,28 @@ import {
   BookOpen,
   Code,
   Download,
+  Expand,
+  FileText,
   Heading1,
   Heading2,
   Heading3,
   Italic,
   List,
   ListOrdered,
+  Loader2,
   Minus,
   Quote,
   Redo,
+  RefreshCw,
+  Search,
   Sparkles,
   Strikethrough,
   Undo,
 } from "lucide-react";
+import { useState } from "react";
 import { cn } from "../../lib/cn";
 import { exportEditorToMarkdown } from "../../lib/export-markdown";
+import { useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
 
 interface ToolbarButtonProps {
@@ -54,12 +61,32 @@ export function Toolbar() {
   const rightPanel = useEditorStore((s) => s.rightPanel);
   const setRightPanel = useEditorStore((s) => s.setRightPanel);
   const setShowCommandPalette = useEditorStore((s) => s.setShowCommandPalette);
+  const selectedText = useEditorStore((s) => s.selectedText);
+
+  const isStreaming = useAiStore((s) => s.isStreaming);
+  const currentAction = useAiStore((s) => s.currentAction);
+  const runAction = useAiStore((s) => s.runAction);
+
+  const [showRewriteInput, setShowRewriteInput] = useState(false);
+  const [rewriteInstruction, setRewriteInstruction] = useState("");
 
   if (!editor) {
     return <div className="h-10 border-b border-border bg-surface-1 flex items-center px-2" />;
   }
 
   const iconSize = 16;
+  const hasSelection = !!selectedText;
+  const aiDisabled = !hasSelection || isStreaming;
+
+  const isActionActive = (action: "expand" | "rewrite" | "summarize" | "research") =>
+    isStreaming && currentAction === action;
+
+  const handleRewrite = () => {
+    if (!rewriteInstruction.trim() || isStreaming || !selectedText) return;
+    runAction("rewrite", { selectedText, instruction: rewriteInstruction });
+    setShowRewriteInput(false);
+    setRewriteInstruction("");
+  };
 
   return (
     <div className="h-10 border-b border-border bg-surface-1 flex items-center px-2 gap-0.5">
@@ -165,6 +192,58 @@ export function Toolbar() {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* AI Quick Actions */}
+      <div className="relative flex items-center">
+        <ToolbarButton
+          onClick={() => runAction("expand", { selectedText: selectedText! })}
+          disabled={aiDisabled}
+          title={hasSelection ? "Expand with AI" : "Select text to expand"}
+        >
+          {isActionActive("expand") ? <Loader2 size={iconSize} className="animate-spin" /> : <Expand size={iconSize} />}
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() => !isStreaming && setShowRewriteInput(!showRewriteInput)}
+          disabled={aiDisabled}
+          isActive={showRewriteInput}
+          title={hasSelection ? "Rewrite with AI" : "Select text to rewrite"}
+        >
+          {isActionActive("rewrite") ? <Loader2 size={iconSize} className="animate-spin" /> : <RefreshCw size={iconSize} />}
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() => runAction("summarize", { text: selectedText! })}
+          disabled={aiDisabled}
+          title={hasSelection ? "Summarize with AI" : "Select text to summarize"}
+        >
+          {isActionActive("summarize") ? <Loader2 size={iconSize} className="animate-spin" /> : <FileText size={iconSize} />}
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() => runAction("research", { query: selectedText! })}
+          disabled={aiDisabled}
+          title={hasSelection ? "Research this topic" : "Select text to research"}
+        >
+          {isActionActive("research") ? <Loader2 size={iconSize} className="animate-spin" /> : <Search size={iconSize} />}
+        </ToolbarButton>
+
+        {showRewriteInput && !isStreaming && hasSelection && (
+          <div className="absolute top-full right-0 mt-1 z-20 bg-surface-2 border border-border rounded-lg shadow-xl p-2">
+            <input
+              type="text"
+              value={rewriteInstruction}
+              onChange={(e) => setRewriteInstruction(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleRewrite();
+                if (e.key === "Escape") setShowRewriteInput(false);
+              }}
+              placeholder="How should I rewrite this?"
+              className="w-64 bg-surface-3 border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent"
+              autoFocus
+            />
+          </div>
+        )}
+      </div>
+
+      <Separator />
 
       {/* Export */}
       <ToolbarButton
