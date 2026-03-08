@@ -6,3 +6,6 @@ export const modKey = isMac ? "⌘" : "Ctrl+";
 /** Platform-aware Shift modifier */
 export const shiftKey = isMac ? "⇧" : "Shift+";
 
+/** Platform-aware Alt/Option modifier */
+export const altKey = isMac ? "⌥" : "Alt+";
+

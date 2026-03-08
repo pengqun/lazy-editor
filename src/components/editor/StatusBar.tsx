@@ -55,7 +55,9 @@ export function StatusBar() {
           )}
 
           <span className={aiPhase === "error" ? "text-red-400" : "text-accent"}>
-            {currentAction ? `${currentAction}: ${phaseLabel}` : phaseLabel}
+            {currentAction
+              ? `${currentAction.charAt(0).toUpperCase() + currentAction.slice(1)}: ${phaseLabel}`
+              : phaseLabel}
           </span>
 
           <div className="w-20 h-1.5 bg-surface-3 rounded-full overflow-hidden">

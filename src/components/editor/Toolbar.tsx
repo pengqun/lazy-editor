@@ -24,7 +24,7 @@ import {
 import { useState } from "react";
 import { cn } from "../../lib/cn";
 import { exportEditorToMarkdown } from "../../lib/export-markdown";
-import { modKey, shiftKey } from "../../lib/shortcuts";
+import { altKey, modKey, shiftKey } from "../../lib/shortcuts";
 import { useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
 
@@ -43,9 +43,9 @@ function ToolbarButton({ onClick, isActive, disabled, title, children }: Toolbar
       disabled={disabled}
       title={title}
       className={cn(
-        "p-1.5 rounded hover:bg-surface-3 transition-colors",
+        "p-1.5 rounded transition-colors",
+        disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-surface-3",
         isActive && "bg-accent/20 text-accent",
-        disabled && "opacity-30 cursor-not-allowed",
       )}
     >
       {children}
@@ -125,21 +125,21 @@ export function Toolbar() {
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
         isActive={editor.isActive("heading", { level: 1 })}
-        title="Heading 1"
+        title={`Heading 1 (${modKey}${altKey}1)`}
       >
         <Heading1 size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         isActive={editor.isActive("heading", { level: 2 })}
-        title="Heading 2"
+        title={`Heading 2 (${modKey}${altKey}2)`}
       >
         <Heading2 size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
         isActive={editor.isActive("heading", { level: 3 })}
-        title="Heading 3"
+        title={`Heading 3 (${modKey}${altKey}3)`}
       >
         <Heading3 size={iconSize} />
       </ToolbarButton>
@@ -195,6 +195,7 @@ export function Toolbar() {
       <div className="flex-1" />
 
       {/* AI Quick Actions */}
+      <Separator />
       <div className="relative flex items-center">
         <ToolbarButton
           onClick={() => runAction("expand", { selectedText: selectedText! })}
@@ -236,6 +237,7 @@ export function Toolbar() {
                 if (e.key === "Enter") handleRewrite();
                 if (e.key === "Escape") setShowRewriteInput(false);
               }}
+              onBlur={() => setShowRewriteInput(false)}
               placeholder="How should I rewrite this?"
               className="w-64 bg-surface-3 border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent"
               autoFocus
