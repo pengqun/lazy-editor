@@ -41,8 +41,102 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      # ── Apple code-signing setup (skipped when secrets are absent) ──
+      - name: Check signing secrets
+        id: signing
+        run: |
+          if [ -n "${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}" ] && \
+             [ -n "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" ] && \
+             [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ] && \
+             [ -n "${{ secrets.APPLE_TEAM_ID }}" ] && \
+             [ -n "${{ secrets.APPLE_ID }}" ] && \
+             [ -n "${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import Apple Developer ID certificate
+        if: steps.signing.outputs.available == 'true'
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+
+          # Decode the .p12 certificate
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          echo "$CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
+
+          # Create a temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import the certificate into the keychain
+          security import "$CERT_PATH" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          # Allow codesign to access the keychain without prompting
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+
+          # Prepend the temporary keychain to the search list
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          # Clean up the cert file
+          rm -f "$CERT_PATH"
+
+          echo "Certificate imported into temporary keychain."
+
+      - name: Warn if signing secrets are missing
+        if: steps.signing.outputs.available != 'true'
+        run: |
+          echo "::warning::Apple signing secrets are not configured. The build will produce UNSIGNED artifacts that trigger Gatekeeper warnings."
+          echo "::warning::See docs/release.md for required GitHub Actions secrets."
+
+      # ── Tauri build (with or without signing) ──
       - name: Build Tauri bundle (aarch64-apple-darwin)
+        env:
+          # Tauri v2 reads these env vars for signing + notarization.
+          # When unset, Tauri skips signing gracefully.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run tauri build -- --target aarch64-apple-darwin
+
+      - name: Verify code signature
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find src-tauri/target -type d -name "*.app" -path '*/bundle/*' | head -1)
+          if [ -n "$APP_PATH" ]; then
+            echo "Verifying signature on: $APP_PATH"
+            codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+            echo "Signature verification passed."
+          else
+            echo "::warning::No .app bundle found to verify."
+          fi
+
+      - name: Clean up keychain
+        if: always() && steps.signing.outputs.available == 'true'
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
 
       - name: Collect release artifacts
         shell: bash
