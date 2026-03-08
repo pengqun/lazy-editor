@@ -37,7 +37,10 @@ export default function App() {
   const showCommandPalette = useEditorStore((s) => s.showCommandPalette);
   const setShowCommandPalette = useEditorStore((s) => s.setShowCommandPalette);
   const rightPanel = useEditorStore((s) => s.rightPanel);
+  const setRightPanel = useEditorStore((s) => s.setRightPanel);
   const loadWorkspace = useFilesStore((s) => s.loadWorkspace);
+  const workspacePath = useFilesStore((s) => s.workspacePath);
+  const aiSettings = useAiStore((s) => s.settings);
   const [showSettings, setShowSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -136,6 +139,11 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  const hasApiKey =
+    aiSettings.provider === "ollama" ||
+    (aiSettings.provider === "claude" && aiSettings.claudeApiKey.length > 0) ||
+    (aiSettings.provider === "openai" && aiSettings.openaiApiKey.length > 0);
+
   // First-run onboarding
   const handleOnboardingChooseFolder = async () => {
     const path = await openFolderDialog();
@@ -146,13 +154,13 @@ export default function App() {
     }
   };
 
+  const handleOnboardingOpenKnowledge = () => {
+    setRightPanel("knowledge");
+    setShowOnboarding(false);
+  };
+
   const handleOnboardingFinish = () => {
     setShowOnboarding(false);
-    const { claudeApiKey, openaiApiKey, provider } = useAiStore.getState().settings;
-    const hasApiKey =
-      provider === "ollama" ||
-      (provider === "claude" && claudeApiKey.length > 0) ||
-      (provider === "openai" && openaiApiKey.length > 0);
     if (!hasApiKey) {
       setShowSettings(true);
     }
@@ -228,25 +236,67 @@ export default function App() {
       {/* First-Run Onboarding Overlay */}
       {showOnboarding && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="w-[420px] bg-surface-2 border border-border rounded-xl shadow-2xl overflow-hidden">
+          <div className="w-[520px] bg-surface-2 border border-border rounded-xl shadow-2xl overflow-hidden">
             <div className="px-6 pt-6 pb-2">
               <h2 className="text-lg font-semibold text-text-primary">Welcome to Lazy Editor</h2>
               <p className="text-sm text-text-secondary mt-2">
-                Get started by choosing a workspace folder for your documents.
+                Core flow: write with AI, ground answers with your Knowledge Base, and ship faster.
               </p>
             </div>
-            <div className="px-6 py-4 space-y-3">
+
+            <div className="px-6 py-4 space-y-2">
+              <div className="flex items-center justify-between text-xs rounded-lg border border-border bg-surface-1 px-3 py-2">
+                <span className="text-text-secondary">1) Choose workspace folder</span>
+                <span className={workspacePath ? "text-emerald-400" : "text-text-tertiary"}>
+                  {workspacePath ? "Done" : "Pending"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs rounded-lg border border-border bg-surface-1 px-3 py-2">
+                <span className="text-text-secondary">2) Configure AI provider</span>
+                <span className={hasApiKey ? "text-emerald-400" : "text-text-tertiary"}>
+                  {hasApiKey ? "Done" : "Pending"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs rounded-lg border border-border bg-surface-1 px-3 py-2">
+                <span className="text-text-secondary">3) Import first KB document</span>
+                <span className="text-text-tertiary">Recommended</span>
+              </div>
+            </div>
+
+            <div className="px-6 pb-4 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={handleOnboardingChooseFolder}
-                className="w-full text-sm px-4 py-2.5 rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
+                className="text-sm px-3 py-2.5 rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
               >
-                Choose Workspace Folder
+                Choose Workspace
               </button>
-              <p className="text-xs text-text-tertiary text-center">
-                You can configure your AI provider in Settings (⌘,) afterwards.
-              </p>
+              <button
+                type="button"
+                onClick={() => setShowSettings(true)}
+                className="text-sm px-3 py-2.5 rounded-lg border border-border text-text-secondary hover:bg-surface-3 transition-colors"
+              >
+                Configure AI
+              </button>
+              <button
+                type="button"
+                onClick={handleOnboardingOpenKnowledge}
+                className="text-sm px-3 py-2.5 rounded-lg border border-border text-text-secondary hover:bg-surface-3 transition-colors"
+              >
+                Open Knowledge Base
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOnboarding(false);
+                  setShowCommandPalette(true);
+                }}
+                className="text-sm px-3 py-2.5 rounded-lg border border-border text-text-secondary hover:bg-surface-3 transition-colors"
+              >
+                Try AI (⌘K)
+              </button>
             </div>
+
             <div className="px-6 pb-4 flex justify-end">
               <button
                 type="button"
