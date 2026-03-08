@@ -222,7 +222,7 @@ export function Toolbar() {
         <ToolbarButton
           onClick={() => runAction("research", { query: selectedText! })}
           disabled={aiDisabled}
-          title={hasSelection ? "Research this topic" : "Select text to research"}
+          title={hasSelection ? "Research with AI" : "Select text to research"}
         >
           {isActionActive("research") ? <Loader2 size={iconSize} className="animate-spin" /> : <Search size={iconSize} />}
         </ToolbarButton>

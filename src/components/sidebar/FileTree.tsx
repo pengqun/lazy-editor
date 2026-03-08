@@ -71,7 +71,7 @@ export function FileTree() {
           <button
             onClick={() => setIsCreating(true)}
             className="p-0.5 hover:bg-surface-3 rounded transition-colors"
-            title="New Document"
+            title="New document"
           >
             <Plus size={14} className="text-text-tertiary" />
           </button>

@@ -6,6 +6,7 @@ import { StatusBar } from "./components/editor/StatusBar";
 import { Toolbar } from "./components/editor/Toolbar";
 import { FileTree } from "./components/sidebar/FileTree";
 import { exportEditorToMarkdown } from "./lib/export-markdown";
+import { modKey } from "./lib/shortcuts";
 import { openFolderDialog, setWorkspacePath } from "./lib/tauri";
 import { useAiStore } from "./stores/ai";
 import { useEditorStore } from "./stores/editor";
@@ -176,7 +177,7 @@ export default function App() {
             type="button"
             onClick={() => setShowSettings(true)}
             className="p-1 hover:bg-surface-3 rounded transition-colors"
-            title="AI Settings (⌘,)"
+            title={`AI Settings (${modKey},)`}
           >
             <Settings size={14} className="text-text-tertiary" />
           </button>
@@ -290,7 +291,7 @@ export default function App() {
                 }}
                 className="text-sm px-3 py-2.5 rounded-lg border border-border text-text-secondary hover:bg-surface-3 transition-colors"
               >
-                Try AI (⌘K)
+                Try AI ({modKey}K)
               </button>
             </div>
 
