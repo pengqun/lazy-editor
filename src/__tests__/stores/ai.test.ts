@@ -99,7 +99,11 @@ describe("useAiStore", () => {
 
   it("cancelStream calls invoke and resets state", () => {
     mockedInvoke.mockResolvedValueOnce(undefined);
-    useAiStore.setState({ isStreaming: true, currentAction: "draft", lockedPlacement: "insert_at_cursor" });
+    useAiStore.setState({
+      isStreaming: true,
+      currentAction: "draft",
+      lockedPlacement: "insert_at_cursor",
+    });
     useAiStore.getState().cancelStream();
     expect(mockedInvoke).toHaveBeenCalledWith("ai_cancel_stream");
     expect(useAiStore.getState().isStreaming).toBe(false);

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { resolveOutputPlacement } from "@/lib/output-placement";
+import { describe, expect, it } from "vitest";
 
 describe("resolveOutputPlacement", () => {
   describe("auto-detection (no override)", () => {

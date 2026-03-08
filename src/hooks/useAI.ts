@@ -39,7 +39,6 @@ export function useAIStream() {
               editor.commands.insertContent("\n\n");
               break;
             }
-            case "insert_at_cursor":
             default:
               break;
           }

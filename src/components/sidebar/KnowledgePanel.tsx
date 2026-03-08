@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
+import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
 import { useKnowledgeStore } from "../../stores/knowledge";
 
@@ -205,22 +206,33 @@ export function KnowledgePanel() {
               Search Results
             </span>
           </div>
-          {searchResults.map((result) => (
-            <div
-              key={`${result.documentId}-${result.score}`}
-              className="px-3 py-2 border-t border-border/50 hover:bg-surface-2 transition-colors"
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-accent truncate">
-                  {result.documentTitle}
-                </span>
-                <span className="text-xs text-text-tertiary">
-                  {(result.score * 100).toFixed(0)}%
-                </span>
+          {searchResults.map((result) => {
+            const segments = highlightText(result.chunkContent, searchQuery);
+            const matched = findMatchedTerms(searchQuery, result.chunkContent);
+            return (
+              <div
+                key={`${result.documentId}-${result.score}`}
+                className="px-3 py-2 border-t border-border/50 hover:bg-surface-2 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-accent truncate">
+                    {result.documentTitle}
+                  </span>
+                  <span className="text-xs text-text-tertiary">
+                    {(result.score * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <p className="text-xs text-text-secondary line-clamp-3">
+                  <HighlightedText segments={segments} />
+                </p>
+                {matched.length > 0 && (
+                  <p className="text-xs text-text-tertiary mt-1 truncate">
+                    <span className="text-accent/70">Why:</span> {matched.slice(0, 5).join(", ")}
+                  </p>
+                )}
               </div>
-              <p className="text-xs text-text-secondary line-clamp-3">{result.chunkContent}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -282,5 +294,21 @@ export function KnowledgePanel() {
         </div>
       )}
     </div>
+  );
+}
+
+function HighlightedText({ segments }: { segments: HighlightSegment[] }) {
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.highlighted ? (
+          <mark key={`${i}-${seg.text}`} className="bg-accent/20 text-accent rounded-sm px-0.5">
+            {seg.text}
+          </mark>
+        ) : (
+          <span key={`${i}-${seg.text}`}>{seg.text}</span>
+        ),
+      )}
+    </>
   );
 }

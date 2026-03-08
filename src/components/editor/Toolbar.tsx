@@ -63,7 +63,11 @@ function Separator() {
   return <div className="w-px h-5 bg-border mx-1" />;
 }
 
-const PLACEMENT_OPTIONS: { value: OutputPlacementMode | null; label: string; icon: React.ReactNode }[] = [
+const PLACEMENT_OPTIONS: {
+  value: OutputPlacementMode | null;
+  label: string;
+  icon: React.ReactNode;
+}[] = [
   { value: null, label: "Auto", icon: <MousePointerClick size={14} /> },
   { value: "replace_selection", label: "Replace selection", icon: <Replace size={14} /> },
   { value: "insert_at_cursor", label: "Insert at cursor", icon: <MousePointerClick size={14} /> },
@@ -114,7 +118,9 @@ function PlacementPicker({
               }}
               className={cn(
                 "w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors",
-                opt.value === value ? "bg-accent/15 text-accent" : "hover:bg-surface-3 text-text-secondary",
+                opt.value === value
+                  ? "bg-accent/15 text-accent"
+                  : "hover:bg-surface-3 text-text-secondary",
               )}
             >
               {opt.icon}
