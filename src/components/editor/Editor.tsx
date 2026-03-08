@@ -4,7 +4,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAIStream } from "../../hooks/useAI";
 import { useAutoSave } from "../../hooks/useAutoSave";
 import { loadLanguagesForDoc, lowlight } from "../../lib/lowlight-loader";
@@ -18,6 +18,9 @@ export function Editor() {
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
   const setDirty = useFilesStore((s) => s.setDirty);
   const setActiveFile = useFilesStore((s) => s.setActiveFile);
+
+  const contentRef = useRef(activeFileContent);
+  contentRef.current = activeFileContent;
 
   useAutoSave();
   useAIStream();
@@ -70,16 +73,18 @@ export function Editor() {
     return () => setEditor(null);
   }, [editor, setEditor]);
 
-  // Load content when active file changes
+  // Load content when active file changes (reads from ref to avoid
+  // re-running on every keystroke which would clobber the editor).
   useEffect(() => {
-    if (editor && activeFileContent !== undefined) {
+    void activeFilePath;
+    const content = contentRef.current;
+    if (editor && content !== undefined) {
       const currentContent = editor.getHTML();
-      if (currentContent !== activeFileContent) {
-        editor.commands.setContent(activeFileContent || "");
+      if (currentContent !== content) {
+        editor.commands.setContent(content || "");
         loadLanguagesForDoc(editor);
       }
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional - only re-run when file path changes, not content
   }, [editor, activeFilePath]);
 
   if (!activeFilePath) {

@@ -9,6 +9,10 @@ export function useAutoSave(debounceMs = 1000) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // activeFileContent is a dep so each keystroke restarts the debounce
+    // timer; the actual save reads content from the store.
+    void activeFileContent;
+
     if (!isDirty || !activeFilePath) return;
 
     if (timeoutRef.current) {

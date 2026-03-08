@@ -1,5 +1,5 @@
 import { Expand, FileText, Loader2, RefreshCw, Search, Sparkles, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
 import { modKey } from "../../lib/shortcuts";
 import { type AiAction, useAiStore } from "../../stores/ai";
@@ -72,11 +72,6 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
       )
     : COMMANDS;
 
-  // Reset active index when filtered list changes
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [filteredCommands.length]);
-
   const handleSubmit = () => {
     if (!input.trim() || isStreaming) return;
 
@@ -113,60 +108,57 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
   const handleCommandClick = (cmd: Command) => {
     setSelectedCommand(cmd);
     setInput("");
+    setActiveIndex(0);
   };
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      onClose();
+      return;
+    }
+
+    // Arrow navigation and Enter selection only when command list is visible
+    if (showCommandList) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev < filteredCommands.length - 1 ? prev + 1 : 0));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev > 0 ? prev - 1 : filteredCommands.length - 1));
         return;
       }
 
-      // Arrow navigation and Enter selection only when command list is visible
-      if (showCommandList) {
-        if (e.key === "ArrowDown") {
+      // Enter: select active command if input is empty, otherwise submit
+      if (e.key === "Enter") {
+        if (!input.trim() && filteredCommands[activeIndex]) {
           e.preventDefault();
-          setActiveIndex((prev) => (prev < filteredCommands.length - 1 ? prev + 1 : 0));
+          handleCommandClick(filteredCommands[activeIndex]);
           return;
         }
-        if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setActiveIndex((prev) => (prev > 0 ? prev - 1 : filteredCommands.length - 1));
-          return;
-        }
-
-        // Enter: select active command if input is empty, otherwise submit
-        if (e.key === "Enter") {
-          if (!input.trim() && filteredCommands[activeIndex]) {
-            e.preventDefault();
-            handleCommandClick(filteredCommands[activeIndex]);
-            return;
-          }
-          handleSubmit();
-          return;
-        }
-
-        // Ctrl/Cmd + 1..5 quick-select
-        const digit = Number.parseInt(e.key, 10);
-        if (digit >= 1 && digit <= 5 && (e.ctrlKey || e.metaKey)) {
-          const idx = digit - 1;
-          if (idx < filteredCommands.length) {
-            e.preventDefault();
-            handleCommandClick(filteredCommands[idx]);
-          }
-          return;
-        }
-      } else {
-        // When a command is selected, Enter submits
-        if (e.key === "Enter") {
-          handleSubmit();
-          return;
-        }
+        handleSubmit();
+        return;
       }
-    },
-    // biome-ignore lint/correctness/useExhaustiveDependencies: stable references from parent scope
-    [showCommandList, filteredCommands, activeIndex, input, selectedCommand],
-  );
+
+      // Ctrl/Cmd + 1..5 quick-select
+      const digit = Number.parseInt(e.key, 10);
+      if (digit >= 1 && digit <= 5 && (e.ctrlKey || e.metaKey)) {
+        const idx = digit - 1;
+        if (idx < filteredCommands.length) {
+          e.preventDefault();
+          handleCommandClick(filteredCommands[idx]);
+        }
+        return;
+      }
+    } else {
+      // When a command is selected, Enter submits
+      if (e.key === "Enter") {
+        handleSubmit();
+        return;
+      }
+    }
+  };
 
   return (
     <div
@@ -194,7 +186,10 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setActiveIndex(0);
+            }}
             onKeyDown={handleKeyDown}
             placeholder={
               selectedCommand

@@ -48,12 +48,10 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     loadSettings();
   }, [loadSettings]);
 
-  // Clear validation error when relevant settings change
-  const settingsKey = `${settings.provider}:${settings.claudeApiKey}:${settings.openaiApiKey}:${settings.ollamaEndpoint}`;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional - reset on field change
-  useEffect(() => {
+  const updateSettings = (partial: Partial<AiSettings>) => {
+    setSettings(partial);
     setValidationError(null);
-  }, [settingsKey]);
+  };
 
   const handleSave = async () => {
     const error = validateSettings(settings);
@@ -97,7 +95,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 <button
                   type="button"
                   key={p.id}
-                  onClick={() => setSettings({ provider: p.id })}
+                  onClick={() => updateSettings({ provider: p.id })}
                   className={`flex-1 text-xs px-3 py-2 rounded border transition-colors ${
                     settings.provider === p.id
                       ? "bg-accent/20 border-accent text-accent"
@@ -117,13 +115,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 label="API Key"
                 type="password"
                 value={settings.claudeApiKey}
-                onChange={(v) => setSettings({ claudeApiKey: v })}
+                onChange={(v) => updateSettings({ claudeApiKey: v })}
                 placeholder="sk-ant-..."
               />
               <Field
                 label="Model"
                 value={settings.claudeModel}
-                onChange={(v) => setSettings({ claudeModel: v })}
+                onChange={(v) => updateSettings({ claudeModel: v })}
                 placeholder="claude-sonnet-4-20250514"
               />
             </>
@@ -136,13 +134,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 label="API Key"
                 type="password"
                 value={settings.openaiApiKey}
-                onChange={(v) => setSettings({ openaiApiKey: v })}
+                onChange={(v) => updateSettings({ openaiApiKey: v })}
                 placeholder="sk-..."
               />
               <Field
                 label="Model"
                 value={settings.openaiModel}
-                onChange={(v) => setSettings({ openaiModel: v })}
+                onChange={(v) => updateSettings({ openaiModel: v })}
                 placeholder="gpt-4o"
               />
             </>
@@ -154,13 +152,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               <Field
                 label="Endpoint"
                 value={settings.ollamaEndpoint}
-                onChange={(v) => setSettings({ ollamaEndpoint: v })}
+                onChange={(v) => updateSettings({ ollamaEndpoint: v })}
                 placeholder="http://localhost:11434"
               />
               <Field
                 label="Model"
                 value={settings.ollamaModel}
-                onChange={(v) => setSettings({ ollamaModel: v })}
+                onChange={(v) => updateSettings({ ollamaModel: v })}
                 placeholder="llama3.2"
               />
             </>
@@ -177,7 +175,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               max="1"
               step="0.1"
               value={settings.temperature}
-              onChange={(e) => setSettings({ temperature: Number.parseFloat(e.target.value) })}
+              onChange={(e) => updateSettings({ temperature: Number.parseFloat(e.target.value) })}
               className="w-full accent-accent"
             />
             <div className="flex justify-between text-xs text-text-tertiary mt-1">
@@ -191,7 +189,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             label="Max Tokens"
             type="number"
             value={String(settings.maxTokens)}
-            onChange={(v) => setSettings({ maxTokens: Number.parseInt(v) || 4096 })}
+            onChange={(v) => updateSettings({ maxTokens: Number.parseInt(v) || 4096 })}
             placeholder="4096"
           />
 
