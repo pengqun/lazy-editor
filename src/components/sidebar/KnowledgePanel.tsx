@@ -1,6 +1,7 @@
 import {
   BookOpen,
   ClipboardPaste,
+  FilePlus2,
   Loader2,
   Pin,
   PinOff,
@@ -65,6 +66,8 @@ export function KnowledgePanel() {
     if (!searchQuery.trim()) return;
     await searchKB(searchQuery);
   };
+
+  const showEmptyState = documents.length === 0 && searchResults.length === 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -158,6 +161,35 @@ export function KnowledgePanel() {
         </div>
       )}
 
+      {/* Empty State */}
+      {showEmptyState && (
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-xs rounded-lg border border-dashed border-border bg-surface-1/50 p-4 text-center">
+            <div className="mx-auto mb-2 w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center">
+              <FilePlus2 size={16} className="text-accent" />
+            </div>
+            <p className="text-sm text-text-primary font-medium">Your knowledge base is empty</p>
+            <p className="text-xs text-text-tertiary mt-1">
+              Add your first document so AI can use it for research and drafting.
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              <button
+                onClick={handleIngestFile}
+                className="w-full text-xs px-2 py-1.5 rounded bg-accent text-white hover:bg-accent/90 transition-colors"
+              >
+                Import first document
+              </button>
+              <button
+                onClick={() => setShowTextInput(true)}
+                className="w-full text-xs px-2 py-1.5 rounded border border-border hover:bg-surface-2 transition-colors text-text-secondary"
+              >
+                Paste quick notes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search Results */}
       {searchResults.length > 0 && (
         <div className="border-b border-border">
@@ -186,58 +218,60 @@ export function KnowledgePanel() {
       )}
 
       {/* Documents List */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-3 py-2">
-          <span className="text-xs text-text-tertiary uppercase tracking-wider">
-            Documents ({documents.length})
-          </span>
-        </div>
-        {documents.map((doc) => (
-          <div
-            key={doc.id}
-            className="px-3 py-2 border-t border-border/50 hover:bg-surface-2 transition-colors group"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-text-primary truncate flex-1">
-                {doc.title}
-              </span>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => togglePinDocument(doc.id)}
-                  className="p-0.5 hover:bg-surface-3 rounded"
-                  title={pinnedDocIds.has(doc.id) ? "Unpin" : "Pin for AI context"}
-                >
-                  {pinnedDocIds.has(doc.id) ? (
-                    <PinOff size={12} className="text-accent" />
-                  ) : (
-                    <Pin size={12} className="text-text-tertiary" />
+      {!showEmptyState && (
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-3 py-2">
+            <span className="text-xs text-text-tertiary uppercase tracking-wider">
+              Documents ({documents.length})
+            </span>
+          </div>
+          {documents.map((doc) => (
+            <div
+              key={doc.id}
+              className="px-3 py-2 border-t border-border/50 hover:bg-surface-2 transition-colors group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-text-primary truncate flex-1">
+                  {doc.title}
+                </span>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => togglePinDocument(doc.id)}
+                    className="p-0.5 hover:bg-surface-3 rounded"
+                    title={pinnedDocIds.has(doc.id) ? "Unpin" : "Pin for AI context"}
+                  >
+                    {pinnedDocIds.has(doc.id) ? (
+                      <PinOff size={12} className="text-accent" />
+                    ) : (
+                      <Pin size={12} className="text-text-tertiary" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => removeDocument(doc.id)}
+                    className="p-0.5 hover:bg-surface-3 rounded"
+                    title="Remove from KB"
+                  >
+                    <Trash2 size={12} className="text-text-tertiary hover:text-red-400" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span
+                  className={cn(
+                    "text-xs px-1.5 py-0.5 rounded",
+                    pinnedDocIds.has(doc.id)
+                      ? "bg-accent/20 text-accent"
+                      : "bg-surface-3 text-text-tertiary",
                   )}
-                </button>
-                <button
-                  onClick={() => removeDocument(doc.id)}
-                  className="p-0.5 hover:bg-surface-3 rounded"
-                  title="Remove from KB"
                 >
-                  <Trash2 size={12} className="text-text-tertiary hover:text-red-400" />
-                </button>
+                  {doc.sourceType}
+                </span>
+                <span className="text-xs text-text-tertiary">{doc.chunkCount} chunks</span>
               </div>
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span
-                className={cn(
-                  "text-xs px-1.5 py-0.5 rounded",
-                  pinnedDocIds.has(doc.id)
-                    ? "bg-accent/20 text-accent"
-                    : "bg-surface-3 text-text-tertiary",
-                )}
-              >
-                {doc.sourceType}
-              </span>
-              <span className="text-xs text-text-tertiary">{doc.chunkCount} chunks</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
