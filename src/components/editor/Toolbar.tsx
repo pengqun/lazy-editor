@@ -24,6 +24,7 @@ import {
 import { useState } from "react";
 import { cn } from "../../lib/cn";
 import { exportEditorToMarkdown } from "../../lib/export-markdown";
+import { modKey, shiftKey } from "../../lib/shortcuts";
 import { useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
 
@@ -93,28 +94,28 @@ export function Toolbar() {
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBold().run()}
         isActive={editor.isActive("bold")}
-        title="Bold (Cmd+B)"
+        title={`Bold (${modKey}B)`}
       >
         <Bold size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleItalic().run()}
         isActive={editor.isActive("italic")}
-        title="Italic (Cmd+I)"
+        title={`Italic (${modKey}I)`}
       >
         <Italic size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleStrike().run()}
         isActive={editor.isActive("strike")}
-        title="Strikethrough"
+        title={`Strikethrough (${modKey}${shiftKey}X)`}
       >
         <Strikethrough size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleCode().run()}
         isActive={editor.isActive("code")}
-        title="Inline Code"
+        title={`Inline Code (${modKey}E)`}
       >
         <Code size={iconSize} />
       </ToolbarButton>
@@ -148,21 +149,21 @@ export function Toolbar() {
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         isActive={editor.isActive("bulletList")}
-        title="Bullet List"
+        title={`Bullet List (${modKey}${shiftKey}8)`}
       >
         <List size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         isActive={editor.isActive("orderedList")}
-        title="Ordered List"
+        title={`Ordered List (${modKey}${shiftKey}7)`}
       >
         <ListOrdered size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
         isActive={editor.isActive("blockquote")}
-        title="Blockquote"
+        title={`Blockquote (${modKey}${shiftKey}B)`}
       >
         <Quote size={iconSize} />
       </ToolbarButton>
@@ -178,14 +179,14 @@ export function Toolbar() {
       <ToolbarButton
         onClick={() => editor.chain().focus().undo().run()}
         disabled={!editor.can().undo()}
-        title="Undo (Cmd+Z)"
+        title={`Undo (${modKey}Z)`}
       >
         <Undo size={iconSize} />
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().redo().run()}
         disabled={!editor.can().redo()}
-        title="Redo (Cmd+Shift+Z)"
+        title={`Redo (${modKey}${shiftKey}Z)`}
       >
         <Redo size={iconSize} />
       </ToolbarButton>
@@ -248,7 +249,7 @@ export function Toolbar() {
       {/* Export */}
       <ToolbarButton
         onClick={() => exportEditorToMarkdown(editor)}
-        title="Export Markdown (Cmd+Shift+E)"
+        title={`Export Markdown (${modKey}${shiftKey}E)`}
       >
         <Download size={iconSize} />
       </ToolbarButton>
@@ -256,7 +257,7 @@ export function Toolbar() {
       <Separator />
 
       {/* AI & KB toggles */}
-      <ToolbarButton onClick={() => setShowCommandPalette(true)} title="AI Command Palette (Cmd+K)">
+      <ToolbarButton onClick={() => setShowCommandPalette(true)} title={`AI Command Palette (${modKey}K)`}>
         <Sparkles size={iconSize} />
       </ToolbarButton>
       <ToolbarButton

@@ -1,6 +1,7 @@
 import { Expand, FileText, Loader2, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
+import { modKey } from "../../lib/shortcuts";
 import { type AiAction, useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
 
@@ -220,8 +221,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
                   <div className="text-xs text-text-tertiary">{cmd.description}</div>
                 </div>
                 <kbd className="text-[10px] text-text-tertiary bg-surface-3 px-1 py-0.5 rounded opacity-60">
-                  {navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}
-                  {idx + 1}
+                  {modKey}{idx + 1}
                 </kbd>
               </button>
             ))}
