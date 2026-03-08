@@ -97,10 +97,10 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
           params.text = selectedText || input;
           break;
       }
-      runAction(selectedCommand.id as AiAction, params);
+      runAction(selectedCommand.id as AiAction, params, !!selectedText);
     } else {
       // Free-form: treat as a draft action
-      runAction("draft", { topic: input, style: "natural", kbContextCount: "5" });
+      runAction("draft", { topic: input, style: "natural", kbContextCount: "5" }, !!selectedText);
     }
     onClose();
   };

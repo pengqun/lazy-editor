@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import type { OutputPlacementMode } from "../lib/output-placement";
+import { resolveOutputPlacement } from "../lib/output-placement";
 import { toast } from "./toast";
 
 export type AiAction = "draft" | "expand" | "rewrite" | "research" | "summarize";
@@ -31,7 +33,18 @@ interface AiState {
   aiError: string | null;
   setAiPhase: (phase: AiPhase) => void;
 
-  runAction: (action: AiAction, params: Record<string, string>) => Promise<void>;
+  /** User-selected output placement override (null = auto-detect). */
+  outputPlacementOverride: OutputPlacementMode | null;
+  setOutputPlacementOverride: (mode: OutputPlacementMode | null) => void;
+
+  /** Resolved placement mode locked for the current action (null when idle). */
+  lockedPlacement: OutputPlacementMode | null;
+
+  runAction: (
+    action: AiAction,
+    params: Record<string, string>,
+    hasSelection?: boolean,
+  ) => Promise<void>;
   cancelStream: () => void;
 }
 
@@ -79,14 +92,23 @@ export const useAiStore = create<AiState>((set, get) => ({
   aiError: null,
   setAiPhase: (phase) => set({ aiPhase: phase }),
 
-  runAction: async (action, params) => {
+  outputPlacementOverride: null,
+  setOutputPlacementOverride: (mode) => set({ outputPlacementOverride: mode }),
+
+  lockedPlacement: null,
+
+  runAction: async (action, params, hasSelection = false) => {
     if (get().isStreaming) return; // prevent duplicate triggers
+
+    const locked = resolveOutputPlacement(get().outputPlacementOverride, hasSelection);
+
     set({
       isStreaming: true,
       streamContent: "",
       currentAction: action,
       aiPhase: "searching_kb",
       aiError: null,
+      lockedPlacement: locked,
     });
     try {
       await invoke(`ai_${action}`, params);
@@ -96,12 +118,18 @@ export const useAiStore = create<AiState>((set, get) => ({
       set({ aiPhase: "error", aiError: message });
       toast.error(`AI ${action} failed: ${message}`);
     } finally {
-      set({ isStreaming: false, currentAction: null });
+      set({ isStreaming: false, currentAction: null, lockedPlacement: null });
     }
   },
 
   cancelStream: () => {
     invoke("ai_cancel_stream").catch(console.error);
-    set({ isStreaming: false, currentAction: null, aiPhase: "idle", aiError: null });
+    set({
+      isStreaming: false,
+      currentAction: null,
+      aiPhase: "idle",
+      aiError: null,
+      lockedPlacement: null,
+    });
   },
 }));

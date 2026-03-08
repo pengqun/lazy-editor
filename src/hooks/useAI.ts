@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { listenToAiPhase, listenToAiStream } from "../lib/tauri";
 import { useAiStore } from "../stores/ai";
 import { useEditorStore } from "../stores/editor";
@@ -11,19 +11,46 @@ export function useAIStream() {
   const editor = useEditorStore((s) => s.editor);
   const setAiPhase = useAiStore((s) => s.setAiPhase);
 
+  const firstChunkRef = useRef(true);
+
   useEffect(() => {
     const cleanupStream = listenToAiStream(
       (chunk) => {
         appendAiStream(chunk);
-        // Insert streamed text at current cursor position
-        if (editor && !editor.isDestroyed) {
-          editor.commands.insertContent(chunk);
+
+        if (!editor || editor.isDestroyed) return;
+
+        // On the very first chunk, apply cursor positioning based on the locked mode.
+        if (firstChunkRef.current) {
+          firstChunkRef.current = false;
+
+          const mode = useAiStore.getState().lockedPlacement ?? "insert_at_cursor";
+
+          switch (mode) {
+            case "replace_selection": {
+              const { from, to } = editor.state.selection;
+              if (from !== to) {
+                editor.chain().focus().deleteRange({ from, to }).run();
+              }
+              break;
+            }
+            case "append_to_end": {
+              editor.commands.focus("end");
+              editor.commands.insertContent("\n\n");
+              break;
+            }
+            case "insert_at_cursor":
+            default:
+              break;
+          }
         }
+
+        editor.commands.insertContent(chunk);
       },
       () => {
         setAiStreaming(false);
         setAiPhase("done");
-        // Auto-reset to idle after a brief display of "done"
+        firstChunkRef.current = true;
         setTimeout(() => {
           useAiStore.getState().setAiPhase("idle");
         }, 2000);
@@ -32,6 +59,7 @@ export function useAIStream() {
         console.error("AI stream error:", error);
         setAiStreaming(false);
         setAiPhase("error");
+        firstChunkRef.current = true;
         toast.error(`AI stream error: ${error}`);
       },
     );
@@ -49,6 +77,7 @@ export function useAIStream() {
   const startStream = useCallback(() => {
     clearAiStream();
     setAiStreaming(true);
+    firstChunkRef.current = true;
   }, [clearAiStream, setAiStreaming]);
 
   return { startStream };

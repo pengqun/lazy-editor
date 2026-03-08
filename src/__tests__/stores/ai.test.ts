@@ -20,6 +20,8 @@ function resetStore() {
     isStreaming: false,
     streamContent: "",
     currentAction: null,
+    outputPlacementOverride: null,
+    lockedPlacement: null,
   });
 }
 
@@ -97,10 +99,66 @@ describe("useAiStore", () => {
 
   it("cancelStream calls invoke and resets state", () => {
     mockedInvoke.mockResolvedValueOnce(undefined);
-    useAiStore.setState({ isStreaming: true, currentAction: "draft" });
+    useAiStore.setState({ isStreaming: true, currentAction: "draft", lockedPlacement: "insert_at_cursor" });
     useAiStore.getState().cancelStream();
     expect(mockedInvoke).toHaveBeenCalledWith("ai_cancel_stream");
     expect(useAiStore.getState().isStreaming).toBe(false);
     expect(useAiStore.getState().currentAction).toBeNull();
+    expect(useAiStore.getState().lockedPlacement).toBeNull();
+  });
+
+  describe("output placement", () => {
+    it("has null outputPlacementOverride by default", () => {
+      expect(useAiStore.getState().outputPlacementOverride).toBeNull();
+    });
+
+    it("setOutputPlacementOverride persists the mode", () => {
+      useAiStore.getState().setOutputPlacementOverride("append_to_end");
+      expect(useAiStore.getState().outputPlacementOverride).toBe("append_to_end");
+    });
+
+    it("setOutputPlacementOverride can reset to null (auto)", () => {
+      useAiStore.getState().setOutputPlacementOverride("append_to_end");
+      useAiStore.getState().setOutputPlacementOverride(null);
+      expect(useAiStore.getState().outputPlacementOverride).toBeNull();
+    });
+
+    it("runAction locks placement to insert_at_cursor when no selection and no override", async () => {
+      mockedInvoke.mockResolvedValueOnce(undefined);
+      const promise = useAiStore.getState().runAction("draft", { topic: "test" }, false);
+      expect(useAiStore.getState().lockedPlacement).toBe("insert_at_cursor");
+      await promise;
+      expect(useAiStore.getState().lockedPlacement).toBeNull();
+    });
+
+    it("runAction locks placement to replace_selection when selection exists", async () => {
+      mockedInvoke.mockResolvedValueOnce(undefined);
+      const promise = useAiStore.getState().runAction("expand", { selectedText: "hi" }, true);
+      expect(useAiStore.getState().lockedPlacement).toBe("replace_selection");
+      await promise;
+    });
+
+    it("runAction uses override when set", async () => {
+      mockedInvoke.mockResolvedValueOnce(undefined);
+      useAiStore.getState().setOutputPlacementOverride("append_to_end");
+      const promise = useAiStore.getState().runAction("draft", { topic: "test" }, false);
+      expect(useAiStore.getState().lockedPlacement).toBe("append_to_end");
+      await promise;
+    });
+
+    it("runAction falls back replace_selection override to insert_at_cursor without selection", async () => {
+      mockedInvoke.mockResolvedValueOnce(undefined);
+      useAiStore.getState().setOutputPlacementOverride("replace_selection");
+      const promise = useAiStore.getState().runAction("draft", { topic: "test" }, false);
+      expect(useAiStore.getState().lockedPlacement).toBe("insert_at_cursor");
+      await promise;
+    });
+
+    it("cancelStream clears lockedPlacement", () => {
+      mockedInvoke.mockResolvedValueOnce(undefined);
+      useAiStore.setState({ isStreaming: true, lockedPlacement: "append_to_end" });
+      useAiStore.getState().cancelStream();
+      expect(useAiStore.getState().lockedPlacement).toBeNull();
+    });
   });
 });

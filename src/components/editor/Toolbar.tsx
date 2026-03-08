@@ -1,6 +1,8 @@
 import {
+  ArrowDownToLine,
   Bold,
   BookOpen,
+  ChevronDown,
   Code,
   Download,
   Expand,
@@ -13,9 +15,11 @@ import {
   ListOrdered,
   Loader2,
   Minus,
+  MousePointerClick,
   Quote,
   Redo,
   RefreshCw,
+  Replace,
   Search,
   Sparkles,
   Strikethrough,
@@ -24,6 +28,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
 import { exportEditorToMarkdown } from "../../lib/export-markdown";
+import type { OutputPlacementMode } from "../../lib/output-placement";
 import { altKey, modKey, shiftKey } from "../../lib/shortcuts";
 import { useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
@@ -58,6 +63,70 @@ function Separator() {
   return <div className="w-px h-5 bg-border mx-1" />;
 }
 
+const PLACEMENT_OPTIONS: { value: OutputPlacementMode | null; label: string; icon: React.ReactNode }[] = [
+  { value: null, label: "Auto", icon: <MousePointerClick size={14} /> },
+  { value: "replace_selection", label: "Replace selection", icon: <Replace size={14} /> },
+  { value: "insert_at_cursor", label: "Insert at cursor", icon: <MousePointerClick size={14} /> },
+  { value: "append_to_end", label: "Append to end", icon: <ArrowDownToLine size={14} /> },
+];
+
+function PlacementPicker({
+  value,
+  onChange,
+  open,
+  onToggle,
+  onClose,
+  disabled,
+}: {
+  value: OutputPlacementMode | null;
+  onChange: (mode: OutputPlacementMode | null) => void;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  disabled: boolean;
+}) {
+  const current = PLACEMENT_OPTIONS.find((o) => o.value === value) ?? PLACEMENT_OPTIONS[0];
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        title="AI output placement"
+        className={cn(
+          "flex items-center gap-1 px-1.5 py-1 rounded text-xs transition-colors",
+          disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-surface-3",
+          value != null && "text-accent",
+        )}
+      >
+        {current.icon}
+        <ChevronDown size={10} />
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 mt-1 z-20 bg-surface-2 border border-border rounded-lg shadow-xl py-1 min-w-[160px]">
+          {PLACEMENT_OPTIONS.map((opt) => (
+            <button
+              type="button"
+              key={opt.label}
+              onClick={() => {
+                onChange(opt.value);
+                onClose();
+              }}
+              className={cn(
+                "w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors",
+                opt.value === value ? "bg-accent/15 text-accent" : "hover:bg-surface-3 text-text-secondary",
+              )}
+            >
+              {opt.icon}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Toolbar() {
   const editor = useEditorStore((s) => s.editor);
   const rightPanel = useEditorStore((s) => s.rightPanel);
@@ -68,10 +137,13 @@ export function Toolbar() {
   const isStreaming = useAiStore((s) => s.isStreaming);
   const currentAction = useAiStore((s) => s.currentAction);
   const runAction = useAiStore((s) => s.runAction);
+  const outputPlacementOverride = useAiStore((s) => s.outputPlacementOverride);
+  const setOutputPlacementOverride = useAiStore((s) => s.setOutputPlacementOverride);
 
   const [showRewriteInput, setShowRewriteInput] = useState(false);
   const [rewriteInstruction, setRewriteInstruction] = useState("");
   const rewriteInputRef = useRef<HTMLInputElement>(null);
+  const [showPlacementPicker, setShowPlacementPicker] = useState(false);
 
   useEffect(() => {
     if (showRewriteInput) {
@@ -92,7 +164,7 @@ export function Toolbar() {
 
   const handleRewrite = () => {
     if (!rewriteInstruction.trim() || isStreaming || !selectedText) return;
-    runAction("rewrite", { selectedText, instruction: rewriteInstruction });
+    runAction("rewrite", { selectedText, instruction: rewriteInstruction }, hasSelection);
     setShowRewriteInput(false);
     setRewriteInstruction("");
   };
@@ -206,7 +278,7 @@ export function Toolbar() {
       <Separator />
       <div className="relative flex items-center">
         <ToolbarButton
-          onClick={() => runAction("expand", { selectedText: selectedText! })}
+          onClick={() => runAction("expand", { selectedText: selectedText! }, hasSelection)}
           disabled={aiDisabled}
           title={hasSelection ? "Expand with AI" : "Select text to expand"}
         >
@@ -229,7 +301,7 @@ export function Toolbar() {
           )}
         </ToolbarButton>
         <ToolbarButton
-          onClick={() => runAction("summarize", { text: selectedText! })}
+          onClick={() => runAction("summarize", { text: selectedText! }, hasSelection)}
           disabled={aiDisabled}
           title={hasSelection ? "Summarize with AI" : "Select text to summarize"}
         >
@@ -240,7 +312,7 @@ export function Toolbar() {
           )}
         </ToolbarButton>
         <ToolbarButton
-          onClick={() => runAction("research", { query: selectedText! })}
+          onClick={() => runAction("research", { query: selectedText! }, hasSelection)}
           disabled={aiDisabled}
           title={hasSelection ? "Research with AI" : "Select text to research"}
         >
@@ -269,6 +341,16 @@ export function Toolbar() {
           </div>
         )}
       </div>
+
+      {/* AI output placement mode picker */}
+      <PlacementPicker
+        value={outputPlacementOverride}
+        onChange={setOutputPlacementOverride}
+        open={showPlacementPicker}
+        onToggle={() => setShowPlacementPicker((v) => !v)}
+        onClose={() => setShowPlacementPicker(false)}
+        disabled={isStreaming}
+      />
 
       <Separator />
 
