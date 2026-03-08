@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { type AiProvider, type AiSettings, useAiStore } from "../../stores/ai";
+import { criticalAlert } from "../../stores/alert";
 import { toast } from "../../stores/toast";
 
 interface SettingsPanelProps {
@@ -59,6 +60,14 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     const error = validateSettings(settings);
     if (error) {
       setValidationError(error);
+      criticalAlert.show({
+        title: "Invalid AI Settings",
+        message: error,
+        actions: [
+          { label: "Dismiss", variant: "secondary", onClick: () => {} },
+          { label: "Fix Settings", variant: "primary", onClick: () => {} },
+        ],
+      });
       return;
     }
     await saveSettings();

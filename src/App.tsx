@@ -1,5 +1,6 @@
 import { Settings } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { CriticalAlert } from "./components/CriticalAlert";
 import { ToastContainer } from "./components/Toast";
 import { StatusBar } from "./components/editor/StatusBar";
 import { Toolbar } from "./components/editor/Toolbar";
@@ -305,6 +306,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Critical Alert Dialog */}
+      <CriticalAlert />
 
       {/* Toast Notifications */}
       <ToastContainer />

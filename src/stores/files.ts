@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { criticalAlert } from "@/stores/alert";
 import { toast } from "@/stores/toast";
 
 export interface FileEntry {
@@ -88,6 +89,14 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     } catch (err) {
       console.error("Failed to save file:", err);
       toast.error(`Failed to save file: ${err}`);
+      criticalAlert.show({
+        title: "File Save Failed",
+        message: `Could not save "${activeFilePath.split("/").pop()}". Your changes may be lost. Error: ${err}`,
+        actions: [
+          { label: "Dismiss", variant: "secondary", onClick: () => {} },
+          { label: "Retry", variant: "primary", onClick: () => get().saveFile() },
+        ],
+      });
     }
   },
 
