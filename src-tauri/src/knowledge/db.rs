@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use rusqlite::{params, Connection};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -148,6 +148,45 @@ impl Database {
             params![chunk_id, blob],
         )?;
         Ok(())
+    }
+
+    pub fn insert_document_with_embeddings(
+        &mut self,
+        title: &str,
+        source_type: &str,
+        source_path: Option<&str>,
+        content: &str,
+        chunks: &[String],
+        token_counts: &[i64],
+        embeddings: &[Vec<f32>],
+    ) -> Result<i64> {
+        if chunks.len() != embeddings.len() || chunks.len() != token_counts.len() {
+            bail!("chunks/embeddings/token_counts length mismatch");
+        }
+
+        let tx = self.conn.transaction()?;
+        let hash = content_hash(content);
+        tx.execute(
+            "INSERT INTO documents (title, source_type, source_path, content, content_hash) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![title, source_type, source_path, content, hash],
+        )?;
+        let doc_id = tx.last_insert_rowid();
+
+        for (index, chunk) in chunks.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO chunks (document_id, content, chunk_index, token_count) VALUES (?1, ?2, ?3, ?4)",
+                params![doc_id, chunk, index as i64, Some(token_counts[index])],
+            )?;
+            let chunk_id = tx.last_insert_rowid();
+            let blob = embedding_to_blob(&embeddings[index]);
+            tx.execute(
+                "INSERT INTO chunk_embeddings (chunk_id, embedding) VALUES (?1, ?2)",
+                params![chunk_id, blob],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(doc_id)
     }
 
     pub fn list_documents(&self) -> Result<Vec<KBDocument>> {

@@ -72,6 +72,16 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
       )
     : COMMANDS;
 
+  useEffect(() => {
+    if (filteredCommands.length === 0) {
+      setActiveIndex(0);
+      return;
+    }
+    if (activeIndex >= filteredCommands.length) {
+      setActiveIndex(filteredCommands.length - 1);
+    }
+  }, [filteredCommands.length, activeIndex]);
+
   const handleSubmit = () => {
     if (!input.trim() || isStreaming) return;
 
@@ -132,9 +142,11 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
 
       // Enter: select active command if input is empty, otherwise submit
       if (e.key === "Enter") {
-        if (!input.trim() && filteredCommands[activeIndex]) {
+        const selected =
+          filteredCommands[Math.min(activeIndex, Math.max(filteredCommands.length - 1, 0))];
+        if (!input.trim() && selected) {
           e.preventDefault();
-          handleCommandClick(filteredCommands[activeIndex]);
+          handleCommandClick(selected);
           return;
         }
         handleSubmit();

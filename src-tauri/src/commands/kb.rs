@@ -71,27 +71,22 @@ pub async fn ingest_file(
 
     let _ = app.emit("ingest-progress", "Storing in knowledge base...");
 
-    // Insert document — lock DB briefly
-    let doc_id = {
-        let db = state.db.lock().await;
-        db.insert_document(&title, "file", Some(&path), &content)
-            .map_err(|e| format!("Failed to insert document: {}", e))?
-    };
+    let chunk_contents: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
+    let token_counts: Vec<i64> = chunks.iter().map(|c| c.approx_tokens as i64).collect();
 
-    // Insert chunks and embeddings — lock DB per iteration to avoid long holds
-    for (i, chunk) in chunks.iter().enumerate() {
-        let db = state.db.lock().await;
-        let chunk_id = db
-            .insert_chunk(
-                doc_id,
-                &chunk.content,
-                chunk.index as i64,
-                Some(chunk.approx_tokens as i64),
-            )
-            .map_err(|e| format!("Failed to insert chunk: {}", e))?;
-
-        db.insert_embedding(chunk_id, &embeddings[i])
-            .map_err(|e| format!("Failed to insert embedding: {}", e))?;
+    // Atomic insert: document + chunks + embeddings in one transaction
+    {
+        let mut db = state.db.lock().await;
+        db.insert_document_with_embeddings(
+            &title,
+            "file",
+            Some(&path),
+            &content,
+            &chunk_contents,
+            &token_counts,
+            &embeddings,
+        )
+        .map_err(|e| format!("Failed to store knowledge: {}", e))?;
     }
 
     let _ = app.emit("ingest-progress", "Done!");
@@ -148,27 +143,22 @@ pub async fn ingest_text(
 
     let _ = app.emit("ingest-progress", "Storing in knowledge base...");
 
-    // Insert document — lock DB briefly
-    let doc_id = {
-        let db = state.db.lock().await;
-        db.insert_document(&title, "paste", None, &text)
-            .map_err(|e| format!("Failed to insert document: {}", e))?
-    };
+    let chunk_contents: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
+    let token_counts: Vec<i64> = chunks.iter().map(|c| c.approx_tokens as i64).collect();
 
-    // Insert chunks and embeddings — lock DB per iteration
-    for (i, chunk) in chunks.iter().enumerate() {
-        let db = state.db.lock().await;
-        let chunk_id = db
-            .insert_chunk(
-                doc_id,
-                &chunk.content,
-                chunk.index as i64,
-                Some(chunk.approx_tokens as i64),
-            )
-            .map_err(|e| format!("Failed to insert chunk: {}", e))?;
-
-        db.insert_embedding(chunk_id, &embeddings[i])
-            .map_err(|e| format!("Failed to insert embedding: {}", e))?;
+    // Atomic insert: document + chunks + embeddings in one transaction
+    {
+        let mut db = state.db.lock().await;
+        db.insert_document_with_embeddings(
+            &title,
+            "paste",
+            None,
+            &text,
+            &chunk_contents,
+            &token_counts,
+            &embeddings,
+        )
+        .map_err(|e| format!("Failed to store knowledge: {}", e))?;
     }
 
     let _ = app.emit("ingest-progress", "Done!");

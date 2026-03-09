@@ -152,12 +152,27 @@ export function Toolbar() {
   const [rewriteInstruction, setRewriteInstruction] = useState("");
   const rewriteInputRef = useRef<HTMLInputElement>(null);
   const [showPlacementPicker, setShowPlacementPicker] = useState(false);
+  const placementPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (showRewriteInput) {
       rewriteInputRef.current?.focus();
     }
   }, [showRewriteInput]);
+
+  useEffect(() => {
+    if (!showPlacementPicker) return;
+
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (placementPickerRef.current && !placementPickerRef.current.contains(target)) {
+        setShowPlacementPicker(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [showPlacementPicker]);
 
   if (!editor) {
     return <div className="h-10 border-b border-border bg-surface-1 flex items-center px-2" />;
@@ -351,14 +366,16 @@ export function Toolbar() {
       </div>
 
       {/* AI output placement mode picker */}
-      <PlacementPicker
-        value={outputPlacementOverride}
-        onChange={setOutputPlacementOverride}
-        open={showPlacementPicker}
-        onToggle={() => setShowPlacementPicker((v) => !v)}
-        onClose={() => setShowPlacementPicker(false)}
-        disabled={isStreaming}
-      />
+      <div ref={placementPickerRef}>
+        <PlacementPicker
+          value={outputPlacementOverride}
+          onChange={setOutputPlacementOverride}
+          open={showPlacementPicker}
+          onToggle={() => setShowPlacementPicker((v) => !v)}
+          onClose={() => setShowPlacementPicker(false)}
+          disabled={isStreaming}
+        />
+      </div>
 
       <Separator />
 
