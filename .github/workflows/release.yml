@@ -44,13 +44,20 @@ jobs:
       # ── Apple code-signing setup (skipped when secrets are absent) ──
       - name: Check signing secrets
         id: signing
+        env:
+          HAS_CERT: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          HAS_PASS: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          HAS_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          HAS_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          HAS_APPLE_ID: ${{ secrets.APPLE_ID }}
+          HAS_APP_PASS: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
-          if [ -n "${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}" ] && \
-             [ -n "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" ] && \
-             [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ] && \
-             [ -n "${{ secrets.APPLE_TEAM_ID }}" ] && \
-             [ -n "${{ secrets.APPLE_ID }}" ] && \
-             [ -n "${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" ]; then
+          if [ -n "$HAS_CERT" ] && \
+             [ -n "$HAS_PASS" ] && \
+             [ -n "$HAS_IDENTITY" ] && \
+             [ -n "$HAS_TEAM" ] && \
+             [ -n "$HAS_APPLE_ID" ] && \
+             [ -n "$HAS_APP_PASS" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
@@ -105,16 +112,22 @@ jobs:
           echo "::warning::See docs/release.md for required GitHub Actions secrets."
 
       # ── Tauri build (with or without signing) ──
-      - name: Build Tauri bundle (aarch64-apple-darwin)
+      # When APPLE_CERTIFICATE is set (even to empty), Tauri attempts code-signing
+      # and calls `security import`, which hard-fails with invalid/missing certs.
+      # Only pass signing env vars when secrets are actually configured.
+      - name: Build Tauri bundle (signed)
+        if: steps.signing.outputs.available == 'true'
         env:
-          # Tauri v2 reads these env vars for signing + notarization.
-          # When unset, Tauri skips signing gracefully.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run tauri build -- --target aarch64-apple-darwin
+
+      - name: Build Tauri bundle (unsigned)
+        if: steps.signing.outputs.available != 'true'
         run: npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Verify code signature
