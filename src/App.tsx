@@ -71,81 +71,81 @@ export default function App() {
   }, [loadWorkspace]);
 
   // Keyboard shortcuts
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (!mod) return;
 
-      // Cmd+K — Command palette
-      if (e.key === "k") {
-        e.preventDefault();
-        setShowCommandPalette(!showCommandPalette);
+    // Cmd+K — Command palette
+    if (e.key === "k") {
+      e.preventDefault();
+      const { showCommandPalette: open, setShowCommandPalette: setOpen } =
+        useEditorStore.getState();
+      setOpen(!open);
+      return;
+    }
+
+    // Cmd+Shift+E — Export markdown
+    if (e.shiftKey && e.key === "e") {
+      e.preventDefault();
+      const editor = useEditorStore.getState().editor;
+      if (editor) exportEditorToMarkdown(editor);
+      return;
+    }
+
+    // Cmd+S — Save file
+    if (e.key === "s" && !e.shiftKey) {
+      e.preventDefault();
+      const { activeFilePath, saveFile } = useFilesStore.getState();
+      if (activeFilePath) {
+        saveFile().then(() => toast.success("File saved"));
+      }
+      return;
+    }
+
+    // Cmd+N — New file
+    if (e.key === "n" && !e.shiftKey) {
+      e.preventDefault();
+      const ws = useFilesStore.getState().workspacePath;
+      if (!ws) {
+        toast.error("Open a workspace first");
         return;
       }
-
-      // Cmd+Shift+E — Export markdown
-      if (e.shiftKey && e.key === "e") {
-        e.preventDefault();
-        const editor = useEditorStore.getState().editor;
-        if (editor) exportEditorToMarkdown(editor);
-        return;
+      const name = window.prompt("New file name:", "untitled.md");
+      if (name) {
+        const fileName = name.endsWith(".md") ? name : `${name}.md`;
+        useFilesStore.getState().createFile(fileName);
       }
+      return;
+    }
 
-      // Cmd+S — Save file
-      if (e.key === "s" && !e.shiftKey) {
-        e.preventDefault();
-        const { activeFilePath, saveFile } = useFilesStore.getState();
-        if (activeFilePath) {
-          saveFile().then(() => toast.success("File saved"));
+    // Cmd+O — Open folder
+    if (e.key === "o" && !e.shiftKey) {
+      e.preventDefault();
+      openFolderDialog().then(async (path) => {
+        if (path) {
+          await setWorkspacePath(path);
+          await useFilesStore.getState().loadWorkspace();
+          toast.success("Workspace opened");
         }
-        return;
-      }
+      });
+      return;
+    }
 
-      // Cmd+N — New file
-      if (e.key === "n" && !e.shiftKey) {
-        e.preventDefault();
-        const ws = useFilesStore.getState().workspacePath;
-        if (!ws) {
-          toast.error("Open a workspace first");
-          return;
-        }
-        const name = window.prompt("New file name:", "untitled.md");
-        if (name) {
-          const fileName = name.endsWith(".md") ? name : `${name}.md`;
-          useFilesStore.getState().createFile(fileName);
-        }
-        return;
-      }
+    // Cmd+, — Settings
+    if (e.key === ",") {
+      e.preventDefault();
+      setShowSettings(true);
+      return;
+    }
 
-      // Cmd+O — Open folder
-      if (e.key === "o" && !e.shiftKey) {
-        e.preventDefault();
-        openFolderDialog().then(async (path) => {
-          if (path) {
-            await setWorkspacePath(path);
-            await useFilesStore.getState().loadWorkspace();
-            toast.success("Workspace opened");
-          }
-        });
-        return;
-      }
-
-      // Cmd+, — Settings
-      if (e.key === ",") {
-        e.preventDefault();
-        setShowSettings(true);
-        return;
-      }
-
-      // Cmd+/ — Shortcut help
-      if (e.key === "/") {
-        e.preventDefault();
-        setShowShortcutHelp(!showShortcutHelp);
-        return;
-      }
-    },
-    [showCommandPalette, setShowCommandPalette, showShortcutHelp, setShowShortcutHelp],
-  );
+    // Cmd+/ — Shortcut help
+    if (e.key === "/") {
+      e.preventDefault();
+      const { showShortcutHelp: open, setShowShortcutHelp: setOpen } = useEditorStore.getState();
+      setOpen(!open);
+      return;
+    }
+  }, []);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
