@@ -1,5 +1,4 @@
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
-import { useMemo } from "react";
 import { useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
 import { useFilesStore } from "../../stores/files";
@@ -19,17 +18,12 @@ const PHASE_PROGRESS: Record<string, number> = {
 };
 
 export function StatusBar() {
-  const editor = useEditorStore((s) => s.editor);
+  const wordCount = useEditorStore((s) => s.wordCount);
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
   const isDirty = useFilesStore((s) => s.isDirty);
   const aiPhase = useAiStore((s) => s.aiPhase);
   const currentAction = useAiStore((s) => s.currentAction);
 
-  const wordCount = useMemo(() => {
-    if (!editor) return 0;
-    const matches = editor.state.doc.textContent.match(/\S+/g);
-    return matches ? matches.length : 0;
-  }, [editor]);
   const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 
   const phaseLabel = PHASE_LABELS[aiPhase];

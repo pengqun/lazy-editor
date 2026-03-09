@@ -23,6 +23,9 @@ interface EditorState {
 
   selectedText: string;
   setSelectedText: (text: string) => void;
+
+  wordCount: number;
+  setWordCount: (count: number) => void;
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -47,4 +50,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   selectedText: "",
   setSelectedText: (text) => set({ selectedText: text }),
+
+  wordCount: 0,
+  setWordCount: (count) => set({ wordCount: count }),
 }));

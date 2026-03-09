@@ -15,6 +15,7 @@ import { useFilesStore } from "../../stores/files";
 export function Editor() {
   const setEditor = useEditorStore((s) => s.setEditor);
   const setSelectedText = useEditorStore((s) => s.setSelectedText);
+  const setWordCount = useEditorStore((s) => s.setWordCount);
   const activeFileContent = useFilesStore((s) => s.activeFileContent);
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
 
@@ -54,6 +55,8 @@ export function Editor() {
           isDirty: true,
         });
       }
+      const words = editor.state.doc.textContent.match(/\S+/g);
+      setWordCount(words ? words.length : 0);
       loadLanguagesForDoc(editor);
     },
     onSelectionUpdate: ({ editor }) => {
@@ -79,16 +82,22 @@ export function Editor() {
   // Load content when active file changes (reads from ref to avoid
   // re-running on every keystroke which would clobber the editor).
   useEffect(() => {
-    void activeFilePath;
+    if (!activeFilePath) {
+      setWordCount(0);
+      return;
+    }
+
     const content = contentRef.current;
     if (editor && content !== undefined) {
       const currentContent = editor.getHTML();
       if (currentContent !== content) {
         editor.commands.setContent(content || "");
+        const words = editor.state.doc.textContent.match(/\S+/g);
+        setWordCount(words ? words.length : 0);
         loadLanguagesForDoc(editor);
       }
     }
-  }, [editor, activeFilePath]);
+  }, [editor, activeFilePath, setWordCount]);
 
   if (!activeFilePath) {
     return (
