@@ -75,7 +75,8 @@ pub fn run_with_context(context: tauri::Context) {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_store::Builder::default().build());
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
     // NOTE: In self-test mode, avoid initializing the HTTP plugin. In CI / headless
     // contexts it may fail with "Operation not permitted" and prevent tests from running.

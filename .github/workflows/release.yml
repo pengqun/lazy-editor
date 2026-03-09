@@ -124,10 +124,15 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Build Tauri bundle (unsigned)
         if: steps.signing.outputs.available != 'true'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Verify code signature
@@ -170,6 +175,10 @@ jobs:
             -name "*.tar.gz" -o \
             -name "*.pkg" \
           \) -print0 2>/dev/null || true)
+
+          while IFS= read -r -d '' f; do
+            files+=("$f")
+          done < <(find src-tauri/target -type f -name "latest.json" -print0 2>/dev/null || true)
 
           # Some Tauri setups may only output raw .app bundles.
           while IFS= read -r -d '' d; do

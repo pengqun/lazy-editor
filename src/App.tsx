@@ -8,6 +8,7 @@ import { FileTree } from "./components/sidebar/FileTree";
 import { exportEditorToMarkdown } from "./lib/export-markdown";
 import { modKey } from "./lib/shortcuts";
 import { openFolderDialog, setWorkspacePath } from "./lib/tauri";
+import { checkForAppUpdate } from "./lib/updater";
 import { useAiStore } from "./stores/ai";
 import { useEditorStore } from "./stores/editor";
 import { useFilesStore } from "./stores/files";
@@ -55,6 +56,7 @@ export default function App() {
     const init = async () => {
       await loadWorkspace();
       await useAiStore.getState().loadSettings();
+      void checkForAppUpdate();
 
       const ws = useFilesStore.getState().workspacePath;
       const { claudeApiKey, openaiApiKey, provider } = useAiStore.getState().settings;
