@@ -14,46 +14,51 @@ export async function setWorkspacePath(path: string): Promise<void> {
   return invoke("set_workspace_path", { path });
 }
 
+function registerListener<T>(event: string, handler: (payload: T) => void): () => void {
+  let unlisten: UnlistenFn | null = null;
+  let disposed = false;
+
+  listen<T>(event, (evt) => handler(evt.payload))
+    .then((fn) => {
+      if (disposed) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    })
+    .catch((err) => {
+      console.error(`Failed to listen to ${event}:`, err);
+    });
+
+  return () => {
+    disposed = true;
+    if (unlisten) {
+      unlisten();
+      unlisten = null;
+    }
+  };
+}
+
 export function listenToAiStream(
   onChunk: (chunk: string) => void,
   onDone: () => void,
   onError: (error: string) => void,
 ): () => void {
-  const unlisteners: UnlistenFn[] = [];
-
-  listen<string>("ai-stream-chunk", (event) => {
-    onChunk(event.payload);
-  }).then((fn) => unlisteners.push(fn));
-
-  listen<void>("ai-stream-done", () => {
-    onDone();
-  }).then((fn) => unlisteners.push(fn));
-
-  listen<string>("ai-stream-error", (event) => {
-    onError(event.payload);
-  }).then((fn) => unlisteners.push(fn));
+  const stopChunk = registerListener<string>("ai-stream-chunk", onChunk);
+  const stopDone = registerListener<void>("ai-stream-done", onDone);
+  const stopError = registerListener<string>("ai-stream-error", onError);
 
   return () => {
-    for (const fn of unlisteners) fn();
+    stopChunk();
+    stopDone();
+    stopError();
   };
 }
 
 export function listenToAiPhase(onPhase: (phase: AiPhase) => void): () => void {
-  let unlisten: UnlistenFn | null = null;
-  listen<AiPhase>("ai-action-phase", (event) => {
-    onPhase(event.payload);
-  }).then((fn) => {
-    unlisten = fn;
-  });
-  return () => unlisten?.();
+  return registerListener<AiPhase>("ai-action-phase", onPhase);
 }
 
 export function listenToIngestProgress(onProgress: (msg: string) => void): () => void {
-  let unlisten: UnlistenFn | null = null;
-  listen<string>("ingest-progress", (event) => {
-    onProgress(event.payload);
-  }).then((fn) => {
-    unlisten = fn;
-  });
-  return () => unlisten?.();
+  return registerListener<string>("ingest-progress", onProgress);
 }

@@ -114,15 +114,17 @@ async fn run_ai_action(
 
     // Run the streaming generation
     match provider.generate_stream(request, tx).await {
-        Ok(()) => {}
+        Ok(()) => {
+            let _ = forward_handle.await;
+            Ok(())
+        }
         Err(e) => {
+            forward_handle.abort();
+            let _ = forward_handle.await;
             let _ = app.emit("ai-stream-error", e.to_string());
-            return Err(format!("AI generation failed: {}", e));
+            Err(format!("AI generation failed: {}", e))
         }
     }
-
-    forward_handle.await.ok();
-    Ok(())
 }
 
 // ── Load settings helper ─────────────────────────────────────────────

@@ -19,7 +19,10 @@ export function useAutoSave(debounceMs = 1000) {
       clearTimeout(timeoutRef.current);
     }
 
+    const pathAtSchedule = activeFilePath;
     timeoutRef.current = setTimeout(() => {
+      const { activeFilePath: currentPath, isDirty: stillDirty } = useFilesStore.getState();
+      if (!stillDirty || currentPath !== pathAtSchedule) return;
       saveFile();
     }, debounceMs);
 

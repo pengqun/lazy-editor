@@ -114,9 +114,20 @@ export const useAiStore = create<AiState>((set, get) => ({
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`AI ${action} failed:`, message);
-      set({ aiPhase: "error", aiError: message });
+      set({
+        aiPhase: "error",
+        aiError: message,
+        isStreaming: false,
+        currentAction: null,
+        lockedPlacement: null,
+      });
       toast.error(`AI ${action} failed: ${message}`);
-    } finally {
+      return;
+    }
+
+    // If backend invocation finished before any stream-phase update,
+    // reset to idle to avoid a stuck loading state in non-stream/error paths.
+    if (get().aiPhase === "searching_kb") {
       set({ isStreaming: false, currentAction: null, lockedPlacement: null });
     }
   },

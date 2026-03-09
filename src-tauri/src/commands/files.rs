@@ -19,20 +19,12 @@ pub struct WorkspaceInfo {
     files: Vec<FileEntry>,
 }
 
-#[tauri::command]
-pub async fn open_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
-}
-
-#[tauri::command]
-pub async fn open_file_by_path(path: String, state: State<'_ , AppState>) -> Result<String, String> {
-    // Canonicalize once and use the canonical path for both validation and reading
-    // to avoid TOCTOU race where a symlink is swapped between check and read.
-    let canonical = PathBuf::from(&path)
+fn canonicalize_within_workspace(path: &str, workspace: Option<String>) -> Result<PathBuf, String> {
+    let canonical = PathBuf::from(path)
         .canonicalize()
         .map_err(|e| format!("Invalid file path: {}", e))?;
 
-    if let Some(workspace) = state.workspace_path.lock().await.clone() {
+    if let Some(workspace) = workspace {
         let ws_canon = PathBuf::from(workspace)
             .canonicalize()
             .map_err(|e| format!("Invalid workspace path: {}", e))?;
@@ -40,16 +32,51 @@ pub async fn open_file_by_path(path: String, state: State<'_ , AppState>) -> Res
             return Err("Path is outside current workspace".to_string());
         }
     }
+
+    Ok(canonical)
+}
+
+#[tauri::command]
+pub async fn open_file(path: String, state: State<'_, AppState>) -> Result<String, String> {
+    let workspace = state.workspace_path.lock().await.clone();
+    let canonical = canonicalize_within_workspace(&path, workspace)?;
     fs::read_to_string(&canonical).map_err(|e| format!("Failed to read file: {}", e))
 }
 
 #[tauri::command]
-pub async fn save_file(path: String, content: String) -> Result<(), String> {
+pub async fn open_file_by_path(path: String, state: State<'_ , AppState>) -> Result<String, String> {
+    let workspace = state.workspace_path.lock().await.clone();
+    let canonical = canonicalize_within_workspace(&path, workspace)?;
+    fs::read_to_string(&canonical).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+#[tauri::command]
+pub async fn save_file(path: String, content: String, state: State<'_, AppState>) -> Result<(), String> {
+    let requested = PathBuf::from(&path);
+    let workspace = state.workspace_path.lock().await.clone();
+
+    if let Some(workspace_path) = workspace {
+        let ws_canon = PathBuf::from(workspace_path)
+            .canonicalize()
+            .map_err(|e| format!("Invalid workspace path: {}", e))?;
+
+        let parent = requested
+            .parent()
+            .ok_or_else(|| "Invalid target path".to_string())?;
+        let parent_canon = parent
+            .canonicalize()
+            .map_err(|e| format!("Invalid parent path: {}", e))?;
+
+        if !parent_canon.starts_with(&ws_canon) {
+            return Err("Path is outside current workspace".to_string());
+        }
+    }
+
     // Ensure parent directory exists
-    if let Some(parent) = PathBuf::from(&path).parent() {
+    if let Some(parent) = requested.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
     }
-    fs::write(&path, &content).map_err(|e| format!("Failed to write file: {}", e))
+    fs::write(&requested, &content).map_err(|e| format!("Failed to write file: {}", e))
 }
 
 #[tauri::command]

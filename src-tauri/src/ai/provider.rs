@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -36,6 +36,17 @@ pub trait AiProvider: Send + Sync {
         request: GenerateRequest,
         tx: mpsc::Sender<String>,
     ) -> Result<()>;
+}
+
+async fn ensure_success_response(resp: reqwest::Response, provider: &str) -> Result<reqwest::Response> {
+    let status = resp.status();
+    if status.is_success() {
+        return Ok(resp);
+    }
+
+    let body = resp.text().await.unwrap_or_default();
+    let snippet: String = body.chars().take(600).collect();
+    Err(anyhow!("{} API error {}: {}", provider, status, snippet))
 }
 
 // ── Claude Provider ──────────────────────────────────────────────────
@@ -86,6 +97,7 @@ impl AiProvider for ClaudeProvider {
             .json(&body)
             .send()
             .await?;
+        let resp = ensure_success_response(resp, "Claude").await?;
 
         let json: serde_json::Value = resp.json().await?;
 
@@ -127,6 +139,7 @@ impl AiProvider for ClaudeProvider {
             .json(&body)
             .send()
             .await?;
+        let resp = ensure_success_response(resp, "Claude").await?;
 
         let mut stream = resp.bytes_stream();
         let mut buffer = String::new();
@@ -214,6 +227,7 @@ impl AiProvider for OpenAiProvider {
             .json(&body)
             .send()
             .await?;
+        let resp = ensure_success_response(resp, "OpenAI").await?;
 
         let json: serde_json::Value = resp.json().await?;
 
@@ -259,6 +273,7 @@ impl AiProvider for OpenAiProvider {
             .json(&body)
             .send()
             .await?;
+        let resp = ensure_success_response(resp, "OpenAI").await?;
 
         let mut stream = resp.bytes_stream();
         let mut buffer = String::new();
@@ -336,6 +351,7 @@ impl AiProvider for OllamaProvider {
             .json(&body)
             .send()
             .await?;
+        let resp = ensure_success_response(resp, "Ollama").await?;
 
         let json: serde_json::Value = resp.json().await?;
         let text = json["response"].as_str().unwrap_or("").to_string();
@@ -365,6 +381,7 @@ impl AiProvider for OllamaProvider {
             .json(&body)
             .send()
             .await?;
+        let resp = ensure_success_response(resp, "Ollama").await?;
 
         let mut stream = resp.bytes_stream();
         use futures::StreamExt;

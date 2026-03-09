@@ -57,6 +57,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   openFile: async (path) => {
     try {
+      const { activeFilePath: currentPath, isDirty } = get();
+      if (isDirty && currentPath && currentPath !== path) {
+        await get().saveFile();
+      }
       const content = await invoke<string>("open_file", { path });
       set({
         activeFilePath: path,
@@ -70,6 +74,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   openFileByPath: async (path) => {
     try {
+      const { activeFilePath: currentPath, isDirty } = get();
+      if (isDirty && currentPath && currentPath !== path) {
+        await get().saveFile();
+      }
       const content = await invoke<string>("open_file_by_path", { path });
       set({ activeFilePath: path, activeFileContent: content, isDirty: false });
     } catch (err) {
