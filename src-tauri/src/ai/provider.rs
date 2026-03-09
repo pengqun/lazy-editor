@@ -162,7 +162,9 @@ impl AiProvider for ClaudeProvider {
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
                             if json["type"] == "content_block_delta" {
                                 if let Some(text) = json["delta"]["text"].as_str() {
-                                    let _ = tx.send(text.to_string()).await;
+                                    if tx.send(text.to_string()).await.is_err() {
+                                        return Ok(());
+                                    }
                                 }
                             }
                         }
@@ -296,7 +298,9 @@ impl AiProvider for OpenAiProvider {
                             if let Some(content) =
                                 json["choices"][0]["delta"]["content"].as_str()
                             {
-                                let _ = tx.send(content.to_string()).await;
+                                if tx.send(content.to_string()).await.is_err() {
+                                    return Ok(());
+                                }
                             }
                         }
                     }
@@ -394,7 +398,9 @@ impl AiProvider for OllamaProvider {
             for line in text.lines() {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
                     if let Some(response) = json["response"].as_str() {
-                        let _ = tx.send(response.to_string()).await;
+                        if tx.send(response.to_string()).await.is_err() {
+                            return Ok(());
+                        }
                     }
                     if json["done"].as_bool() == Some(true) {
                         return Ok(());

@@ -17,8 +17,6 @@ export function Editor() {
   const setSelectedText = useEditorStore((s) => s.setSelectedText);
   const activeFileContent = useFilesStore((s) => s.activeFileContent);
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
-  const setDirty = useFilesStore((s) => s.setDirty);
-  const setActiveFile = useFilesStore((s) => s.setActiveFile);
 
   const contentRef = useRef(activeFileContent);
   contentRef.current = activeFileContent;
@@ -47,10 +45,14 @@ export function Editor() {
     ],
     content: "",
     onUpdate: ({ editor }) => {
-      if (activeFilePath) {
+      const { activeFilePath: currentPath } = useFilesStore.getState();
+      if (currentPath) {
         const content = editor.getHTML();
-        setActiveFile(activeFilePath, content);
-        setDirty(true);
+        useFilesStore.setState({
+          activeFilePath: currentPath,
+          activeFileContent: content,
+          isDirty: true,
+        });
       }
       loadLanguagesForDoc(editor);
     },

@@ -42,23 +42,29 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const setSettings = useAiStore((s) => s.setSettings);
   const saveSettings = useAiStore((s) => s.saveSettings);
   const loadSettings = useAiStore((s) => s.loadSettings);
+  const [draft, setDraft] = useState<AiSettings>(settings);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
+  useEffect(() => {
+    setDraft(settings);
+  }, [settings]);
+
   const updateSettings = (partial: Partial<AiSettings>) => {
-    setSettings(partial);
+    setDraft((prev) => ({ ...prev, ...partial }));
     setValidationError(null);
   };
 
   const handleSave = async () => {
-    const error = validateSettings(settings);
+    const error = validateSettings(draft);
     if (error) {
       setValidationError(error);
       return;
     }
+    setSettings(draft);
     await saveSettings();
     toast.success("Settings saved");
     onClose();
@@ -68,7 +74,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     <div
       className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[15vh] z-50"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) {
+          setDraft(settings);
+          setValidationError(null);
+          onClose();
+        }
       }}
     >
       <div className="w-[480px] bg-surface-2 border border-border rounded-xl shadow-2xl overflow-hidden">
@@ -77,7 +87,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           <span className="text-sm font-medium text-text-primary">AI Settings</span>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              setDraft(settings);
+              setValidationError(null);
+              onClose();
+            }}
             className="p-1 hover:bg-surface-3 rounded transition-colors"
           >
             <X size={16} className="text-text-tertiary" />
@@ -97,7 +111,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   key={p.id}
                   onClick={() => updateSettings({ provider: p.id })}
                   className={`flex-1 text-xs px-3 py-2 rounded border transition-colors ${
-                    settings.provider === p.id
+                    draft.provider === p.id
                       ? "bg-accent/20 border-accent text-accent"
                       : "bg-surface-3 border-border text-text-secondary hover:border-text-tertiary"
                   }`}
@@ -109,18 +123,18 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           </div>
 
           {/* Claude Settings */}
-          {settings.provider === "claude" && (
+          {draft.provider === "claude" && (
             <>
               <Field
                 label="API Key"
                 type="password"
-                value={settings.claudeApiKey}
+                value={draft.claudeApiKey}
                 onChange={(v) => updateSettings({ claudeApiKey: v })}
                 placeholder="sk-ant-..."
               />
               <Field
                 label="Model"
-                value={settings.claudeModel}
+                value={draft.claudeModel}
                 onChange={(v) => updateSettings({ claudeModel: v })}
                 placeholder="claude-sonnet-4-20250514"
               />
@@ -128,18 +142,18 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           )}
 
           {/* OpenAI Settings */}
-          {settings.provider === "openai" && (
+          {draft.provider === "openai" && (
             <>
               <Field
                 label="API Key"
                 type="password"
-                value={settings.openaiApiKey}
+                value={draft.openaiApiKey}
                 onChange={(v) => updateSettings({ openaiApiKey: v })}
                 placeholder="sk-..."
               />
               <Field
                 label="Model"
-                value={settings.openaiModel}
+                value={draft.openaiModel}
                 onChange={(v) => updateSettings({ openaiModel: v })}
                 placeholder="gpt-4o"
               />
@@ -147,17 +161,17 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           )}
 
           {/* Ollama Settings */}
-          {settings.provider === "ollama" && (
+          {draft.provider === "ollama" && (
             <>
               <Field
                 label="Endpoint"
-                value={settings.ollamaEndpoint}
+                value={draft.ollamaEndpoint}
                 onChange={(v) => updateSettings({ ollamaEndpoint: v })}
                 placeholder="http://localhost:11434"
               />
               <Field
                 label="Model"
-                value={settings.ollamaModel}
+                value={draft.ollamaModel}
                 onChange={(v) => updateSettings({ ollamaModel: v })}
                 placeholder="llama3.2"
               />
@@ -167,14 +181,14 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           {/* Temperature */}
           <div>
             <label className="text-xs text-text-tertiary uppercase tracking-wider mb-2 block">
-              Temperature: {settings.temperature.toFixed(1)}
+              Temperature: {draft.temperature.toFixed(1)}
             </label>
             <input
               type="range"
               min="0"
               max="1"
               step="0.1"
-              value={settings.temperature}
+              value={draft.temperature}
               onChange={(e) => updateSettings({ temperature: Number.parseFloat(e.target.value) })}
               className="w-full accent-accent"
             />
@@ -188,7 +202,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           <Field
             label="Max Tokens"
             type="number"
-            value={String(settings.maxTokens)}
+            value={String(draft.maxTokens)}
             onChange={(v) => updateSettings({ maxTokens: Number.parseInt(v) || 4096 })}
             placeholder="4096"
           />
@@ -205,7 +219,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              setDraft(settings);
+              setValidationError(null);
+              onClose();
+            }}
             className="text-xs px-3 py-1.5 rounded border border-border text-text-secondary hover:bg-surface-3 transition-colors"
           >
             Cancel
