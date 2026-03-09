@@ -25,6 +25,8 @@
         { "url": "http://**" }
       ],
       "deny": []
-    }
+    },
+
+    "updater:default"
   ]
 }

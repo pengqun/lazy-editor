@@ -1,16 +1,19 @@
 import { check } from "@tauri-apps/plugin-updater";
+import { toast } from "../stores/toast";
 
 export async function checkForAppUpdate(): Promise<void> {
   try {
     const update = await check();
     if (!update?.available) return;
 
-    const confirmed = window.confirm(`发现新版本 ${update.version}，现在下载并安装？`);
-    if (!confirmed) return;
+    toast.info(`Downloading update v${update.version}…`);
 
     await update.downloadAndInstall();
-    window.alert("更新已安装，请重启应用以完成升级。");
+
+    // Keep this toast visible for 10 seconds so the user notices
+    toast.success("Update installed — restart to apply.", 10_000);
   } catch (error) {
+    // Expected to fail when updater signing keys are not yet configured
     console.warn("[updater] check/install failed", error);
   }
 }

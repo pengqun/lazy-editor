@@ -31,8 +31,6 @@
   },
   "plugins": {
     "updater": {
-      "active": true,
-      "dialog": false,
       "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
       "endpoints": [
         "https://github.com/pengqun/lazy-editor/releases/latest/download/latest.json"

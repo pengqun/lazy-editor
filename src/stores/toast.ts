@@ -10,7 +10,7 @@ export interface Toast {
 
 interface ToastState {
   toasts: Toast[];
-  addToast: (message: string, type?: ToastType) => void;
+  addToast: (message: string, type?: ToastType, duration?: number) => void;
   removeToast: (id: string) => void;
 }
 
@@ -19,16 +19,18 @@ let nextId = 0;
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
 
-  addToast: (message, type = "info") => {
+  addToast: (message, type = "info", duration = 3500) => {
     const id = String(++nextId);
     set((state) => ({
       toasts: [...state.toasts, { id, message, type }],
     }));
-    setTimeout(() => {
-      set((state) => ({
-        toasts: state.toasts.filter((t) => t.id !== id),
-      }));
-    }, 3500);
+    if (duration > 0) {
+      setTimeout(() => {
+        set((state) => ({
+          toasts: state.toasts.filter((t) => t.id !== id),
+        }));
+      }, duration);
+    }
   },
 
   removeToast: (id) =>
@@ -39,7 +41,10 @@ export const useToastStore = create<ToastState>((set) => ({
 
 /** Convenience function — call from anywhere without hooks */
 export const toast = {
-  success: (message: string) => useToastStore.getState().addToast(message, "success"),
-  error: (message: string) => useToastStore.getState().addToast(message, "error"),
-  info: (message: string) => useToastStore.getState().addToast(message, "info"),
+  success: (message: string, duration?: number) =>
+    useToastStore.getState().addToast(message, "success", duration),
+  error: (message: string, duration?: number) =>
+    useToastStore.getState().addToast(message, "error", duration),
+  info: (message: string, duration?: number) =>
+    useToastStore.getState().addToast(message, "info", duration),
 };

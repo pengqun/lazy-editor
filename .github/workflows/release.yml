@@ -176,10 +176,6 @@ jobs:
             -name "*.pkg" \
           \) -print0 2>/dev/null || true)
 
-          while IFS= read -r -d '' f; do
-            files+=("$f")
-          done < <(find src-tauri/target -type f -name "latest.json" -print0 2>/dev/null || true)
-
           # Some Tauri setups may only output raw .app bundles.
           while IFS= read -r -d '' d; do
             files+=("$d")
@@ -197,6 +193,51 @@ jobs:
 
           echo "Collected artifacts:"
           ls -lah dist-release
+
+      # ── Generate latest.json for the Tauri updater endpoint ──
+      - name: Generate latest.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
+          TAG="${GITHUB_REF#refs/tags/}"
+
+          # Locate the update bundle (.app.tar.gz) and its signature
+          UPDATE_TAR=$(find dist-release -name "*.app.tar.gz" | head -1)
+          UPDATE_SIG=$(find dist-release -name "*.app.tar.gz.sig" | head -1)
+
+          if [ -z "$UPDATE_TAR" ]; then
+            echo "::warning::No .app.tar.gz found — skipping latest.json generation"
+            exit 0
+          fi
+
+          FILENAME=$(basename "$UPDATE_TAR")
+          SIGNATURE=""
+          if [ -n "$UPDATE_SIG" ] && [ -f "$UPDATE_SIG" ]; then
+            SIGNATURE=$(cat "$UPDATE_SIG")
+          fi
+
+          REPO="${GITHUB_REPOSITORY}"
+          DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${FILENAME}"
+
+          cat > dist-release/latest.json <<ENDJSON
+          {
+            "version": "${VERSION}",
+            "notes": "See the release notes on GitHub.",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${SIGNATURE}",
+                "url": "${DOWNLOAD_URL}"
+              }
+            }
+          }
+          ENDJSON
+
+          echo "Generated latest.json:"
+          cat dist-release/latest.json
 
       - name: Upload artifacts (workflow run)
         uses: actions/upload-artifact@v4
