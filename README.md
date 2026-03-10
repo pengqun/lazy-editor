@@ -4,6 +4,12 @@ AI-native writing workspace for desktop — a rich text editor with multi-provid
 
 Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
 
+## Product Scope (Current Phase)
+
+- **Single-user first**: this phase is focused on personal writing workflows.
+- **Out of scope for now**: multi-user collaboration features (shared editing, team workspaces, real-time co-authoring, comment/review workflows).
+- Collaboration may be revisited in a later phase after core personal-writing stability is fully validated.
+
 ## Features
 
 - **Rich text editor** powered by TipTap
@@ -161,6 +167,7 @@ Unsigned apps are fine for internal testing but may show macOS security warnings
 - CI for builds/releases
 - Additional export formats (DOCX, EPUB)
 - More retrieval controls (collections, filters, citation click-to-view)
+- Keep prioritizing single-user workflow polish; defer multi-user collaboration to a future phase
 
 ## License
 
