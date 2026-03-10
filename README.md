@@ -21,6 +21,7 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
 - **Export** — Markdown, HTML (standalone document), and PDF (via native print dialog). Accessible from the toolbar export menu or keyboard shortcuts (`⌘⇧E` / `⌘⇧H` / `⌘⇧P`)
 - **Version History** — automatic local snapshots captured on save (deduplicated, rate-limited to every 5 minutes), with manual snapshot creation and restore-with-confirmation. Up to 50 snapshots per file, oldest pruned automatically (`⌘⇧V`)
 - **Crash Recovery** — unsaved editor content is periodically checkpointed to local storage while you type. If the app exits unexpectedly, a recovery dialog offers to restore or discard the draft on next file open. Recovery drafts are bounded (max 20, auto-expired after 7 days) and cleared on successful save
+- **Writing Metrics** — live word count, estimated reading time (based on 200 WPM), and configurable per-file writing goals with progress tracking. Click the word count in the status bar to set a target; progress is shown as a compact bar + percentage. Goals persist across sessions via local storage
 
 ## Tech Stack
 

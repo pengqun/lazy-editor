@@ -1,7 +1,11 @@
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Target } from "lucide-react";
+import { useState } from "react";
+import { goalLabel, goalProgress, readingTimeMinutes } from "../../lib/writing-metrics";
 import { useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
 import { useFilesStore } from "../../stores/files";
+import { useWritingGoalsStore } from "../../stores/writing-goals";
+import { WritingGoalPopover } from "./WritingGoalPopover";
 
 const PHASE_LABELS: Record<string, string> = {
   searching_kb: "Searching knowledge base...",
@@ -23,19 +27,57 @@ export function StatusBar() {
   const isDirty = useFilesStore((s) => s.isDirty);
   const aiPhase = useAiStore((s) => s.aiPhase);
   const currentAction = useAiStore((s) => s.currentAction);
+  const goal = useWritingGoalsStore((s) =>
+    activeFilePath ? s.getGoal(activeFilePath) : null,
+  );
 
-  const readingTime = Math.max(1, Math.ceil(wordCount / 200));
+  const [showGoalPopover, setShowGoalPopover] = useState(false);
 
+  const readingTime = readingTimeMinutes(wordCount);
   const phaseLabel = PHASE_LABELS[aiPhase];
   const progress = PHASE_PROGRESS[aiPhase] ?? 0;
+
+  const hasGoal = goal !== null && goal.target > 0;
+  const pct = hasGoal ? goalProgress(wordCount, goal.target) : 0;
 
   return (
     <div className="h-7 border-t border-border bg-surface-1 flex items-center px-4 text-xs text-text-tertiary gap-4">
       {activeFilePath && (
         <>
-          <span>
-            {wordCount} word{wordCount !== 1 ? "s" : ""}
-          </span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowGoalPopover((v) => !v)}
+              className="flex items-center gap-1 hover:text-text-primary"
+              title={hasGoal ? goalLabel(wordCount, goal.target) : "Set writing goal"}
+            >
+              {hasGoal && <Target size={10} className="text-accent" />}
+              <span>
+                {wordCount} word{wordCount !== 1 ? "s" : ""}
+              </span>
+            </button>
+            {showGoalPopover && (
+              <WritingGoalPopover
+                filePath={activeFilePath}
+                onClose={() => setShowGoalPopover(false)}
+              />
+            )}
+          </div>
+
+          {hasGoal && (
+            <div className="flex items-center gap-1.5" title={goalLabel(wordCount, goal.target)}>
+              <div className="w-16 h-1.5 bg-surface-3 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    pct >= 100 ? "bg-emerald-400" : "bg-accent"
+                  }`}
+                  style={{ width: `${Math.min(pct, 100)}%` }}
+                />
+              </div>
+              <span className={pct >= 100 ? "text-emerald-400" : ""}>{pct}%</span>
+            </div>
+          )}
+
           <span>{readingTime} min read</span>
           <span>{isDirty ? "Unsaved" : "Saved"}</span>
         </>
