@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockedInvoke = vi.mocked(invoke);
 
 function resetStore() {
+  localStorage.removeItem("lazy-editor:retrieval-preset");
   useKnowledgeStore.setState({
     documents: [],
     isIngesting: false,
@@ -13,6 +14,7 @@ function resetStore() {
     pinnedDocIds: new Set(),
     retrievalTopK: 5,
     retrievalScope: "all",
+    activePreset: null,
     viewedChunk: null,
     viewedChunkQuery: null,
     viewedChunkScore: null,
@@ -250,6 +252,85 @@ describe("useKnowledgeStore", () => {
       const ids = useKnowledgeStore.getState().getScopeDocIds();
       expect(ids).toBeDefined();
       expect(ids!.sort()).toEqual([10, 20]);
+    });
+  });
+
+  describe("retrieval presets", () => {
+    it("has null activePreset by default (no localStorage)", () => {
+      expect(useKnowledgeStore.getState().activePreset).toBeNull();
+    });
+
+    it("setPreset applies writing preset settings", () => {
+      useKnowledgeStore.getState().setPreset("writing");
+      const state = useKnowledgeStore.getState();
+      expect(state.activePreset).toBe("writing");
+      expect(state.retrievalTopK).toBe(5);
+      expect(state.retrievalScope).toBe("all");
+    });
+
+    it("setPreset applies research preset settings", () => {
+      useKnowledgeStore.getState().setPreset("research");
+      const state = useKnowledgeStore.getState();
+      expect(state.activePreset).toBe("research");
+      expect(state.retrievalTopK).toBe(8);
+      expect(state.retrievalScope).toBe("all");
+    });
+
+    it("setPreset applies precision preset settings", () => {
+      useKnowledgeStore.getState().setPreset("precision");
+      const state = useKnowledgeStore.getState();
+      expect(state.activePreset).toBe("precision");
+      expect(state.retrievalTopK).toBe(3);
+      expect(state.retrievalScope).toBe("pinned");
+    });
+
+    it("setPreset persists to localStorage", () => {
+      useKnowledgeStore.getState().setPreset("research");
+      expect(localStorage.getItem("lazy-editor:retrieval-preset")).toBe("research");
+    });
+
+    it("manual topK change clears preset when settings no longer match", () => {
+      useKnowledgeStore.getState().setPreset("writing");
+      expect(useKnowledgeStore.getState().activePreset).toBe("writing");
+
+      useKnowledgeStore.getState().setRetrievalTopK(7);
+      expect(useKnowledgeStore.getState().activePreset).toBeNull();
+    });
+
+    it("manual topK change detects matching preset", () => {
+      useKnowledgeStore.getState().setPreset("writing");
+      // Change topK to research value (8) while scope is still "all"
+      useKnowledgeStore.getState().setRetrievalTopK(8);
+      expect(useKnowledgeStore.getState().activePreset).toBe("research");
+    });
+
+    it("manual scope change clears preset when settings no longer match", () => {
+      useKnowledgeStore.getState().setPreset("research");
+      useKnowledgeStore.getState().setRetrievalScope("pinned");
+      // topK=8, scope=pinned doesn't match any preset
+      expect(useKnowledgeStore.getState().activePreset).toBeNull();
+    });
+
+    it("manual scope change detects matching preset", () => {
+      // Start at topK=3, scope=all (no preset match)
+      useKnowledgeStore.getState().setRetrievalTopK(3);
+      expect(useKnowledgeStore.getState().activePreset).toBeNull();
+      // Switch scope to pinned → matches precision
+      useKnowledgeStore.getState().setRetrievalScope("pinned");
+      expect(useKnowledgeStore.getState().activePreset).toBe("precision");
+    });
+
+    it("switching presets updates localStorage each time", () => {
+      useKnowledgeStore.getState().setPreset("writing");
+      expect(localStorage.getItem("lazy-editor:retrieval-preset")).toBe("writing");
+      useKnowledgeStore.getState().setPreset("precision");
+      expect(localStorage.getItem("lazy-editor:retrieval-preset")).toBe("precision");
+    });
+
+    it("clearing preset via manual override removes from localStorage", () => {
+      useKnowledgeStore.getState().setPreset("writing");
+      useKnowledgeStore.getState().setRetrievalTopK(7); // no matching preset
+      expect(localStorage.getItem("lazy-editor:retrieval-preset")).toBeNull();
     });
   });
 });

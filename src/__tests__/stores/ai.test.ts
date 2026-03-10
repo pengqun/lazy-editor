@@ -107,6 +107,29 @@ describe("useAiStore", () => {
     });
   });
 
+  it("runAction uses preset-derived settings when a preset is active", async () => {
+    // Apply "research" preset: topK=8, scope=all
+    useKnowledgeStore.getState().setPreset("research");
+    mockedInvoke.mockResolvedValueOnce(undefined);
+    await useAiStore.getState().runAction("draft", { topic: "test" });
+    expect(mockedInvoke).toHaveBeenCalledWith("ai_draft", {
+      topic: "test",
+      topK: 8,
+    });
+  });
+
+  it("runAction uses precision preset with pinned scope", async () => {
+    useKnowledgeStore.setState({ pinnedDocIds: new Set([5, 15]) });
+    useKnowledgeStore.getState().setPreset("precision");
+    mockedInvoke.mockResolvedValueOnce(undefined);
+    await useAiStore.getState().runAction("expand", { selectedText: "hi" });
+    expect(mockedInvoke).toHaveBeenCalledWith("ai_expand", {
+      selectedText: "hi",
+      topK: 3,
+      scopeDocIds: expect.arrayContaining([5, 15]),
+    });
+  });
+
   it("runAction does not inject retrieval params for summarize", async () => {
     mockedInvoke.mockResolvedValueOnce(undefined);
     await useAiStore.getState().runAction("summarize", { text: "hello" });

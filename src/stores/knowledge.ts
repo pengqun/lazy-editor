@@ -1,5 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import {
+  type RetrievalPresetId,
+  RETRIEVAL_PRESETS,
+  detectMatchingPreset,
+  loadPresetFromStorage,
+  savePresetToStorage,
+} from "../lib/retrieval-presets";
 import { toast } from "./toast";
 
 export interface KBDocument {
@@ -48,6 +55,11 @@ interface KnowledgeState {
   retrievalScope: RetrievalScope;
   setRetrievalScope: (scope: RetrievalScope) => void;
 
+  /** Active retrieval preset (null = custom / manual settings). */
+  activePreset: RetrievalPresetId | null;
+  /** Apply a preset — updates topK + scope and persists the selection. */
+  setPreset: (id: RetrievalPresetId) => void;
+
   /** Compute the scope_doc_ids to send to the backend based on current settings. */
   getScopeDocIds: () => number[] | undefined;
 
@@ -73,21 +85,41 @@ interface KnowledgeState {
   closeChunkViewer: () => void;
 }
 
+// Initialise from persisted preset (if any), falling back to defaults
+const _initialPreset = loadPresetFromStorage();
+const _initialConfig = _initialPreset ? RETRIEVAL_PRESETS[_initialPreset] : null;
+
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   documents: [],
   isIngesting: false,
   ingestProgress: "",
   searchResults: [],
   pinnedDocIds: new Set(),
-  retrievalTopK: 5,
-  retrievalScope: "all" as RetrievalScope,
+  retrievalTopK: _initialConfig?.topK ?? 5,
+  retrievalScope: (_initialConfig?.scope ?? "all") as RetrievalScope,
+  activePreset: _initialPreset,
   viewedChunk: null,
   viewChunkLoading: false,
   viewedChunkQuery: null,
   viewedChunkScore: null,
 
-  setRetrievalTopK: (topK) => set({ retrievalTopK: Math.max(1, Math.min(10, topK)) }),
-  setRetrievalScope: (scope) => set({ retrievalScope: scope }),
+  setRetrievalTopK: (topK) => {
+    const clamped = Math.max(1, Math.min(10, topK));
+    const newPreset = detectMatchingPreset(clamped, get().retrievalScope);
+    savePresetToStorage(newPreset);
+    set({ retrievalTopK: clamped, activePreset: newPreset });
+  },
+  setRetrievalScope: (scope) => {
+    const newPreset = detectMatchingPreset(get().retrievalTopK, scope);
+    savePresetToStorage(newPreset);
+    set({ retrievalScope: scope, activePreset: newPreset });
+  },
+
+  setPreset: (id) => {
+    const preset = RETRIEVAL_PRESETS[id];
+    savePresetToStorage(id);
+    set({ activePreset: id, retrievalTopK: preset.topK, retrievalScope: preset.scope });
+  },
 
   getScopeDocIds: () => {
     const { retrievalScope, pinnedDocIds } = get();

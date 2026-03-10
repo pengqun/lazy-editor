@@ -23,6 +23,7 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
   - **clickable source recall** — click any citation link in AI output to view the original source chunk in the Knowledge Base panel, with surrounding context (previous/next chunks), navigation, relevance score badge, and matched-term highlighting showing why the chunk was retrieved
   - **retrieval quality** — score threshold filtering (removes low-relevance noise), document diversity limits (max 2 chunks per document in results), and XML-safe prompt injection
   - **retrieval controls** — configure how many KB results are injected into AI prompts (1–10) and scope retrieval to all documents or only pinned documents
+  - **retrieval presets** — switch between Writing (balanced, 5 results), Research (maximum context, 8 results), and Precision (focused, 3 results from pinned docs) modes; manual overrides are preserved, and the active preset is persisted across restarts
 - **Workspace file management** (open/save + file tree)
 - **Find & Replace** — document-level search with match highlighting, next/prev navigation, case-sensitive toggle, replace one or all (`⌘F`)
 - **Document Outline** — toggleable sidebar listing H1–H3 headings for quick navigation; click to jump (`⌘⇧O`)

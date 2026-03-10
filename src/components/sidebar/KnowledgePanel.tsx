@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
+import { PRESET_IDS, RETRIEVAL_PRESETS } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
 import { type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
 
@@ -37,6 +38,8 @@ export function KnowledgePanel() {
     setRetrievalTopK,
     retrievalScope,
     setRetrievalScope,
+    activePreset,
+    setPreset,
     viewedChunk,
     viewChunkLoading,
     viewChunk,
@@ -95,6 +98,15 @@ export function KnowledgePanel() {
           <span className="text-sm font-medium text-text-secondary">Knowledge Base</span>
         </div>
         <div className="flex items-center gap-1">
+          {activePreset && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent font-medium cursor-pointer"
+              onClick={() => setShowRetrievalSettings(true)}
+              title={`Preset: ${RETRIEVAL_PRESETS[activePreset].label} — ${RETRIEVAL_PRESETS[activePreset].description}`}
+            >
+              {RETRIEVAL_PRESETS[activePreset].label}
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setShowRetrievalSettings(!showRetrievalSettings)}
@@ -141,6 +153,35 @@ export function KnowledgePanel() {
             >
               <X size={12} className="text-text-tertiary" />
             </button>
+          </div>
+
+          {/* Preset switcher */}
+          <div className="space-y-1">
+            <label className="text-xs text-text-secondary">Preset</label>
+            <div className="flex gap-1">
+              {PRESET_IDS.map((id) => {
+                const preset = RETRIEVAL_PRESETS[id];
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setPreset(id)}
+                    className={cn(
+                      "flex-1 text-xs px-2 py-1 rounded border transition-colors",
+                      activePreset === id
+                        ? "bg-accent/20 border-accent text-accent"
+                        : "bg-surface-2 border-border text-text-tertiary hover:bg-surface-3",
+                    )}
+                    title={preset.description}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+            {!activePreset && (
+              <p className="text-[10px] text-text-tertiary">Custom settings active</p>
+            )}
           </div>
 
           {/* Top-K control */}
