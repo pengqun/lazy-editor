@@ -1,4 +1,6 @@
+import { clearDraft } from "@/lib/recovery";
 import { criticalAlert } from "@/stores/alert";
+import { useRecoveryStore } from "@/stores/recovery";
 import { useSnapshotsStore } from "@/stores/snapshots";
 import { toast } from "@/stores/toast";
 import { invoke } from "@tauri-apps/api/core";
@@ -68,6 +70,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         activeFileContent: content,
         isDirty: false,
       });
+      // Check for crash-recovery draft
+      useRecoveryStore.getState().checkOnOpen(path, content);
     } catch (err) {
       console.error("Failed to open file:", err);
     }
@@ -81,6 +85,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       }
       const content = await invoke<string>("open_file_by_path", { path });
       set({ activeFilePath: path, activeFileContent: content, isDirty: false });
+      // Check for crash-recovery draft
+      useRecoveryStore.getState().checkOnOpen(path, content);
     } catch (err) {
       console.error("Failed to open file by path:", err);
     }
@@ -95,6 +101,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         content: activeFileContent,
       });
       set({ isDirty: false });
+      clearDraft(activeFilePath);
       // Fire-and-forget auto-snapshot after successful save
       useSnapshotsStore.getState().autoSnapshot(activeFilePath, activeFileContent);
     } catch (err) {

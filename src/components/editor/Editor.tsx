@@ -7,6 +7,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
 import { useAIStream } from "../../hooks/useAI";
 import { useAutoSave } from "../../hooks/useAutoSave";
+import { useRecoveryDraft } from "../../hooks/useRecoveryDraft";
 import { SearchAndReplace } from "../../lib/find-replace";
 import { loadLanguagesForDoc, lowlight } from "../../lib/lowlight-loader";
 import { modKey } from "../../lib/shortcuts";
@@ -25,6 +26,7 @@ export function Editor() {
 
   useAutoSave();
   useAIStream();
+  useRecoveryDraft();
 
   const editor = useEditor({
     extensions: [

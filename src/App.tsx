@@ -16,6 +16,7 @@ import { checkForAppUpdate } from "./lib/updater";
 import { useAiStore } from "./stores/ai";
 import { useEditorStore } from "./stores/editor";
 import { useFilesStore } from "./stores/files";
+import { useRecoveryStore } from "./stores/recovery";
 import { toast } from "./stores/toast";
 
 const Editor = lazy(() =>
@@ -41,6 +42,11 @@ const ShortcutHelpPanel = lazy(() =>
     default: m.ShortcutHelpPanel,
   })),
 );
+const RecoveryDialog = lazy(() =>
+  import("./components/panels/RecoveryDialog").then((m) => ({
+    default: m.RecoveryDialog,
+  })),
+);
 const VersionHistoryPanel = lazy(() =>
   import("./components/panels/VersionHistoryPanel").then((m) => ({
     default: m.VersionHistoryPanel,
@@ -58,6 +64,7 @@ export default function App() {
   const setShowVersionHistory = useEditorStore((s) => s.setShowVersionHistory);
   const rightPanel = useEditorStore((s) => s.rightPanel);
   const setRightPanel = useEditorStore((s) => s.setRightPanel);
+  const showRecoveryDialog = useRecoveryStore((s) => s.showRecoveryDialog);
   const loadWorkspace = useFilesStore((s) => s.loadWorkspace);
   const workspacePath = useFilesStore((s) => s.workspacePath);
   const aiSettings = useAiStore((s) => s.settings);
@@ -406,6 +413,13 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Crash Recovery Dialog */}
+      {showRecoveryDialog && (
+        <Suspense fallback={null}>
+          <RecoveryDialog />
+        </Suspense>
       )}
 
       {/* Critical Alert Dialog */}

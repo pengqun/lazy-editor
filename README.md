@@ -20,6 +20,7 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
 - **Document Outline** — toggleable sidebar listing H1–H3 headings for quick navigation; click to jump (`⌘⇧O`)
 - **Export** — Markdown, HTML (standalone document), and PDF (via native print dialog). Accessible from the toolbar export menu or keyboard shortcuts (`⌘⇧E` / `⌘⇧H` / `⌘⇧P`)
 - **Version History** — automatic local snapshots captured on save (deduplicated, rate-limited to every 5 minutes), with manual snapshot creation and restore-with-confirmation. Up to 50 snapshots per file, oldest pruned automatically (`⌘⇧V`)
+- **Crash Recovery** — unsaved editor content is periodically checkpointed to local storage while you type. If the app exits unexpectedly, a recovery dialog offers to restore or discard the draft on next file open. Recovery drafts are bounded (max 20, auto-expired after 7 days) and cleared on successful save
 
 ## Tech Stack
 
