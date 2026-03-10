@@ -51,6 +51,9 @@ pub struct CitationSource {
 }
 
 /// Helper: run an AI action with KB context injection and streaming.
+///
+/// `top_k` controls the number of KB results (defaults to 5 if `None`).
+/// `scope_doc_ids` limits search to specific documents (all documents if `None` or empty).
 async fn run_ai_action(
     action: &str,
     user_message: &str,
@@ -58,16 +61,25 @@ async fn run_ai_action(
     app: &AppHandle,
     settings: &AiSettings,
     kb_query: Option<&str>,
+    top_k: Option<usize>,
+    scope_doc_ids: Option<Vec<i64>>,
 ) -> Result<(), String> {
+    let effective_top_k = top_k.unwrap_or(5);
+
     // 1. Search KB for relevant context
     let kb_results = if let Some(query) = kb_query {
         let _ = app.emit("ai-action-phase", "searching_kb");
-        let db = state.db.lock().await;
-        let embedder_guard = state.embedder.lock().await;
-        let Some(embedder) = embedder_guard.as_ref() else {
-            return Err("Embedder not available".to_string());
+        let query_embedding = {
+            let embedder_guard = state.embedder.lock().await;
+            let Some(embedder) = embedder_guard.as_ref() else {
+                return Err("Embedder not available".to_string());
+            };
+            embedder.embed_text(query).map_err(|e| format!("Failed to embed query: {}", e))?
         };
-        search::search(&db, embedder, query, 5).unwrap_or_default()
+        let db = state.db.lock().await;
+        let scope_ids = scope_doc_ids.as_deref();
+        search::search_with_embedding_scoped(&db, &query_embedding, effective_top_k, scope_ids)
+            .unwrap_or_default()
     } else {
         vec![]
     };
@@ -193,7 +205,8 @@ fn load_settings_from_store(app: &AppHandle) -> AiSettings {
 pub async fn ai_draft(
     topic: String,
     style: String,
-    #[allow(non_snake_case)] kbContextCount: Option<String>,
+    #[allow(non_snake_case)] topK: Option<usize>,
+    #[allow(non_snake_case)] scopeDocIds: Option<Vec<i64>>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
@@ -202,13 +215,14 @@ pub async fn ai_draft(
         "Write a {} about the following topic:\n\n{}",
         style, topic
     );
-    let _ = kbContextCount; // reserved for future use
-    run_ai_action("draft", &user_msg, &state, &app, &settings, Some(&topic)).await
+    run_ai_action("draft", &user_msg, &state, &app, &settings, Some(&topic), topK, scopeDocIds).await
 }
 
 #[tauri::command]
 pub async fn ai_expand(
     #[allow(non_snake_case)] selectedText: String,
+    #[allow(non_snake_case)] topK: Option<usize>,
+    #[allow(non_snake_case)] scopeDocIds: Option<Vec<i64>>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
@@ -217,13 +231,15 @@ pub async fn ai_expand(
         "Expand the following text with more detail and depth:\n\n{}",
         selectedText
     );
-    run_ai_action("expand", &user_msg, &state, &app, &settings, Some(&selectedText)).await
+    run_ai_action("expand", &user_msg, &state, &app, &settings, Some(&selectedText), topK, scopeDocIds).await
 }
 
 #[tauri::command]
 pub async fn ai_rewrite(
     #[allow(non_snake_case)] selectedText: String,
     instruction: String,
+    #[allow(non_snake_case)] topK: Option<usize>,
+    #[allow(non_snake_case)] scopeDocIds: Option<Vec<i64>>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
@@ -232,12 +248,14 @@ pub async fn ai_rewrite(
         "Rewrite the following text according to this instruction: {}\n\nOriginal text:\n{}",
         instruction, selectedText
     );
-    run_ai_action("rewrite", &user_msg, &state, &app, &settings, Some(&selectedText)).await
+    run_ai_action("rewrite", &user_msg, &state, &app, &settings, Some(&selectedText), topK, scopeDocIds).await
 }
 
 #[tauri::command]
 pub async fn ai_research(
     query: String,
+    #[allow(non_snake_case)] topK: Option<usize>,
+    #[allow(non_snake_case)] scopeDocIds: Option<Vec<i64>>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
@@ -246,7 +264,7 @@ pub async fn ai_research(
         "Research and synthesize information about:\n\n{}",
         query
     );
-    run_ai_action("research", &user_msg, &state, &app, &settings, Some(&query)).await
+    run_ai_action("research", &user_msg, &state, &app, &settings, Some(&query), topK, scopeDocIds).await
 }
 
 #[tauri::command]
@@ -257,7 +275,7 @@ pub async fn ai_summarize(
 ) -> Result<(), String> {
     let settings = load_settings_from_store(&app);
     let user_msg = format!("Summarize the following text:\n\n{}", text);
-    run_ai_action("summarize", &user_msg, &state, &app, &settings, None).await
+    run_ai_action("summarize", &user_msg, &state, &app, &settings, None, None, None).await
 }
 
 #[tauri::command]

@@ -91,7 +91,6 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
         case "draft":
           params.topic = input;
           params.style = "blog post";
-          params.kbContextCount = "5";
           break;
         case "expand":
           params.selectedText = selectedText || input;
@@ -110,7 +109,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
       runAction(selectedCommand.id as AiAction, params, !!selectedText);
     } else {
       // Free-form: treat as a draft action
-      runAction("draft", { topic: input, style: "natural", kbContextCount: "5" }, !!selectedText);
+      runAction("draft", { topic: input, style: "natural" }, !!selectedText);
     }
     onClose();
   };

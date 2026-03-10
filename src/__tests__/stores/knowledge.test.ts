@@ -11,6 +11,8 @@ function resetStore() {
     ingestProgress: "",
     searchResults: [],
     pinnedDocIds: new Set(),
+    retrievalTopK: 5,
+    retrievalScope: "all",
   });
 }
 
@@ -113,5 +115,49 @@ describe("useKnowledgeStore", () => {
     expect(pinned.has(1)).toBe(true);
     expect(pinned.has(2)).toBe(true);
     expect(pinned.has(3)).toBe(true);
+  });
+
+  describe("retrieval settings", () => {
+    it("has correct defaults", () => {
+      const state = useKnowledgeStore.getState();
+      expect(state.retrievalTopK).toBe(5);
+      expect(state.retrievalScope).toBe("all");
+    });
+
+    it("setRetrievalTopK updates value", () => {
+      useKnowledgeStore.getState().setRetrievalTopK(8);
+      expect(useKnowledgeStore.getState().retrievalTopK).toBe(8);
+    });
+
+    it("setRetrievalTopK clamps to 1–10", () => {
+      useKnowledgeStore.getState().setRetrievalTopK(0);
+      expect(useKnowledgeStore.getState().retrievalTopK).toBe(1);
+      useKnowledgeStore.getState().setRetrievalTopK(15);
+      expect(useKnowledgeStore.getState().retrievalTopK).toBe(10);
+    });
+
+    it("setRetrievalScope updates value", () => {
+      useKnowledgeStore.getState().setRetrievalScope("pinned");
+      expect(useKnowledgeStore.getState().retrievalScope).toBe("pinned");
+    });
+
+    it("getScopeDocIds returns undefined for scope=all", () => {
+      useKnowledgeStore.getState().setRetrievalScope("all");
+      expect(useKnowledgeStore.getState().getScopeDocIds()).toBeUndefined();
+    });
+
+    it("getScopeDocIds returns undefined for scope=pinned with no pins", () => {
+      useKnowledgeStore.getState().setRetrievalScope("pinned");
+      expect(useKnowledgeStore.getState().getScopeDocIds()).toBeUndefined();
+    });
+
+    it("getScopeDocIds returns pinned IDs for scope=pinned with pins", () => {
+      useKnowledgeStore.getState().togglePinDocument(10);
+      useKnowledgeStore.getState().togglePinDocument(20);
+      useKnowledgeStore.getState().setRetrievalScope("pinned");
+      const ids = useKnowledgeStore.getState().getScopeDocIds();
+      expect(ids).toBeDefined();
+      expect(ids!.sort()).toEqual([10, 20]);
+    });
   });
 });

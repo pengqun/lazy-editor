@@ -20,12 +20,25 @@ export interface SearchResult {
   score: number;
 }
 
+export type RetrievalScope = "all" | "pinned";
+
 interface KnowledgeState {
   documents: KBDocument[];
   isIngesting: boolean;
   ingestProgress: string;
   searchResults: SearchResult[];
   pinnedDocIds: Set<number>;
+
+  /** Number of KB results to inject into AI prompts (1–10, default 5). */
+  retrievalTopK: number;
+  setRetrievalTopK: (topK: number) => void;
+
+  /** Whether AI retrieval searches all docs or only pinned docs. */
+  retrievalScope: RetrievalScope;
+  setRetrievalScope: (scope: RetrievalScope) => void;
+
+  /** Compute the scope_doc_ids to send to the backend based on current settings. */
+  getScopeDocIds: () => number[] | undefined;
 
   setIngestProgress: (msg: string) => void;
   loadDocuments: () => Promise<void>;
@@ -42,6 +55,19 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   ingestProgress: "",
   searchResults: [],
   pinnedDocIds: new Set(),
+  retrievalTopK: 5,
+  retrievalScope: "all" as RetrievalScope,
+
+  setRetrievalTopK: (topK) => set({ retrievalTopK: Math.max(1, Math.min(10, topK)) }),
+  setRetrievalScope: (scope) => set({ retrievalScope: scope }),
+
+  getScopeDocIds: () => {
+    const { retrievalScope, pinnedDocIds } = get();
+    if (retrievalScope === "pinned" && pinnedDocIds.size > 0) {
+      return Array.from(pinnedDocIds);
+    }
+    return undefined;
+  },
 
   setIngestProgress: (msg) => set({ ingestProgress: msg }),
 

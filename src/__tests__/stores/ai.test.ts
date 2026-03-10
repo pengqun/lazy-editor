@@ -1,4 +1,5 @@
 import { useAiStore } from "@/stores/ai";
+import { useKnowledgeStore } from "@/stores/knowledge";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -75,7 +76,7 @@ describe("useAiStore", () => {
     expect(useAiStore.getState().settings.provider).toBe("claude");
   });
 
-  it("runAction sets streaming state and calls invoke", async () => {
+  it("runAction sets streaming state and calls invoke with retrieval params", async () => {
     mockedInvoke.mockResolvedValueOnce(undefined);
     const promise = useAiStore.getState().runAction("draft", { topic: "test" });
 
@@ -85,9 +86,31 @@ describe("useAiStore", () => {
 
     await promise;
 
-    expect(mockedInvoke).toHaveBeenCalledWith("ai_draft", { topic: "test" });
+    // topK is injected from knowledge store defaults
+    expect(mockedInvoke).toHaveBeenCalledWith("ai_draft", { topic: "test", topK: 5 });
     expect(useAiStore.getState().isStreaming).toBe(false);
     expect(useAiStore.getState().currentAction).toBeNull();
+  });
+
+  it("runAction injects scopeDocIds when knowledge store scope is pinned", async () => {
+    useKnowledgeStore.setState({
+      retrievalTopK: 3,
+      retrievalScope: "pinned",
+      pinnedDocIds: new Set([10, 20]),
+    });
+    mockedInvoke.mockResolvedValueOnce(undefined);
+    await useAiStore.getState().runAction("research", { query: "test" });
+    expect(mockedInvoke).toHaveBeenCalledWith("ai_research", {
+      query: "test",
+      topK: 3,
+      scopeDocIds: expect.arrayContaining([10, 20]),
+    });
+  });
+
+  it("runAction does not inject retrieval params for summarize", async () => {
+    mockedInvoke.mockResolvedValueOnce(undefined);
+    await useAiStore.getState().runAction("summarize", { text: "hello" });
+    expect(mockedInvoke).toHaveBeenCalledWith("ai_summarize", { text: "hello" });
   });
 
   it("runAction resets streaming on error", async () => {

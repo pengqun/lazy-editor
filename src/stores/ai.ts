@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { type OutputPlacementMode, resolveOutputPlacement } from "../lib/output-placement";
 import type { CitationSource } from "../lib/tauri";
+import { useKnowledgeStore } from "./knowledge";
 import { toast } from "./toast";
 
 export type AiAction = "draft" | "expand" | "rewrite" | "research" | "summarize";
@@ -118,8 +119,19 @@ export const useAiStore = create<AiState>((set, get) => ({
       lockedPlacement: locked,
       citations: [],
     });
+    // Inject retrieval controls for KB-backed actions (summarize has no KB query)
+    const invokeParams: Record<string, unknown> = { ...params };
+    if (action !== "summarize") {
+      const kbStore = useKnowledgeStore.getState();
+      invokeParams.topK = kbStore.retrievalTopK;
+      const scopeDocIds = kbStore.getScopeDocIds();
+      if (scopeDocIds) {
+        invokeParams.scopeDocIds = scopeDocIds;
+      }
+    }
+
     try {
-      await invoke(`ai_${action}`, params);
+      await invoke(`ai_${action}`, invokeParams);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`AI ${action} failed:`, message);

@@ -24,8 +24,22 @@ pub fn search_with_embedding(
     query_embedding: &[f32],
     top_k: usize,
 ) -> Result<Vec<SearchResult>> {
-    // Get all stored embeddings
-    let all_embeddings = db.get_all_embeddings()?;
+    search_with_embedding_scoped(db, query_embedding, top_k, None)
+}
+
+/// Search using a pre-computed query embedding, optionally scoped to specific document IDs.
+/// When `scope_doc_ids` is `Some`, only chunks from those documents are considered.
+pub fn search_with_embedding_scoped(
+    db: &Database,
+    query_embedding: &[f32],
+    top_k: usize,
+    scope_doc_ids: Option<&[i64]>,
+) -> Result<Vec<SearchResult>> {
+    // Get embeddings — filtered by scope if provided
+    let all_embeddings = match scope_doc_ids {
+        Some(ids) => db.get_embeddings_for_documents(ids)?,
+        None => db.get_all_embeddings()?,
+    };
 
     if all_embeddings.is_empty() {
         return Ok(vec![]);
@@ -78,6 +92,60 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn test_db() -> Database {
+        Database::new(&PathBuf::from(":memory:")).unwrap()
+    }
+
+    #[test]
+    fn search_with_embedding_scoped_filters_by_document() {
+        let db = test_db();
+        let doc1 = db.insert_document("Doc1", "paste", None, "content1").unwrap();
+        let doc2 = db.insert_document("Doc2", "paste", None, "content2").unwrap();
+
+        let c1 = db.insert_chunk(doc1, "chunk from doc1", 0, None).unwrap();
+        let c2 = db.insert_chunk(doc2, "chunk from doc2", 0, None).unwrap();
+
+        // Use simple 2D embeddings: doc1 chunk near query, doc2 chunk far
+        db.insert_embedding(c1, &[1.0, 0.0]).unwrap();
+        db.insert_embedding(c2, &[0.0, 1.0]).unwrap();
+
+        let query_emb = vec![1.0, 0.0]; // matches doc1
+
+        // Unscoped: both results
+        let results = search_with_embedding_scoped(&db, &query_emb, 10, None).unwrap();
+        assert_eq!(results.len(), 2);
+
+        // Scoped to doc1 only
+        let results = search_with_embedding_scoped(&db, &query_emb, 10, Some(&[doc1])).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].document_title, "Doc1");
+
+        // Scoped to doc2 only
+        let results = search_with_embedding_scoped(&db, &query_emb, 10, Some(&[doc2])).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].document_title, "Doc2");
+
+        // Empty scope returns no results
+        let results = search_with_embedding_scoped(&db, &query_emb, 10, Some(&[])).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_with_embedding_respects_top_k() {
+        let db = test_db();
+        let doc = db.insert_document("Doc", "paste", None, "content").unwrap();
+
+        for i in 0..5 {
+            let c = db.insert_chunk(doc, &format!("chunk {}", i), i, None).unwrap();
+            db.insert_embedding(c, &[1.0, i as f32]).unwrap();
+        }
+
+        let query = vec![1.0, 0.0];
+        let results = search_with_embedding(&db, &query, 2).unwrap();
+        assert_eq!(results.len(), 2);
+    }
 
     #[test]
     fn identical_vectors_have_similarity_one() {

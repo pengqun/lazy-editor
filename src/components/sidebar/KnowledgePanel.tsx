@@ -6,6 +6,7 @@ import {
   Pin,
   PinOff,
   Search,
+  Settings2,
   Trash2,
   Upload,
   X,
@@ -14,7 +15,7 @@ import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
-import { useKnowledgeStore } from "../../stores/knowledge";
+import { type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
 
 export function KnowledgePanel() {
   const {
@@ -30,10 +31,15 @@ export function KnowledgePanel() {
     setIngestProgress,
     pinnedDocIds,
     togglePinDocument,
+    retrievalTopK,
+    setRetrievalTopK,
+    retrievalScope,
+    setRetrievalScope,
   } = useKnowledgeStore();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
+  const [showRetrievalSettings, setShowRetrievalSettings] = useState(false);
   const [textTitle, setTextTitle] = useState("");
   const [textContent, setTextContent] = useState("");
 
@@ -81,6 +87,17 @@ export function KnowledgePanel() {
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={() => setShowRetrievalSettings(!showRetrievalSettings)}
+            className={cn(
+              "p-1 rounded transition-colors",
+              showRetrievalSettings ? "bg-accent/20 text-accent" : "hover:bg-surface-3 text-text-tertiary",
+            )}
+            title="Retrieval settings"
+          >
+            <Settings2 size={14} />
+          </button>
+          <button
+            type="button"
             onClick={() => setShowTextInput(!showTextInput)}
             className="p-1 hover:bg-surface-3 rounded transition-colors"
             title="Paste text to KB"
@@ -97,6 +114,71 @@ export function KnowledgePanel() {
           </button>
         </div>
       </div>
+
+      {/* Retrieval Settings */}
+      {showRetrievalSettings && (
+        <div className="p-3 border-b border-border space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-text-tertiary uppercase tracking-wider">
+              Retrieval Settings
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowRetrievalSettings(false)}
+              className="p-0.5 hover:bg-surface-3 rounded"
+            >
+              <X size={12} className="text-text-tertiary" />
+            </button>
+          </div>
+
+          {/* Top-K control */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-text-secondary">Results per query</label>
+              <span className="text-xs text-accent font-medium tabular-nums">{retrievalTopK}</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={retrievalTopK}
+              onChange={(e) => setRetrievalTopK(Number(e.target.value))}
+              className="w-full h-1 bg-surface-3 rounded-full appearance-none cursor-pointer accent-accent"
+            />
+            <div className="flex justify-between text-[10px] text-text-tertiary">
+              <span>1</span>
+              <span>10</span>
+            </div>
+          </div>
+
+          {/* Scope control */}
+          <div className="space-y-1">
+            <label className="text-xs text-text-secondary">Document scope</label>
+            <div className="flex gap-1">
+              {(["all", "pinned"] as RetrievalScope[]).map((scope) => (
+                <button
+                  key={scope}
+                  type="button"
+                  onClick={() => setRetrievalScope(scope)}
+                  className={cn(
+                    "flex-1 text-xs px-2 py-1 rounded border transition-colors",
+                    retrievalScope === scope
+                      ? "bg-accent/20 border-accent text-accent"
+                      : "bg-surface-2 border-border text-text-tertiary hover:bg-surface-3",
+                  )}
+                >
+                  {scope === "all" ? "All docs" : "Pinned only"}
+                </button>
+              ))}
+            </div>
+            {retrievalScope === "pinned" && pinnedDocIds.size === 0 && (
+              <p className="text-[10px] text-amber-400">
+                No documents pinned — AI will search all docs as fallback.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Text Input Form */}
       {showTextInput && (

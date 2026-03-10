@@ -240,6 +240,34 @@ impl Database {
         Ok(results)
     }
 
+    /// Get embeddings only for chunks belonging to the given document IDs.
+    pub fn get_embeddings_for_documents(&self, doc_ids: &[i64]) -> Result<Vec<(i64, Vec<f32>)>> {
+        if doc_ids.is_empty() {
+            return Ok(vec![]);
+        }
+        // Build a WHERE IN clause with positional parameters
+        let placeholders: Vec<String> = (1..=doc_ids.len()).map(|i| format!("?{}", i)).collect();
+        let sql = format!(
+            "SELECT ce.chunk_id, ce.embedding
+             FROM chunk_embeddings ce
+             JOIN chunks c ON c.id = ce.chunk_id
+             WHERE c.document_id IN ({})",
+            placeholders.join(", ")
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::types::ToSql> =
+            doc_ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
+        let results = stmt
+            .query_map(params.as_slice(), |row| {
+                let chunk_id: i64 = row.get(0)?;
+                let blob: Vec<u8> = row.get(1)?;
+                let embedding = blob_to_embedding(&blob);
+                Ok((chunk_id, embedding))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(results)
+    }
+
     pub fn get_chunk_with_document(
         &self,
         chunk_id: i64,
@@ -463,5 +491,41 @@ mod tests {
         let hash2 = content_hash("test content");
         assert_eq!(hash1, hash2);
         assert_ne!(hash1, content_hash("different content"));
+    }
+
+    #[test]
+    fn get_embeddings_for_documents_filters_correctly() {
+        let db = test_db();
+        let doc1 = db.insert_document("Doc1", "paste", None, "content1").unwrap();
+        let doc2 = db.insert_document("Doc2", "paste", None, "content2").unwrap();
+
+        let c1 = db.insert_chunk(doc1, "chunk1", 0, None).unwrap();
+        let c2 = db.insert_chunk(doc1, "chunk2", 1, None).unwrap();
+        let c3 = db.insert_chunk(doc2, "chunk3", 0, None).unwrap();
+
+        db.insert_embedding(c1, &[1.0, 0.0]).unwrap();
+        db.insert_embedding(c2, &[0.0, 1.0]).unwrap();
+        db.insert_embedding(c3, &[1.0, 1.0]).unwrap();
+
+        // Filter to doc1 only
+        let results = db.get_embeddings_for_documents(&[doc1]).unwrap();
+        assert_eq!(results.len(), 2);
+        let chunk_ids: Vec<i64> = results.iter().map(|(id, _)| *id).collect();
+        assert!(chunk_ids.contains(&c1));
+        assert!(chunk_ids.contains(&c2));
+        assert!(!chunk_ids.contains(&c3));
+
+        // Filter to doc2 only
+        let results = db.get_embeddings_for_documents(&[doc2]).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, c3);
+
+        // Filter to both
+        let results = db.get_embeddings_for_documents(&[doc1, doc2]).unwrap();
+        assert_eq!(results.len(), 3);
+
+        // Empty filter
+        let results = db.get_embeddings_for_documents(&[]).unwrap();
+        assert_eq!(results.len(), 0);
     }
 }
