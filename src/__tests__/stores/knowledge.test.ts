@@ -1,3 +1,4 @@
+import { loadDocRetrievalSettings } from "@/lib/retrieval-presets";
 import { useKnowledgeStore } from "@/stores/knowledge";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +16,7 @@ function resetStore() {
     retrievalTopK: 5,
     retrievalScope: "all",
     activePreset: null,
+    _activeDocPath: null,
     viewedChunk: null,
     viewedChunkQuery: null,
     viewedChunkScore: null,
@@ -331,6 +333,134 @@ describe("useKnowledgeStore", () => {
       useKnowledgeStore.getState().setPreset("writing");
       useKnowledgeStore.getState().setRetrievalTopK(7); // no matching preset
       expect(localStorage.getItem("lazy-editor:retrieval-preset")).toBeNull();
+    });
+  });
+
+  describe("per-document retrieval settings", () => {
+    beforeEach(() => {
+      // Clear any per-doc storage
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith("lazy-editor:doc-retrieval:")) {
+          localStorage.removeItem(key);
+        }
+      }
+    });
+
+    it("restoreForDocument sets _activeDocPath", () => {
+      useKnowledgeStore.getState().restoreForDocument("/path/essay.md");
+      expect(useKnowledgeStore.getState()._activeDocPath).toBe("/path/essay.md");
+    });
+
+    it("restoreForDocument falls back to global preset for new documents", () => {
+      // Set a global preset first
+      localStorage.setItem("lazy-editor:retrieval-preset", "research");
+      useKnowledgeStore.getState().restoreForDocument("/new-file.md");
+      const state = useKnowledgeStore.getState();
+      expect(state.activePreset).toBe("research");
+      expect(state.retrievalTopK).toBe(8);
+      expect(state.retrievalScope).toBe("all");
+    });
+
+    it("restoreForDocument falls back to defaults when no global preset", () => {
+      useKnowledgeStore.getState().restoreForDocument("/new-file.md");
+      const state = useKnowledgeStore.getState();
+      expect(state.activePreset).toBeNull();
+      expect(state.retrievalTopK).toBe(5);
+      expect(state.retrievalScope).toBe("all");
+    });
+
+    it("restoreForDocument(null) uses global defaults", () => {
+      localStorage.setItem("lazy-editor:retrieval-preset", "precision");
+      useKnowledgeStore.getState().restoreForDocument(null);
+      const state = useKnowledgeStore.getState();
+      expect(state._activeDocPath).toBeNull();
+      expect(state.activePreset).toBe("precision");
+      expect(state.retrievalTopK).toBe(3);
+      expect(state.retrievalScope).toBe("pinned");
+    });
+
+    it("setPreset persists per-document when _activeDocPath is set", () => {
+      useKnowledgeStore.getState().restoreForDocument("/essay.md");
+      useKnowledgeStore.getState().setPreset("precision");
+
+      const saved = loadDocRetrievalSettings("/essay.md");
+      expect(saved).toEqual({ preset: "precision", topK: 3, scope: "pinned" });
+    });
+
+    it("setRetrievalTopK persists per-document", () => {
+      useKnowledgeStore.getState().restoreForDocument("/essay.md");
+      useKnowledgeStore.getState().setRetrievalTopK(7);
+
+      const saved = loadDocRetrievalSettings("/essay.md");
+      expect(saved?.topK).toBe(7);
+      expect(saved?.preset).toBeNull(); // 7 doesn't match any preset
+    });
+
+    it("setRetrievalScope persists per-document", () => {
+      useKnowledgeStore.getState().restoreForDocument("/essay.md");
+      useKnowledgeStore.getState().setPreset("writing"); // topK=5, scope=all
+      useKnowledgeStore.getState().setRetrievalScope("pinned");
+
+      const saved = loadDocRetrievalSettings("/essay.md");
+      expect(saved?.scope).toBe("pinned");
+    });
+
+    it("does not persist per-document when no active doc", () => {
+      useKnowledgeStore.getState().restoreForDocument(null);
+      useKnowledgeStore.getState().setPreset("research");
+
+      // No per-doc key should exist
+      const keys = Object.keys(localStorage).filter((k) =>
+        k.startsWith("lazy-editor:doc-retrieval:"),
+      );
+      expect(keys).toHaveLength(0);
+      // But global should be updated
+      expect(localStorage.getItem("lazy-editor:retrieval-preset")).toBe("research");
+    });
+
+    it("switching documents restores each document's saved settings", () => {
+      // Set up doc A with precision
+      useKnowledgeStore.getState().restoreForDocument("/a.md");
+      useKnowledgeStore.getState().setPreset("precision");
+      expect(useKnowledgeStore.getState().retrievalTopK).toBe(3);
+
+      // Set up doc B with research
+      useKnowledgeStore.getState().restoreForDocument("/b.md");
+      useKnowledgeStore.getState().setPreset("research");
+      expect(useKnowledgeStore.getState().retrievalTopK).toBe(8);
+
+      // Switch back to A — should restore precision
+      useKnowledgeStore.getState().restoreForDocument("/a.md");
+      const state = useKnowledgeStore.getState();
+      expect(state.activePreset).toBe("precision");
+      expect(state.retrievalTopK).toBe(3);
+      expect(state.retrievalScope).toBe("pinned");
+
+      // Switch back to B — should restore research
+      useKnowledgeStore.getState().restoreForDocument("/b.md");
+      const state2 = useKnowledgeStore.getState();
+      expect(state2.activePreset).toBe("research");
+      expect(state2.retrievalTopK).toBe(8);
+      expect(state2.retrievalScope).toBe("all");
+    });
+
+    it("preset detection works after document switching", () => {
+      // Set up doc with custom settings
+      useKnowledgeStore.getState().restoreForDocument("/custom.md");
+      useKnowledgeStore.getState().setRetrievalTopK(7);
+      expect(useKnowledgeStore.getState().activePreset).toBeNull();
+
+      // Switch to another doc and back
+      useKnowledgeStore.getState().restoreForDocument("/other.md");
+      useKnowledgeStore.getState().restoreForDocument("/custom.md");
+
+      // Should restore as custom (null preset)
+      expect(useKnowledgeStore.getState().activePreset).toBeNull();
+      expect(useKnowledgeStore.getState().retrievalTopK).toBe(7);
+
+      // Now change to match a preset
+      useKnowledgeStore.getState().setRetrievalTopK(5);
+      expect(useKnowledgeStore.getState().activePreset).toBe("writing");
     });
   });
 });

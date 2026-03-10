@@ -1,5 +1,6 @@
 import { clearDraft } from "@/lib/recovery";
 import { criticalAlert } from "@/stores/alert";
+import { useKnowledgeStore } from "@/stores/knowledge";
 import { useRecoveryStore } from "@/stores/recovery";
 import { useSnapshotsStore } from "@/stores/snapshots";
 import { toast } from "@/stores/toast";
@@ -70,6 +71,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         activeFileContent: content,
         isDirty: false,
       });
+      // Restore per-document retrieval settings
+      useKnowledgeStore.getState().restoreForDocument(path);
       // Check for crash-recovery draft
       useRecoveryStore.getState().checkOnOpen(path, content);
     } catch (err) {
@@ -85,6 +88,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       }
       const content = await invoke<string>("open_file_by_path", { path });
       set({ activeFilePath: path, activeFileContent: content, isDirty: false });
+      // Restore per-document retrieval settings
+      useKnowledgeStore.getState().restoreForDocument(path);
       // Check for crash-recovery draft
       useRecoveryStore.getState().checkOnOpen(path, content);
     } catch (err) {

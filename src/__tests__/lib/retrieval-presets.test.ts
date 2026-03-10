@@ -2,7 +2,9 @@ import {
   PRESET_IDS,
   RETRIEVAL_PRESETS,
   detectMatchingPreset,
+  loadDocRetrievalSettings,
   loadPresetFromStorage,
+  saveDocRetrievalSettings,
   savePresetToStorage,
 } from "@/lib/retrieval-presets";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -90,6 +92,56 @@ describe("retrieval-presets", () => {
       expect(detectMatchingPreset(7, "all")).toBeNull();
       expect(detectMatchingPreset(5, "pinned")).toBeNull();
       expect(detectMatchingPreset(1, "all")).toBeNull();
+    });
+  });
+
+  describe("per-document persistence", () => {
+    it("loadDocRetrievalSettings returns null when empty", () => {
+      expect(loadDocRetrievalSettings("/path/to/file.md")).toBeNull();
+    });
+
+    it("saveDocRetrievalSettings + loadDocRetrievalSettings round-trips", () => {
+      saveDocRetrievalSettings("/path/essay.md", { preset: "research", topK: 8, scope: "all" });
+      const loaded = loadDocRetrievalSettings("/path/essay.md");
+      expect(loaded).toEqual({ preset: "research", topK: 8, scope: "all" });
+    });
+
+    it("stores different settings for different documents", () => {
+      saveDocRetrievalSettings("/a.md", { preset: "writing", topK: 5, scope: "all" });
+      saveDocRetrievalSettings("/b.md", { preset: "precision", topK: 3, scope: "pinned" });
+      expect(loadDocRetrievalSettings("/a.md")?.preset).toBe("writing");
+      expect(loadDocRetrievalSettings("/b.md")?.preset).toBe("precision");
+    });
+
+    it("stores custom (null preset) settings", () => {
+      saveDocRetrievalSettings("/c.md", { preset: null, topK: 7, scope: "all" });
+      const loaded = loadDocRetrievalSettings("/c.md");
+      expect(loaded).toEqual({ preset: null, topK: 7, scope: "all" });
+    });
+
+    it("clamps topK on load", () => {
+      localStorage.setItem(
+        "lazy-editor:doc-retrieval:/bad.md",
+        JSON.stringify({ preset: null, topK: 99, scope: "all" }),
+      );
+      expect(loadDocRetrievalSettings("/bad.md")?.topK).toBe(10);
+    });
+
+    it("returns null for invalid scope on load", () => {
+      localStorage.setItem(
+        "lazy-editor:doc-retrieval:/bad2.md",
+        JSON.stringify({ preset: null, topK: 5, scope: "invalid" }),
+      );
+      expect(loadDocRetrievalSettings("/bad2.md")).toBeNull();
+    });
+
+    it("returns null for invalid preset on load (falls to null)", () => {
+      localStorage.setItem(
+        "lazy-editor:doc-retrieval:/bad3.md",
+        JSON.stringify({ preset: "nonexistent", topK: 5, scope: "all" }),
+      );
+      const loaded = loadDocRetrievalSettings("/bad3.md");
+      expect(loaded?.preset).toBeNull();
     });
   });
 });

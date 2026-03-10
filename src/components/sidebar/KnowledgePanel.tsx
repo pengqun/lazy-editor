@@ -18,6 +18,7 @@ import { cn } from "../../lib/cn";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { PRESET_IDS, RETRIEVAL_PRESETS } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
+import { useFilesStore } from "../../stores/files";
 import { type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
 
 export function KnowledgePanel() {
@@ -44,6 +45,8 @@ export function KnowledgePanel() {
     viewChunkLoading,
     viewChunk,
   } = useKnowledgeStore();
+
+  const activeFilePath = useFilesStore((s) => s.activeFilePath);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
@@ -143,9 +146,16 @@ export function KnowledgePanel() {
       {showRetrievalSettings && (
         <div className="p-3 border-b border-border space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-text-tertiary uppercase tracking-wider">
-              Retrieval Settings
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-text-tertiary uppercase tracking-wider">
+                Retrieval Settings
+              </span>
+              {activeFilePath && (
+                <span className="text-[10px] text-text-tertiary truncate max-w-[100px]" title={activeFilePath}>
+                  — {activeFilePath.split("/").pop()}
+                </span>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setShowRetrievalSettings(false)}

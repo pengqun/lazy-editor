@@ -80,3 +80,41 @@ export function detectMatchingPreset(
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Per-document retrieval settings
+// ---------------------------------------------------------------------------
+
+export interface DocRetrievalSettings {
+  preset: RetrievalPresetId | null;
+  topK: number;
+  scope: RetrievalScope;
+}
+
+const DOC_STORAGE_PREFIX = "lazy-editor:doc-retrieval:";
+
+/** Load persisted retrieval settings for a specific document (null = not stored). */
+export function loadDocRetrievalSettings(filePath: string): DocRetrievalSettings | null {
+  try {
+    const raw = localStorage.getItem(DOC_STORAGE_PREFIX + filePath);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.topK !== "number" || !["all", "pinned"].includes(parsed.scope)) return null;
+    return {
+      preset: parsed.preset && parsed.preset in RETRIEVAL_PRESETS ? parsed.preset : null,
+      topK: Math.max(1, Math.min(10, parsed.topK)),
+      scope: parsed.scope,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Persist retrieval settings for a specific document. */
+export function saveDocRetrievalSettings(filePath: string, settings: DocRetrievalSettings): void {
+  try {
+    localStorage.setItem(DOC_STORAGE_PREFIX + filePath, JSON.stringify(settings));
+  } catch {
+    // localStorage full or disabled — silently skip
+  }
+}

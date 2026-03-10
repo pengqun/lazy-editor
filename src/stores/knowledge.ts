@@ -4,7 +4,9 @@ import {
   type RetrievalPresetId,
   RETRIEVAL_PRESETS,
   detectMatchingPreset,
+  loadDocRetrievalSettings,
   loadPresetFromStorage,
+  saveDocRetrievalSettings,
   savePresetToStorage,
 } from "../lib/retrieval-presets";
 import { toast } from "./toast";
@@ -60,6 +62,11 @@ interface KnowledgeState {
   /** Apply a preset — updates topK + scope and persists the selection. */
   setPreset: (id: RetrievalPresetId) => void;
 
+  /** File path whose retrieval settings are currently active (null = global/untitled). */
+  _activeDocPath: string | null;
+  /** Restore retrieval settings for a document (called on file switch). */
+  restoreForDocument: (filePath: string | null) => void;
+
   /** Compute the scope_doc_ids to send to the backend based on current settings. */
   getScopeDocIds: () => number[] | undefined;
 
@@ -89,6 +96,23 @@ interface KnowledgeState {
 const _initialPreset = loadPresetFromStorage();
 const _initialConfig = _initialPreset ? RETRIEVAL_PRESETS[_initialPreset] : null;
 
+/** Persist current retrieval settings both globally and per-document. */
+function _persistSettings(state: {
+  activePreset: RetrievalPresetId | null;
+  retrievalTopK: number;
+  retrievalScope: RetrievalScope;
+  _activeDocPath: string | null;
+}) {
+  savePresetToStorage(state.activePreset);
+  if (state._activeDocPath) {
+    saveDocRetrievalSettings(state._activeDocPath, {
+      preset: state.activePreset,
+      topK: state.retrievalTopK,
+      scope: state.retrievalScope,
+    });
+  }
+}
+
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   documents: [],
   isIngesting: false,
@@ -98,6 +122,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   retrievalTopK: _initialConfig?.topK ?? 5,
   retrievalScope: (_initialConfig?.scope ?? "all") as RetrievalScope,
   activePreset: _initialPreset,
+  _activeDocPath: null,
   viewedChunk: null,
   viewChunkLoading: false,
   viewedChunkQuery: null,
@@ -106,19 +131,43 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   setRetrievalTopK: (topK) => {
     const clamped = Math.max(1, Math.min(10, topK));
     const newPreset = detectMatchingPreset(clamped, get().retrievalScope);
-    savePresetToStorage(newPreset);
     set({ retrievalTopK: clamped, activePreset: newPreset });
+    _persistSettings(get());
   },
   setRetrievalScope: (scope) => {
     const newPreset = detectMatchingPreset(get().retrievalTopK, scope);
-    savePresetToStorage(newPreset);
     set({ retrievalScope: scope, activePreset: newPreset });
+    _persistSettings(get());
   },
 
   setPreset: (id) => {
     const preset = RETRIEVAL_PRESETS[id];
-    savePresetToStorage(id);
     set({ activePreset: id, retrievalTopK: preset.topK, retrievalScope: preset.scope });
+    _persistSettings(get());
+  },
+
+  restoreForDocument: (filePath) => {
+    if (filePath) {
+      const docSettings = loadDocRetrievalSettings(filePath);
+      if (docSettings) {
+        set({
+          _activeDocPath: filePath,
+          activePreset: docSettings.preset,
+          retrievalTopK: docSettings.topK,
+          retrievalScope: docSettings.scope,
+        });
+        return;
+      }
+    }
+    // No per-doc settings or no file — fall back to global defaults
+    const globalPreset = loadPresetFromStorage();
+    const config = globalPreset ? RETRIEVAL_PRESETS[globalPreset] : null;
+    set({
+      _activeDocPath: filePath,
+      activePreset: globalPreset,
+      retrievalTopK: config?.topK ?? 5,
+      retrievalScope: (config?.scope ?? "all") as RetrievalScope,
+    });
   },
 
   getScopeDocIds: () => {
