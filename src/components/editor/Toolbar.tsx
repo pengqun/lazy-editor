@@ -6,6 +6,7 @@ import {
   Code,
   Download,
   Expand,
+  FileCode,
   FileText,
   Heading1,
   Heading2,
@@ -17,6 +18,7 @@ import {
   Loader2,
   Minus,
   MousePointerClick,
+  Printer,
   Quote,
   Redo,
   RefreshCw,
@@ -28,11 +30,14 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
+import { exportEditorToHtml } from "../../lib/export-html";
 import { exportEditorToMarkdown } from "../../lib/export-markdown";
+import { exportEditorToPdf } from "../../lib/export-pdf";
 import type { OutputPlacementMode } from "../../lib/output-placement";
 import { altKey, modKey, shiftKey } from "../../lib/shortcuts";
 import { useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
+import { toast } from "../../stores/toast";
 
 interface ToolbarButtonProps {
   onClick: () => void;
@@ -128,6 +133,102 @@ function PlacementPicker({
               {opt.label}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExportMenu({
+  editor,
+  iconSize,
+}: {
+  editor: NonNullable<ReturnType<typeof useEditorStore.getState>["editor"]>;
+  iconSize: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [open]);
+
+  const handleMarkdown = async () => {
+    setOpen(false);
+    const path = await exportEditorToMarkdown(editor);
+    if (path) toast.success("Exported as Markdown");
+  };
+
+  const handleHtml = async () => {
+    setOpen(false);
+    try {
+      const path = await exportEditorToHtml(editor);
+      if (path) toast.success("Exported as HTML");
+    } catch {
+      toast.error("HTML export failed");
+    }
+  };
+
+  const handlePdf = () => {
+    setOpen(false);
+    try {
+      exportEditorToPdf(editor);
+      toast.info("Print dialog opened — choose Save as PDF");
+    } catch {
+      toast.error("PDF export failed");
+    }
+  };
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <ToolbarButton onClick={() => setOpen((v) => !v)} title={`Export (${modKey}${shiftKey}E)`}>
+        <Download size={iconSize} />
+      </ToolbarButton>
+      {open && (
+        <div className="absolute top-full right-0 mt-1 z-20 bg-surface-2 border border-border rounded-lg shadow-xl py-1 min-w-[180px]">
+          <button
+            type="button"
+            onClick={handleMarkdown}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-surface-3 text-text-secondary transition-colors"
+          >
+            <FileText size={14} />
+            Markdown
+            <span className="ml-auto text-text-tertiary">
+              {modKey}
+              {shiftKey}E
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={handleHtml}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-surface-3 text-text-secondary transition-colors"
+          >
+            <FileCode size={14} />
+            HTML
+            <span className="ml-auto text-text-tertiary">
+              {modKey}
+              {shiftKey}H
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={handlePdf}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-surface-3 text-text-secondary transition-colors"
+          >
+            <Printer size={14} />
+            PDF (Print)
+            <span className="ml-auto text-text-tertiary">
+              {modKey}
+              {shiftKey}P
+            </span>
+          </button>
         </div>
       )}
     </div>
@@ -379,13 +480,8 @@ export function Toolbar() {
 
       <Separator />
 
-      {/* Export */}
-      <ToolbarButton
-        onClick={() => exportEditorToMarkdown(editor)}
-        title={`Export Markdown (${modKey}${shiftKey}E)`}
-      >
-        <Download size={iconSize} />
-      </ToolbarButton>
+      {/* Export dropdown */}
+      <ExportMenu editor={editor} iconSize={iconSize} />
 
       <Separator />
 

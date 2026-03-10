@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
-import { type CitationSource, listenToAiPhase, listenToAiSources, listenToAiStream } from "../lib/tauri";
+import {
+  type CitationSource,
+  listenToAiPhase,
+  listenToAiSources,
+  listenToAiStream,
+} from "../lib/tauri";
 import { useAiStore } from "../stores/ai";
 import { useEditorStore } from "../stores/editor";
 import { toast } from "../stores/toast";
@@ -21,9 +26,7 @@ export function buildCitationHtml(citations: CitationSource[]): string {
   const deduped = deduplicateCitations(citations);
   if (deduped.length === 0) return "";
 
-  const items = deduped
-    .map((c, i) => `[${i + 1}] ${c.documentTitle}`)
-    .join("&nbsp;&nbsp;");
+  const items = deduped.map((c, i) => `[${i + 1}] ${c.documentTitle}`).join("&nbsp;&nbsp;");
 
   return `<p><br></p><p><em>Sources: ${items}</em></p>`;
 }

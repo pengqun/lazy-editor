@@ -90,7 +90,9 @@ export function KnowledgePanel() {
             onClick={() => setShowRetrievalSettings(!showRetrievalSettings)}
             className={cn(
               "p-1 rounded transition-colors",
-              showRetrievalSettings ? "bg-accent/20 text-accent" : "hover:bg-surface-3 text-text-tertiary",
+              showRetrievalSettings
+                ? "bg-accent/20 text-accent"
+                : "hover:bg-surface-3 text-text-tertiary",
             )}
             title="Retrieval settings"
           >

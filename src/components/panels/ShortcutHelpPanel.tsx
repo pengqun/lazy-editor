@@ -23,6 +23,8 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: `${modKey}N`, label: "New file" },
       { keys: `${modKey}O`, label: "Open workspace folder" },
       { keys: `${modKey}${shiftKey}E`, label: "Export as Markdown" },
+      { keys: `${modKey}${shiftKey}H`, label: "Export as HTML" },
+      { keys: `${modKey}${shiftKey}P`, label: "Export as PDF (Print)" },
     ],
   },
   {

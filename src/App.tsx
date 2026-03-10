@@ -5,7 +5,9 @@ import { ToastContainer } from "./components/Toast";
 import { StatusBar } from "./components/editor/StatusBar";
 import { Toolbar } from "./components/editor/Toolbar";
 import { FileTree } from "./components/sidebar/FileTree";
+import { exportEditorToHtml } from "./lib/export-html";
 import { exportEditorToMarkdown } from "./lib/export-markdown";
+import { exportEditorToPdf } from "./lib/export-pdf";
 import { modKey } from "./lib/shortcuts";
 import { openFolderDialog, setWorkspacePath } from "./lib/tauri";
 import { checkForAppUpdate } from "./lib/updater";
@@ -90,7 +92,34 @@ export default function App() {
     if (e.shiftKey && e.key === "e") {
       e.preventDefault();
       const editor = useEditorStore.getState().editor;
-      if (editor) exportEditorToMarkdown(editor);
+      if (editor)
+        exportEditorToMarkdown(editor).then((p) => p && toast.success("Exported as Markdown"));
+      return;
+    }
+
+    // Cmd+Shift+H — Export HTML
+    if (e.shiftKey && e.key === "h") {
+      e.preventDefault();
+      const editor = useEditorStore.getState().editor;
+      if (editor)
+        exportEditorToHtml(editor)
+          .then((p) => p && toast.success("Exported as HTML"))
+          .catch(() => toast.error("HTML export failed"));
+      return;
+    }
+
+    // Cmd+Shift+P — Export PDF (print dialog)
+    if (e.shiftKey && e.key === "p") {
+      e.preventDefault();
+      const editor = useEditorStore.getState().editor;
+      if (editor) {
+        try {
+          exportEditorToPdf(editor);
+          toast.info("Print dialog opened — choose Save as PDF");
+        } catch {
+          toast.error("PDF export failed");
+        }
+      }
       return;
     }
 

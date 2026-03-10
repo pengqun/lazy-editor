@@ -144,7 +144,7 @@ describe("useAiStore", () => {
     it("setCitations stores citation sources", () => {
       const citations = [
         { documentTitle: "Doc A", documentId: 1, chunkId: 10, chunkIndex: 0, score: 0.95 },
-        { documentTitle: "Doc B", documentId: 2, chunkId: 20, chunkIndex: 1, score: 0.80 },
+        { documentTitle: "Doc B", documentId: 2, chunkId: 20, chunkIndex: 1, score: 0.8 },
       ];
       useAiStore.getState().setCitations(citations);
       expect(useAiStore.getState().citations).toEqual(citations);

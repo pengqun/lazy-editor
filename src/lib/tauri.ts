@@ -67,9 +67,7 @@ export interface CitationSource {
   score: number;
 }
 
-export function listenToAiSources(
-  onSources: (sources: CitationSource[]) => void,
-): () => void {
+export function listenToAiSources(onSources: (sources: CitationSource[]) => void): () => void {
   return registerListener<CitationSource[]>("ai-stream-sources", onSources);
 }
 
