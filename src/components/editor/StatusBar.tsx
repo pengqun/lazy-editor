@@ -1,6 +1,14 @@
-import { AlertCircle, CheckCircle2, ClipboardList, Loader2, Target } from "lucide-react";
-import { useMemo, useState } from "react";
-import { buildReferenceHtml } from "../../lib/citation-notes";
+import { AlertCircle, CheckCircle2, ClipboardList, Copy, Loader2, Target } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  type CitationTemplateId,
+  CITATION_TEMPLATES,
+  TEMPLATE_IDS,
+  buildReferenceHtml,
+  copyReferencesToClipboard,
+  loadLastTemplate,
+  saveLastTemplate,
+} from "../../lib/citation-notes";
 import { goalLabel, goalProgress, readingTimeMinutes } from "../../lib/writing-metrics";
 import { useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
@@ -35,15 +43,28 @@ export function StatusBar() {
     activeFilePath ? s.getGoal(activeFilePath) : null,
   );
 
-  const handleInsertReferences = () => {
+  const [templateId, setTemplateId] = useState<CitationTemplateId>(loadLastTemplate);
+
+  const handleTemplateChange = useCallback((id: CitationTemplateId) => {
+    setTemplateId(id);
+    saveLastTemplate(id);
+  }, []);
+
+  const handleInsertReferences = useCallback(() => {
     if (!editor || editor.isDestroyed || citations.length === 0) return;
-    const html = buildReferenceHtml(citations);
+    const html = buildReferenceHtml(citations, templateId);
     if (html) {
       editor.commands.focus("end");
       editor.commands.insertContent(html);
       toast.success("References inserted");
     }
-  };
+  }, [editor, citations, templateId]);
+
+  const handleCopyReferences = useCallback(async () => {
+    if (citations.length === 0) return;
+    const text = await copyReferencesToClipboard(citations, templateId);
+    if (text) toast.success("References copied to clipboard");
+  }, [citations, templateId]);
 
   const [showGoalPopover, setShowGoalPopover] = useState(false);
 
@@ -134,15 +155,37 @@ export function StatusBar() {
           </div>
 
           {aiPhase === "done" && citations.length > 0 && (
-            <button
-              type="button"
-              onClick={handleInsertReferences}
-              title="Insert formatted reference block at end of document"
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-accent hover:bg-surface-3 transition-colors"
-            >
-              <ClipboardList size={12} />
-              <span>Insert references</span>
-            </button>
+            <div className="flex items-center gap-1">
+              <select
+                value={templateId}
+                onChange={(e) => handleTemplateChange(e.target.value as CitationTemplateId)}
+                title="Citation template"
+                className="h-5 text-[10px] bg-surface-2 border border-border rounded text-text-secondary px-1 outline-none focus:border-accent"
+              >
+                {TEMPLATE_IDS.map((id) => (
+                  <option key={id} value={id}>
+                    {CITATION_TEMPLATES[id].label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleInsertReferences}
+                title="Insert formatted reference block at end of document"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-accent hover:bg-surface-3 transition-colors"
+              >
+                <ClipboardList size={12} />
+                <span>Insert</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyReferences}
+                title="Copy formatted references to clipboard"
+                className="flex items-center gap-0.5 px-1 py-0.5 rounded text-text-secondary hover:text-accent hover:bg-surface-3 transition-colors"
+              >
+                <Copy size={11} />
+              </button>
+            </div>
           )}
         </div>
       )}
