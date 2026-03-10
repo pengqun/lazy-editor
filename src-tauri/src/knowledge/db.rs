@@ -50,6 +50,26 @@ pub struct SearchResult {
 }
 
 #[derive(Debug, Serialize, Clone)]
+pub struct ChunkContext {
+    #[serde(rename = "chunkContent")]
+    pub chunk_content: String,
+    #[serde(rename = "documentTitle")]
+    pub document_title: String,
+    #[serde(rename = "documentId")]
+    pub document_id: i64,
+    #[serde(rename = "chunkId")]
+    pub chunk_id: i64,
+    #[serde(rename = "chunkIndex")]
+    pub chunk_index: i64,
+    #[serde(rename = "totalChunks")]
+    pub total_chunks: i64,
+    #[serde(rename = "prevChunk")]
+    pub prev_chunk: Option<String>,
+    #[serde(rename = "nextChunk")]
+    pub next_chunk: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
 pub struct Snapshot {
     pub id: i64,
     #[serde(rename = "filePath")]
@@ -313,6 +333,57 @@ impl Database {
         })?;
 
         Ok(result)
+    }
+
+    /// Retrieve a chunk with its surrounding context (adjacent chunks from the same document).
+    /// Returns the target chunk content, its neighbours, and document metadata.
+    pub fn get_chunk_with_context(
+        &self,
+        chunk_id: i64,
+    ) -> Result<ChunkContext> {
+        // First, get the target chunk info
+        let (content, doc_title, doc_id, _, chunk_index) =
+            self.get_chunk_with_document(chunk_id)?;
+
+        // Get the total number of chunks in this document
+        let total_chunks: i64 = self
+            .conn
+            .prepare("SELECT COUNT(*) FROM chunks WHERE document_id = ?1")?
+            .query_row(params![doc_id], |row| row.get(0))?;
+
+        // Get adjacent chunks (previous + next) for surrounding context
+        let mut stmt = self.conn.prepare(
+            "SELECT content, chunk_index FROM chunks
+             WHERE document_id = ?1 AND chunk_index IN (?2, ?3)
+             ORDER BY chunk_index ASC",
+        )?;
+        let prev_index = chunk_index - 1;
+        let next_index = chunk_index + 1;
+        let neighbours: Vec<(String, i64)> = stmt
+            .query_map(params![doc_id, prev_index, next_index], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        let prev_chunk = neighbours
+            .iter()
+            .find(|(_, idx)| *idx == prev_index)
+            .map(|(c, _)| c.clone());
+        let next_chunk = neighbours
+            .iter()
+            .find(|(_, idx)| *idx == next_index)
+            .map(|(c, _)| c.clone());
+
+        Ok(ChunkContext {
+            chunk_content: content,
+            document_title: doc_title,
+            document_id: doc_id,
+            chunk_id,
+            chunk_index,
+            total_chunks,
+            prev_chunk,
+            next_chunk,
+        })
     }
 
     // ── Snapshot methods ──
@@ -726,5 +797,46 @@ mod tests {
         // Empty filter
         let results = db.get_embeddings_for_documents(&[]).unwrap();
         assert_eq!(results.len(), 0);
+    }
+
+    // ── ChunkContext tests ──
+
+    #[test]
+    fn get_chunk_with_context_returns_neighbours() {
+        let db = test_db();
+        let doc_id = db.insert_document("Doc", "paste", None, "full content").unwrap();
+        let c0 = db.insert_chunk(doc_id, "chunk zero", 0, None).unwrap();
+        let c1 = db.insert_chunk(doc_id, "chunk one", 1, None).unwrap();
+        let c2 = db.insert_chunk(doc_id, "chunk two", 2, None).unwrap();
+
+        let ctx = db.get_chunk_with_context(c1).unwrap();
+        assert_eq!(ctx.chunk_content, "chunk one");
+        assert_eq!(ctx.document_title, "Doc");
+        assert_eq!(ctx.chunk_index, 1);
+        assert_eq!(ctx.total_chunks, 3);
+        assert_eq!(ctx.prev_chunk.as_deref(), Some("chunk zero"));
+        assert_eq!(ctx.next_chunk.as_deref(), Some("chunk two"));
+
+        // First chunk has no previous
+        let ctx = db.get_chunk_with_context(c0).unwrap();
+        assert!(ctx.prev_chunk.is_none());
+        assert_eq!(ctx.next_chunk.as_deref(), Some("chunk one"));
+
+        // Last chunk has no next
+        let ctx = db.get_chunk_with_context(c2).unwrap();
+        assert_eq!(ctx.prev_chunk.as_deref(), Some("chunk one"));
+        assert!(ctx.next_chunk.is_none());
+    }
+
+    #[test]
+    fn get_chunk_with_context_single_chunk_document() {
+        let db = test_db();
+        let doc_id = db.insert_document("Solo", "paste", None, "content").unwrap();
+        let c = db.insert_chunk(doc_id, "only chunk", 0, None).unwrap();
+
+        let ctx = db.get_chunk_with_context(c).unwrap();
+        assert_eq!(ctx.total_chunks, 1);
+        assert!(ctx.prev_chunk.is_none());
+        assert!(ctx.next_chunk.is_none());
     }
 }

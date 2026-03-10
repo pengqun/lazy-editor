@@ -14,6 +14,9 @@ import { modKey } from "../../lib/shortcuts";
 import { useEditorStore } from "../../stores/editor";
 import { useFilesStore } from "../../stores/files";
 
+/** Debounce delay (ms) for expensive per-keystroke work (word count, language loading). */
+const UPDATE_DEBOUNCE_MS = 300;
+
 export function Editor() {
   const setEditor = useEditorStore((s) => s.setEditor);
   const setSelectedText = useEditorStore((s) => s.setSelectedText);
@@ -23,6 +26,9 @@ export function Editor() {
 
   const contentRef = useRef(activeFileContent);
   contentRef.current = activeFileContent;
+
+  // Timer ref for debounced word count + language loading
+  const debouncedUpdateRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useAutoSave();
   useAIStream();
@@ -59,9 +65,15 @@ export function Editor() {
           isDirty: true,
         });
       }
-      const words = editor.state.doc.textContent.match(/\S+/g);
-      setWordCount(words ? words.length : 0);
-      loadLanguagesForDoc(editor);
+
+      // Debounce expensive word count + language detection
+      if (debouncedUpdateRef.current) clearTimeout(debouncedUpdateRef.current);
+      debouncedUpdateRef.current = setTimeout(() => {
+        if (editor.isDestroyed) return;
+        const words = editor.state.doc.textContent.match(/\S+/g);
+        setWordCount(words ? words.length : 0);
+        loadLanguagesForDoc(editor);
+      }, UPDATE_DEBOUNCE_MS);
     },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection;
@@ -77,6 +89,13 @@ export function Editor() {
       },
     },
   });
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debouncedUpdateRef.current) clearTimeout(debouncedUpdateRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     setEditor(editor);

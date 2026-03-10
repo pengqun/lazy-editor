@@ -20,6 +20,17 @@ export interface SearchResult {
   score: number;
 }
 
+export interface ChunkContext {
+  chunkContent: string;
+  documentTitle: string;
+  documentId: number;
+  chunkId: number;
+  chunkIndex: number;
+  totalChunks: number;
+  prevChunk: string | null;
+  nextChunk: string | null;
+}
+
 export type RetrievalScope = "all" | "pinned";
 
 interface KnowledgeState {
@@ -40,6 +51,10 @@ interface KnowledgeState {
   /** Compute the scope_doc_ids to send to the backend based on current settings. */
   getScopeDocIds: () => number[] | undefined;
 
+  /** Currently viewed source chunk (for source recall from citations). */
+  viewedChunk: ChunkContext | null;
+  viewChunkLoading: boolean;
+
   setIngestProgress: (msg: string) => void;
   loadDocuments: () => Promise<void>;
   ingestFile: (path: string) => Promise<void>;
@@ -47,6 +62,10 @@ interface KnowledgeState {
   searchKB: (query: string, topK?: number) => Promise<SearchResult[]>;
   removeDocument: (id: number) => Promise<void>;
   togglePinDocument: (id: number) => void;
+
+  /** Fetch and display a specific chunk for source recall. */
+  viewChunk: (chunkId: number) => Promise<void>;
+  closeChunkViewer: () => void;
 }
 
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
@@ -57,6 +76,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   pinnedDocIds: new Set(),
   retrievalTopK: 5,
   retrievalScope: "all" as RetrievalScope,
+  viewedChunk: null,
+  viewChunkLoading: false,
 
   setRetrievalTopK: (topK) => set({ retrievalTopK: Math.max(1, Math.min(10, topK)) }),
   setRetrievalScope: (scope) => set({ retrievalScope: scope }),
@@ -144,4 +165,18 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       return { pinnedDocIds: newPinned };
     });
   },
+
+  viewChunk: async (chunkId) => {
+    set({ viewChunkLoading: true });
+    try {
+      const chunk = await invoke<ChunkContext>("get_kb_chunk", { chunkId });
+      set({ viewedChunk: chunk, viewChunkLoading: false });
+    } catch (err) {
+      console.error("Failed to load chunk:", err);
+      toast.error("Failed to load source chunk");
+      set({ viewChunkLoading: false });
+    }
+  },
+
+  closeChunkViewer: () => set({ viewedChunk: null }),
 }));

@@ -13,6 +13,9 @@ import { cn } from "../../lib/cn";
 import { searchPluginKey } from "../../lib/find-replace";
 import { useEditorStore } from "../../stores/editor";
 
+/** Debounce delay (ms) for search-as-you-type to avoid per-keystroke full-doc scans. */
+const SEARCH_DEBOUNCE_MS = 200;
+
 export function FindReplaceBar() {
   const editor = useEditorStore((s) => s.editor);
   const setShowFindReplace = useEditorStore((s) => s.setShowFindReplace);
@@ -25,10 +28,18 @@ export function FindReplaceBar() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Focus search input on mount
   useEffect(() => {
     searchInputRef.current?.focus();
+  }, []);
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, []);
 
   // Dispatch search state to the ProseMirror plugin
@@ -53,9 +64,12 @@ export function FindReplaceBar() {
     [editor],
   );
 
-  // Update search when query or case-sensitivity changes
+  // Debounced search when query or case-sensitivity changes
   useEffect(() => {
-    dispatchSearch(query, caseSensitive);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      dispatchSearch(query, caseSensitive);
+    }, SEARCH_DEBOUNCE_MS);
   }, [query, caseSensitive, dispatchSearch]);
 
   // Scroll editor to make the current match visible

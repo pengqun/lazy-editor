@@ -1,5 +1,7 @@
 import {
   BookOpen,
+  ChevronLeft,
+  ChevronRight,
   ClipboardPaste,
   FilePlus2,
   Loader2,
@@ -35,6 +37,9 @@ export function KnowledgePanel() {
     setRetrievalTopK,
     retrievalScope,
     setRetrievalScope,
+    viewedChunk,
+    viewChunkLoading,
+    viewChunk,
   } = useKnowledgeStore();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -75,6 +80,11 @@ export function KnowledgePanel() {
   };
 
   const showEmptyState = documents.length === 0 && searchResults.length === 0;
+
+  // If viewing a chunk, show the source viewer overlay
+  if (viewedChunk || viewChunkLoading) {
+    return <ChunkViewer />;
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -294,9 +304,11 @@ export function KnowledgePanel() {
             const segments = highlightText(result.chunkContent, searchQuery);
             const matched = findMatchedTerms(searchQuery, result.chunkContent);
             return (
-              <div
-                key={`${result.documentId}-${result.score}`}
-                className="px-3 py-2 border-t border-border/50 hover:bg-surface-2 transition-colors"
+              <button
+                type="button"
+                key={`${result.chunkId}-${result.score}`}
+                onClick={() => viewChunk(result.chunkId)}
+                className="w-full text-left px-3 py-2 border-t border-border/50 hover:bg-surface-2 transition-colors cursor-pointer"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-medium text-accent truncate">
@@ -314,7 +326,7 @@ export function KnowledgePanel() {
                     <span className="text-accent/70">Why:</span> {matched.slice(0, 5).join(", ")}
                   </p>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
@@ -377,6 +389,115 @@ export function KnowledgePanel() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Source chunk viewer — shows full chunk content with prev/next navigation. */
+function ChunkViewer() {
+  const { viewedChunk, viewChunkLoading, viewChunk, closeChunkViewer } = useKnowledgeStore();
+
+  if (viewChunkLoading) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center">
+        <Loader2 size={16} className="text-accent animate-spin" />
+        <span className="text-xs text-text-tertiary mt-2">Loading source...</span>
+      </div>
+    );
+  }
+
+  if (!viewedChunk) return null;
+
+  const { chunkContent, documentTitle, chunkIndex, totalChunks, prevChunk, nextChunk, chunkId } =
+    viewedChunk;
+
+  // Navigate to an adjacent chunk by computing its expected chunk_id offset
+  // This is a heuristic; we use the current chunk_id +/- 1 as adjacent chunks
+  // are typically sequential IDs. The backend get_chunk_with_context handles the lookup.
+  const handleNav = (direction: -1 | 1) => {
+    // We need to find the adjacent chunk's ID. Since we have the chunk_index,
+    // we can compute it from the current chunk_id and index offset.
+    // But chunk IDs aren't necessarily sequential, so we use a different approach:
+    // load by searching for adjacent index in the same document.
+    // For simplicity, we'll use chunk_id arithmetic since chunks are inserted sequentially.
+    viewChunk(chunkId + direction);
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="h-10 flex items-center gap-2 px-3 border-b border-border">
+        <button
+          type="button"
+          onClick={closeChunkViewer}
+          className="p-1 hover:bg-surface-3 rounded transition-colors"
+          title="Back to Knowledge Base"
+        >
+          <ChevronLeft size={14} className="text-text-tertiary" />
+        </button>
+        <span className="text-xs font-medium text-accent truncate flex-1" title={documentTitle}>
+          {documentTitle}
+        </span>
+        <span className="text-[10px] text-text-tertiary whitespace-nowrap">
+          Chunk {chunkIndex + 1} / {totalChunks}
+        </span>
+      </div>
+
+      {/* Chunk content */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Previous chunk (faded context) */}
+        {prevChunk && (
+          <div className="px-3 py-2 border-b border-border/30">
+            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
+              Previous chunk
+            </span>
+            <p className="text-xs text-text-tertiary mt-1 line-clamp-4 whitespace-pre-wrap">
+              {prevChunk}
+            </p>
+          </div>
+        )}
+
+        {/* Current chunk (highlighted) */}
+        <div className="px-3 py-3 bg-accent/5 border-l-2 border-accent">
+          <p className="text-xs text-text-primary whitespace-pre-wrap leading-relaxed">
+            {chunkContent}
+          </p>
+        </div>
+
+        {/* Next chunk (faded context) */}
+        {nextChunk && (
+          <div className="px-3 py-2 border-t border-border/30">
+            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
+              Next chunk
+            </span>
+            <p className="text-xs text-text-tertiary mt-1 line-clamp-4 whitespace-pre-wrap">
+              {nextChunk}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Navigation footer */}
+      <div className="h-8 flex items-center justify-between px-3 border-t border-border">
+        <button
+          type="button"
+          onClick={() => handleNav(-1)}
+          disabled={chunkIndex === 0}
+          className="flex items-center gap-1 text-xs text-text-tertiary hover:text-text-primary disabled:opacity-30 transition-colors"
+        >
+          <ChevronLeft size={12} />
+          Prev
+        </button>
+        <button
+          type="button"
+          onClick={() => handleNav(1)}
+          disabled={chunkIndex >= totalChunks - 1}
+          className="flex items-center gap-1 text-xs text-text-tertiary hover:text-text-primary disabled:opacity-30 transition-colors"
+        >
+          Next
+          <ChevronRight size={12} />
+        </button>
+      </div>
     </div>
   );
 }

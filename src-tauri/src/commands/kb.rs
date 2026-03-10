@@ -1,5 +1,5 @@
 use crate::knowledge::chunker;
-use crate::knowledge::db::{KBDocument, SearchResult};
+use crate::knowledge::db::{ChunkContext, KBDocument, SearchResult};
 use crate::knowledge::search;
 use crate::AppState;
 use std::fs;
@@ -200,4 +200,15 @@ pub async fn remove_kb_document(id: i64, state: State<'_, AppState>) -> Result<(
     let db = state.db.lock().await;
     db.remove_document(id)
         .map_err(|e| format!("Failed to remove document: {}", e))
+}
+
+/// Retrieve a KB chunk with surrounding context for source recall.
+#[tauri::command]
+pub async fn get_kb_chunk(
+    #[allow(non_snake_case)] chunkId: i64,
+    state: State<'_, AppState>,
+) -> Result<ChunkContext, String> {
+    let db = state.db.lock().await;
+    db.get_chunk_with_context(chunkId)
+        .map_err(|e| format!("Failed to get chunk: {}", e))
 }

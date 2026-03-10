@@ -209,6 +209,7 @@ pub fn run_with_context(context: tauri::Context) {
             commands::kb::list_kb_documents,
             commands::kb::search_knowledge_base,
             commands::kb::remove_kb_document,
+            commands::kb::get_kb_chunk,
             // Web commands
             commands::web::fetch_url,
             // AI commands

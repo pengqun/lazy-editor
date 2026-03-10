@@ -55,21 +55,25 @@ describe("buildCitationHtml", () => {
     expect(buildCitationHtml([])).toBe("");
   });
 
-  it("renders single citation", () => {
-    const html = buildCitationHtml([makeCitation({ documentTitle: "My Paper" })]);
+  it("renders single citation with clickable source link", () => {
+    const html = buildCitationHtml([makeCitation({ documentTitle: "My Paper", chunkId: 42 })]);
     expect(html).toContain("Sources:");
     expect(html).toContain("[1] My Paper");
     expect(html).toContain("<em>");
+    expect(html).toContain('class="kb-source-link"');
+    expect(html).toContain('data-chunk-id="42"');
   });
 
   it("renders multiple citations with numbered references", () => {
     const citations = [
-      makeCitation({ documentId: 1, documentTitle: "Doc A" }),
-      makeCitation({ documentId: 2, documentTitle: "Doc B" }),
+      makeCitation({ documentId: 1, documentTitle: "Doc A", chunkId: 10 }),
+      makeCitation({ documentId: 2, documentTitle: "Doc B", chunkId: 20 }),
     ];
     const html = buildCitationHtml(citations);
     expect(html).toContain("[1] Doc A");
     expect(html).toContain("[2] Doc B");
+    expect(html).toContain('data-chunk-id="10"');
+    expect(html).toContain('data-chunk-id="20"');
   });
 
   it("deduplicates before rendering", () => {
@@ -78,9 +82,12 @@ describe("buildCitationHtml", () => {
       makeCitation({ documentId: 1, documentTitle: "Same Doc", chunkId: 11, score: 0.9 }),
     ];
     const html = buildCitationHtml(citations);
-    // Should only appear once
-    expect(html.match(/Same Doc/g)).toHaveLength(1);
+    // Should only have one citation link (one [1], no [2])
     expect(html).toContain("[1] Same Doc");
     expect(html).not.toContain("[2]");
+    // Only one kb-source-link element
+    expect(html.match(/kb-source-link/g)).toHaveLength(1);
+    // Should use the higher-scoring chunk's ID
+    expect(html).toContain('data-chunk-id="11"');
   });
 });

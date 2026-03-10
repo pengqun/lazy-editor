@@ -20,6 +20,8 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
   - SQLite storage
   - semantic search / retrieval to inject context into prompts
   - **citation traceability** — AI outputs that use KB context automatically append a compact "Sources: [1] Doc Title" block so you can trace which knowledge base documents informed each response
+  - **clickable source recall** — click any citation link in AI output to view the original source chunk in the Knowledge Base panel, with surrounding context (previous/next chunks) and navigation
+  - **retrieval quality** — score threshold filtering (removes low-relevance noise), document diversity limits (max 2 chunks per document in results), and XML-safe prompt injection
   - **retrieval controls** — configure how many KB results are injected into AI prompts (1–10) and scope retrieval to all documents or only pinned documents
 - **Workspace file management** (open/save + file tree)
 - **Find & Replace** — document-level search with match highlighting, next/prev navigation, case-sensitive toggle, replace one or all (`⌘F`)
@@ -28,6 +30,7 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
 - **Version History** — automatic local snapshots captured on save (deduplicated, rate-limited to every 5 minutes), with manual snapshot creation and restore-with-confirmation. Up to 50 snapshots per file, oldest pruned automatically (`⌘⇧V`)
 - **Crash Recovery** — unsaved editor content is periodically checkpointed to local storage while you type. If the app exits unexpectedly, a recovery dialog offers to restore or discard the draft on next file open. Recovery drafts are bounded (max 20, auto-expired after 7 days) and cleared on successful save
 - **Writing Metrics** — live word count, estimated reading time (based on 200 WPM), and configurable per-file writing goals with progress tracking. Click the word count in the status bar to set a target; progress is shown as a compact bar + percentage. Goals persist across sessions via local storage
+- **Large document performance** — debounced word count, find/replace search, and outline extraction for smooth editing in long documents; memoized status bar calculations to reduce unnecessary re-renders
 
 ## Tech Stack
 
@@ -166,7 +169,7 @@ Unsigned apps are fine for internal testing but may show macOS security warnings
 - Add basic tests
 - CI for builds/releases
 - Additional export formats (DOCX, EPUB)
-- More retrieval controls (collections, filters, citation click-to-view)
+- More retrieval controls (collections, filters)
 - Keep prioritizing single-user workflow polish; defer multi-user collaboration to a future phase
 
 ## License

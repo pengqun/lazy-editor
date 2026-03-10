@@ -7,6 +7,7 @@ import {
 } from "../lib/tauri";
 import { useAiStore } from "../stores/ai";
 import { useEditorStore } from "../stores/editor";
+import { useKnowledgeStore } from "../stores/knowledge";
 import { toast } from "../stores/toast";
 
 /** Deduplicate citations by document ID, keeping the highest-scoring entry per doc. */
@@ -21,12 +22,17 @@ export function deduplicateCitations(citations: CitationSource[]): CitationSourc
   return Array.from(byDoc.values());
 }
 
-/** Build a compact HTML citation block for insertion into the editor. */
+/** Build a compact HTML citation block with clickable source links. */
 export function buildCitationHtml(citations: CitationSource[]): string {
   const deduped = deduplicateCitations(citations);
   if (deduped.length === 0) return "";
 
-  const items = deduped.map((c, i) => `[${i + 1}] ${c.documentTitle}`).join("&nbsp;&nbsp;");
+  const items = deduped
+    .map(
+      (c, i) =>
+        `<a href="#" class="kb-source-link" data-chunk-id="${c.chunkId}" data-doc-title="${c.documentTitle}">[${i + 1}] ${c.documentTitle}</a>`,
+    )
+    .join("&nbsp;&nbsp;");
 
   return `<p><br></p><p><em>Sources: ${items}</em></p>`;
 }
@@ -39,6 +45,31 @@ export function useAIStream() {
   const setAiPhase = useAiStore((s) => s.setAiPhase);
 
   const firstChunkRef = useRef(true);
+
+  // Handle clicks on citation links in the editor
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const link = target.closest<HTMLAnchorElement>(".kb-source-link");
+      if (!link) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const chunkId = Number(link.dataset.chunkId);
+      if (chunkId) {
+        useKnowledgeStore.getState().viewChunk(chunkId);
+        // Switch right panel to knowledge to show the source viewer
+        useEditorStore.getState().setRightPanel("knowledge");
+      }
+    };
+
+    const editorDom = editor.view.dom;
+    editorDom.addEventListener("click", handleClick);
+    return () => editorDom.removeEventListener("click", handleClick);
+  }, [editor]);
 
   useEffect(() => {
     const cleanupStream = listenToAiStream(

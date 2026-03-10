@@ -153,6 +153,19 @@ body,
   outline: 1px solid rgba(234, 179, 8, 0.7);
 }
 
+/* KB source citation links */
+.tiptap .kb-source-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+  font-style: normal;
+}
+.tiptap .kb-source-link:hover {
+  text-decoration-style: solid;
+  opacity: 0.85;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -1,8 +1,11 @@
 import { List } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
 import { type OutlineHeading, extractHeadings } from "../../lib/outline";
 import { useEditorStore } from "../../stores/editor";
+
+/** Debounce delay (ms) for heading extraction after edits. */
+const OUTLINE_DEBOUNCE_MS = 300;
 
 const INDENT: Record<number, string> = {
   1: "pl-0",
@@ -19,16 +22,27 @@ const TEXT_SIZE: Record<number, string> = {
 export function OutlinePanel() {
   const editor = useEditorStore((s) => s.editor);
   const [headings, setHeadings] = useState<OutlineHeading[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!editor) return;
 
-    const update = () => setHeadings(extractHeadings(editor.state.doc));
-    update();
+    // Immediate extraction on mount / editor change
+    setHeadings(extractHeadings(editor.state.doc));
+
+    const update = () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        if (!editor.isDestroyed) {
+          setHeadings(extractHeadings(editor.state.doc));
+        }
+      }, OUTLINE_DEBOUNCE_MS);
+    };
 
     editor.on("update", update);
     return () => {
       editor.off("update", update);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [editor]);
 

@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, Loader2, Target } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { goalLabel, goalProgress, readingTimeMinutes } from "../../lib/writing-metrics";
 import { useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
@@ -33,12 +33,19 @@ export function StatusBar() {
 
   const [showGoalPopover, setShowGoalPopover] = useState(false);
 
-  const readingTime = readingTimeMinutes(wordCount);
+  const readingTime = useMemo(() => readingTimeMinutes(wordCount), [wordCount]);
   const phaseLabel = PHASE_LABELS[aiPhase];
   const progress = PHASE_PROGRESS[aiPhase] ?? 0;
 
   const hasGoal = goal !== null && goal.target > 0;
-  const pct = hasGoal ? goalProgress(wordCount, goal.target) : 0;
+  const pct = useMemo(
+    () => (hasGoal ? goalProgress(wordCount, goal!.target) : 0),
+    [hasGoal, wordCount, goal],
+  );
+  const label = useMemo(
+    () => (hasGoal ? goalLabel(wordCount, goal!.target) : null),
+    [hasGoal, wordCount, goal],
+  );
 
   return (
     <div className="h-7 border-t border-border bg-surface-1 flex items-center px-4 text-xs text-text-tertiary gap-4">
@@ -49,7 +56,7 @@ export function StatusBar() {
               type="button"
               onClick={() => setShowGoalPopover((v) => !v)}
               className="flex items-center gap-1 hover:text-text-primary"
-              title={hasGoal ? goalLabel(wordCount, goal.target) : "Set writing goal"}
+              title={label ?? "Set writing goal"}
             >
               {hasGoal && <Target size={10} className="text-accent" />}
               <span>
@@ -65,7 +72,7 @@ export function StatusBar() {
           </div>
 
           {hasGoal && (
-            <div className="flex items-center gap-1.5" title={goalLabel(wordCount, goal.target)}>
+            <div className="flex items-center gap-1.5" title={label!}>
               <div className="w-16 h-1.5 bg-surface-3 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-300 ${
