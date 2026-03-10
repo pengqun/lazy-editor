@@ -15,6 +15,8 @@ export interface SearchResult {
   chunkContent: string;
   documentTitle: string;
   documentId: number;
+  chunkId: number;
+  chunkIndex: number;
   score: number;
 }
 

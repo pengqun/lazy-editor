@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { type OutputPlacementMode, resolveOutputPlacement } from "../lib/output-placement";
+import type { CitationSource } from "../lib/tauri";
 import { toast } from "./toast";
 
 export type AiAction = "draft" | "expand" | "rewrite" | "research" | "summarize";
@@ -31,6 +32,10 @@ interface AiState {
   aiPhase: AiPhase;
   aiError: string | null;
   setAiPhase: (phase: AiPhase) => void;
+
+  /** Citation sources from KB used in the current AI action. */
+  citations: CitationSource[];
+  setCitations: (citations: CitationSource[]) => void;
 
   /** User-selected output placement override (null = auto-detect). */
   outputPlacementOverride: OutputPlacementMode | null;
@@ -91,6 +96,9 @@ export const useAiStore = create<AiState>((set, get) => ({
   aiError: null,
   setAiPhase: (phase) => set({ aiPhase: phase }),
 
+  citations: [],
+  setCitations: (citations) => set({ citations }),
+
   outputPlacementOverride: null,
   setOutputPlacementOverride: (mode) => set({ outputPlacementOverride: mode }),
 
@@ -108,6 +116,7 @@ export const useAiStore = create<AiState>((set, get) => ({
       aiPhase: "searching_kb",
       aiError: null,
       lockedPlacement: locked,
+      citations: [],
     });
     try {
       await invoke(`ai_${action}`, params);
@@ -140,6 +149,7 @@ export const useAiStore = create<AiState>((set, get) => ({
       aiPhase: "idle",
       aiError: null,
       lockedPlacement: null,
+      citations: [],
     });
   },
 }));

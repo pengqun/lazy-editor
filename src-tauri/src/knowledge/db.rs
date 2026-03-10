@@ -42,6 +42,10 @@ pub struct SearchResult {
     pub document_title: String,
     #[serde(rename = "documentId")]
     pub document_id: i64,
+    #[serde(rename = "chunkId")]
+    pub chunk_id: i64,
+    #[serde(rename = "chunkIndex")]
+    pub chunk_index: i64,
     pub score: f64,
 }
 
@@ -236,16 +240,25 @@ impl Database {
         Ok(results)
     }
 
-    pub fn get_chunk_with_document(&self, chunk_id: i64) -> Result<(String, String, i64)> {
+    pub fn get_chunk_with_document(
+        &self,
+        chunk_id: i64,
+    ) -> Result<(String, String, i64, i64, i64)> {
         let mut stmt = self.conn.prepare(
-            "SELECT c.content, d.title, d.id
+            "SELECT c.content, d.title, d.id, c.id, c.chunk_index
              FROM chunks c
              JOIN documents d ON c.document_id = d.id
              WHERE c.id = ?1",
         )?;
 
         let result = stmt.query_row(params![chunk_id], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
         })?;
 
         Ok(result)
@@ -352,10 +365,13 @@ mod tests {
             .unwrap();
         let chunk_id = db.insert_chunk(doc_id, "chunk content", 0, Some(5)).unwrap();
 
-        let (content, title, returned_doc_id) = db.get_chunk_with_document(chunk_id).unwrap();
+        let (content, title, returned_doc_id, returned_chunk_id, returned_chunk_index) =
+            db.get_chunk_with_document(chunk_id).unwrap();
         assert_eq!(content, "chunk content");
         assert_eq!(title, "My Doc");
         assert_eq!(returned_doc_id, doc_id);
+        assert_eq!(returned_chunk_id, chunk_id);
+        assert_eq!(returned_chunk_index, 0);
     }
 
     #[test]

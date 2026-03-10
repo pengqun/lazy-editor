@@ -36,6 +36,20 @@ fn default_max_tokens() -> u32 {
     4096
 }
 
+/// Lightweight citation metadata emitted to the frontend via event.
+#[derive(Debug, Clone, Serialize)]
+pub struct CitationSource {
+    #[serde(rename = "documentTitle")]
+    pub document_title: String,
+    #[serde(rename = "documentId")]
+    pub document_id: i64,
+    #[serde(rename = "chunkId")]
+    pub chunk_id: i64,
+    #[serde(rename = "chunkIndex")]
+    pub chunk_index: i64,
+    pub score: f64,
+}
+
 /// Helper: run an AI action with KB context injection and streaming.
 async fn run_ai_action(
     action: &str,
@@ -58,7 +72,22 @@ async fn run_ai_action(
         vec![]
     };
 
-    // 2. Build context-aware system prompt
+    // 2. Emit citation sources to frontend (only if KB results exist)
+    if !kb_results.is_empty() {
+        let citations: Vec<CitationSource> = kb_results
+            .iter()
+            .map(|r| CitationSource {
+                document_title: r.document_title.clone(),
+                document_id: r.document_id,
+                chunk_id: r.chunk_id,
+                chunk_index: r.chunk_index,
+                score: r.score,
+            })
+            .collect();
+        let _ = app.emit("ai-stream-sources", &citations);
+    }
+
+    // 3. Build context-aware system prompt
     let system_prompt = build_system_prompt(action, &kb_results);
 
     // 3. Create the appropriate provider

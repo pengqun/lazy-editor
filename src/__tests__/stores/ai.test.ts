@@ -103,12 +103,38 @@ describe("useAiStore", () => {
       isStreaming: true,
       currentAction: "draft",
       lockedPlacement: "insert_at_cursor",
+      citations: [{ documentTitle: "Doc", documentId: 1, chunkId: 1, chunkIndex: 0, score: 0.9 }],
     });
     useAiStore.getState().cancelStream();
     expect(mockedInvoke).toHaveBeenCalledWith("ai_cancel_stream");
     expect(useAiStore.getState().isStreaming).toBe(false);
     expect(useAiStore.getState().currentAction).toBeNull();
     expect(useAiStore.getState().lockedPlacement).toBeNull();
+    expect(useAiStore.getState().citations).toEqual([]);
+  });
+
+  describe("citations", () => {
+    it("has empty citations by default", () => {
+      expect(useAiStore.getState().citations).toEqual([]);
+    });
+
+    it("setCitations stores citation sources", () => {
+      const citations = [
+        { documentTitle: "Doc A", documentId: 1, chunkId: 10, chunkIndex: 0, score: 0.95 },
+        { documentTitle: "Doc B", documentId: 2, chunkId: 20, chunkIndex: 1, score: 0.80 },
+      ];
+      useAiStore.getState().setCitations(citations);
+      expect(useAiStore.getState().citations).toEqual(citations);
+    });
+
+    it("runAction clears citations on start", async () => {
+      useAiStore.setState({
+        citations: [{ documentTitle: "Old", documentId: 1, chunkId: 1, chunkIndex: 0, score: 0.5 }],
+      });
+      mockedInvoke.mockResolvedValueOnce(undefined);
+      await useAiStore.getState().runAction("draft", { topic: "test" });
+      expect(useAiStore.getState().citations).toEqual([]);
+    });
   });
 
   describe("output placement", () => {

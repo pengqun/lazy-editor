@@ -59,6 +59,20 @@ export function listenToAiPhase(onPhase: (phase: AiPhase) => void): () => void {
   return registerListener<AiPhase>("ai-action-phase", onPhase);
 }
 
+export interface CitationSource {
+  documentTitle: string;
+  documentId: number;
+  chunkId: number;
+  chunkIndex: number;
+  score: number;
+}
+
+export function listenToAiSources(
+  onSources: (sources: CitationSource[]) => void,
+): () => void {
+  return registerListener<CitationSource[]>("ai-stream-sources", onSources);
+}
+
 export function listenToIngestProgress(onProgress: (msg: string) => void): () => void {
   return registerListener<string>("ingest-progress", onProgress);
 }

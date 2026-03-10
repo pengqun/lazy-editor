@@ -13,6 +13,7 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
   - chunking + local embeddings (fastembed)
   - SQLite storage
   - semantic search / retrieval to inject context into prompts
+  - **citation traceability** — AI outputs that use KB context automatically append a compact "Sources: [1] Doc Title" block so you can trace which knowledge base documents informed each response
 - **Workspace file management** (open/save + file tree)
 
 ## Tech Stack
@@ -152,7 +153,7 @@ Unsigned apps are fine for internal testing but may show macOS security warnings
 - Add basic tests
 - CI for builds/releases
 - Export formats (Markdown/PDF)
-- More retrieval controls (collections, filters, citations)
+- More retrieval controls (collections, filters, citation click-to-view)
 
 ## License
 

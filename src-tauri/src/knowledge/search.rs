@@ -46,13 +46,15 @@ pub fn search_with_embedding(
     // Take top-k and resolve chunk content + document info
     let mut results = Vec::new();
     for (chunk_id, score) in scored.into_iter().take(top_k) {
-        if let Ok((chunk_content, document_title, document_id)) =
+        if let Ok((chunk_content, document_title, document_id, chunk_id, chunk_index)) =
             db.get_chunk_with_document(chunk_id)
         {
             results.push(SearchResult {
                 chunk_content,
                 document_title,
                 document_id,
+                chunk_id,
+                chunk_index,
                 score,
             });
         }
