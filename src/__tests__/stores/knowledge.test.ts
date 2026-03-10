@@ -13,6 +13,10 @@ function resetStore() {
     pinnedDocIds: new Set(),
     retrievalTopK: 5,
     retrievalScope: "all",
+    viewedChunk: null,
+    viewedChunkQuery: null,
+    viewedChunkScore: null,
+    viewChunkLoading: false,
   });
 }
 
@@ -115,6 +119,94 @@ describe("useKnowledgeStore", () => {
     expect(pinned.has(1)).toBe(true);
     expect(pinned.has(2)).toBe(true);
     expect(pinned.has(3)).toBe(true);
+  });
+
+  describe("viewChunk with query and score", () => {
+    it("stores query and score when provided", async () => {
+      const mockChunk = {
+        chunkContent: "some content about testing",
+        documentTitle: "Test Doc",
+        documentId: 1,
+        chunkId: 10,
+        chunkIndex: 2,
+        totalChunks: 5,
+        prevChunk: "prev",
+        nextChunk: "next",
+      };
+      mockedInvoke.mockResolvedValueOnce(mockChunk);
+
+      await useKnowledgeStore.getState().viewChunk(10, "testing concepts", 0.87);
+
+      const state = useKnowledgeStore.getState();
+      expect(state.viewedChunk).toEqual(mockChunk);
+      expect(state.viewedChunkQuery).toBe("testing concepts");
+      expect(state.viewedChunkScore).toBe(0.87);
+    });
+
+    it("sets query/score to null when empty string query passed", async () => {
+      mockedInvoke.mockResolvedValueOnce({
+        chunkContent: "c",
+        documentTitle: "D",
+        documentId: 1,
+        chunkId: 1,
+        chunkIndex: 0,
+        totalChunks: 1,
+        prevChunk: null,
+        nextChunk: null,
+      });
+
+      await useKnowledgeStore.getState().viewChunk(1, "", 0.5);
+
+      expect(useKnowledgeStore.getState().viewedChunkQuery).toBeNull();
+      expect(useKnowledgeStore.getState().viewedChunkScore).toBe(0.5);
+    });
+
+    it("preserves query/score when navigating without passing them", async () => {
+      // Set initial state
+      useKnowledgeStore.setState({ viewedChunkQuery: "my query", viewedChunkScore: 0.9 });
+
+      mockedInvoke.mockResolvedValueOnce({
+        chunkContent: "c",
+        documentTitle: "D",
+        documentId: 1,
+        chunkId: 2,
+        chunkIndex: 1,
+        totalChunks: 3,
+        prevChunk: null,
+        nextChunk: null,
+      });
+
+      // Navigate without query/score (e.g., prev/next click)
+      await useKnowledgeStore.getState().viewChunk(2);
+
+      const state = useKnowledgeStore.getState();
+      expect(state.viewedChunkQuery).toBe("my query");
+      expect(state.viewedChunkScore).toBe(0.9);
+    });
+
+    it("clears query/score on closeChunkViewer", async () => {
+      useKnowledgeStore.setState({
+        viewedChunk: {
+          chunkContent: "c",
+          documentTitle: "D",
+          documentId: 1,
+          chunkId: 1,
+          chunkIndex: 0,
+          totalChunks: 1,
+          prevChunk: null,
+          nextChunk: null,
+        },
+        viewedChunkQuery: "some query",
+        viewedChunkScore: 0.75,
+      });
+
+      useKnowledgeStore.getState().closeChunkViewer();
+
+      const state = useKnowledgeStore.getState();
+      expect(state.viewedChunk).toBeNull();
+      expect(state.viewedChunkQuery).toBeNull();
+      expect(state.viewedChunkScore).toBeNull();
+    });
   });
 
   describe("retrieval settings", () => {

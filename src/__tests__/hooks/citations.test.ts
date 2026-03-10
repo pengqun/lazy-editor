@@ -55,13 +55,21 @@ describe("buildCitationHtml", () => {
     expect(buildCitationHtml([])).toBe("");
   });
 
-  it("renders single citation with clickable source link", () => {
-    const html = buildCitationHtml([makeCitation({ documentTitle: "My Paper", chunkId: 42 })]);
+  it("renders single citation with clickable source link and metadata", () => {
+    const html = buildCitationHtml([
+      makeCitation({ documentTitle: "My Paper", chunkId: 42, chunkIndex: 2, score: 0.87 }),
+    ]);
     expect(html).toContain("Sources:");
     expect(html).toContain("[1] My Paper");
     expect(html).toContain("<em>");
     expect(html).toContain('class="kb-source-link"');
     expect(html).toContain('data-chunk-id="42"');
+    expect(html).toContain('data-score="0.87"');
+    expect(html).toContain('data-chunk-index="2"');
+    // Tooltip with doc title, chunk position, and relevance percentage
+    expect(html).toContain("title=");
+    expect(html).toContain("chunk 3");
+    expect(html).toContain("87% relevance");
   });
 
   it("renders multiple citations with numbered references", () => {
@@ -89,5 +97,14 @@ describe("buildCitationHtml", () => {
     expect(html.match(/kb-source-link/g)).toHaveLength(1);
     // Should use the higher-scoring chunk's ID
     expect(html).toContain('data-chunk-id="11"');
+  });
+
+  it("escapes HTML special chars in document titles", () => {
+    const html = buildCitationHtml([
+      makeCitation({ documentTitle: 'Doc <script>"test"</script>', chunkId: 1 }),
+    ]);
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).toContain("&quot;test&quot;");
   });
 });

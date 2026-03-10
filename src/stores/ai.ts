@@ -38,6 +38,9 @@ interface AiState {
   citations: CitationSource[];
   setCitations: (citations: CitationSource[]) => void;
 
+  /** The query text that was used for KB retrieval in the current AI action. */
+  lastKbQuery: string;
+
   /** User-selected output placement override (null = auto-detect). */
   outputPlacementOverride: OutputPlacementMode | null;
   setOutputPlacementOverride: (mode: OutputPlacementMode | null) => void;
@@ -100,6 +103,8 @@ export const useAiStore = create<AiState>((set, get) => ({
   citations: [],
   setCitations: (citations) => set({ citations }),
 
+  lastKbQuery: "",
+
   outputPlacementOverride: null,
   setOutputPlacementOverride: (mode) => set({ outputPlacementOverride: mode }),
 
@@ -110,6 +115,14 @@ export const useAiStore = create<AiState>((set, get) => ({
 
     const locked = resolveOutputPlacement(get().outputPlacementOverride, hasSelection);
 
+    // Derive the KB query from the action params (used for citation highlighting later)
+    const kbQuery =
+      action === "draft"
+        ? (params.topic ?? "")
+        : action === "research"
+          ? (params.query ?? "")
+          : (params.selectedText ?? "");
+
     set({
       isStreaming: true,
       streamContent: "",
@@ -118,6 +131,7 @@ export const useAiStore = create<AiState>((set, get) => ({
       aiError: null,
       lockedPlacement: locked,
       citations: [],
+      lastKbQuery: kbQuery,
     });
     // Inject retrieval controls for KB-backed actions (summarize has no KB query)
     const invokeParams: Record<string, unknown> = { ...params };

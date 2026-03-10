@@ -393,9 +393,9 @@ export function KnowledgePanel() {
   );
 }
 
-/** Source chunk viewer — shows full chunk content with prev/next navigation. */
+/** Source chunk viewer — shows full chunk content with prev/next navigation and matched-term highlighting. */
 function ChunkViewer() {
-  const { viewedChunk, viewChunkLoading, viewChunk, closeChunkViewer } = useKnowledgeStore();
+  const { viewedChunk, viewChunkLoading, viewChunk, closeChunkViewer, viewedChunkQuery, viewedChunkScore } = useKnowledgeStore();
 
   if (viewChunkLoading) {
     return (
@@ -411,15 +411,18 @@ function ChunkViewer() {
   const { chunkContent, documentTitle, chunkIndex, totalChunks, prevChunk, nextChunk, chunkId } =
     viewedChunk;
 
+  // Compute highlighted segments if a query led to this chunk
+  const contentSegments = viewedChunkQuery
+    ? highlightText(chunkContent, viewedChunkQuery)
+    : null;
+  const matchedTerms = viewedChunkQuery
+    ? findMatchedTerms(viewedChunkQuery, chunkContent)
+    : [];
+
   // Navigate to an adjacent chunk by computing its expected chunk_id offset
   // This is a heuristic; we use the current chunk_id +/- 1 as adjacent chunks
   // are typically sequential IDs. The backend get_chunk_with_context handles the lookup.
   const handleNav = (direction: -1 | 1) => {
-    // We need to find the adjacent chunk's ID. Since we have the chunk_index,
-    // we can compute it from the current chunk_id and index offset.
-    // But chunk IDs aren't necessarily sequential, so we use a different approach:
-    // load by searching for adjacent index in the same document.
-    // For simplicity, we'll use chunk_id arithmetic since chunks are inserted sequentially.
     viewChunk(chunkId + direction);
   };
 
@@ -438,10 +441,30 @@ function ChunkViewer() {
         <span className="text-xs font-medium text-accent truncate flex-1" title={documentTitle}>
           {documentTitle}
         </span>
-        <span className="text-[10px] text-text-tertiary whitespace-nowrap">
-          Chunk {chunkIndex + 1} / {totalChunks}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {viewedChunkScore != null && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent font-medium tabular-nums"
+              title={`${(viewedChunkScore * 100).toFixed(1)}% relevance score`}
+            >
+              {Math.round(viewedChunkScore * 100)}%
+            </span>
+          )}
+          <span className="text-[10px] text-text-tertiary whitespace-nowrap tabular-nums">
+            {chunkIndex + 1}/{totalChunks}
+          </span>
+        </div>
       </div>
+
+      {/* Matched terms bar */}
+      {matchedTerms.length > 0 && (
+        <div className="px-3 py-1.5 border-b border-border/50 bg-accent/5">
+          <p className="text-[10px] text-text-tertiary truncate">
+            <span className="text-accent/70 font-medium">Matched:</span>{" "}
+            {matchedTerms.slice(0, 6).join(", ")}
+          </p>
+        </div>
+      )}
 
       {/* Chunk content */}
       <div className="flex-1 overflow-y-auto">
@@ -460,7 +483,11 @@ function ChunkViewer() {
         {/* Current chunk (highlighted) */}
         <div className="px-3 py-3 bg-accent/5 border-l-2 border-accent">
           <p className="text-xs text-text-primary whitespace-pre-wrap leading-relaxed">
-            {chunkContent}
+            {contentSegments ? (
+              <HighlightedText segments={contentSegments} />
+            ) : (
+              chunkContent
+            )}
           </p>
         </div>
 

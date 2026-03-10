@@ -22,16 +22,23 @@ export function deduplicateCitations(citations: CitationSource[]): CitationSourc
   return Array.from(byDoc.values());
 }
 
+/** Escape HTML special chars for safe attribute values. */
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** Build a compact HTML citation block with clickable source links. */
 export function buildCitationHtml(citations: CitationSource[]): string {
   const deduped = deduplicateCitations(citations);
   if (deduped.length === 0) return "";
 
   const items = deduped
-    .map(
-      (c, i) =>
-        `<a href="#" class="kb-source-link" data-chunk-id="${c.chunkId}" data-doc-title="${c.documentTitle}">[${i + 1}] ${c.documentTitle}</a>`,
-    )
+    .map((c, i) => {
+      const pct = Math.round(c.score * 100);
+      const title = escapeAttr(`${c.documentTitle} — chunk ${c.chunkIndex + 1}, ${pct}% relevance`);
+      const docTitle = escapeAttr(c.documentTitle);
+      return `<a href="#" class="kb-source-link" data-chunk-id="${c.chunkId}" data-doc-title="${docTitle}" data-score="${c.score}" data-chunk-index="${c.chunkIndex}" title="${title}">[${i + 1}] ${escapeAttr(c.documentTitle)}</a>`;
+    })
     .join("&nbsp;&nbsp;");
 
   return `<p><br></p><p><em>Sources: ${items}</em></p>`;
@@ -60,7 +67,9 @@ export function useAIStream() {
 
       const chunkId = Number(link.dataset.chunkId);
       if (chunkId) {
-        useKnowledgeStore.getState().viewChunk(chunkId);
+        const score = link.dataset.score ? Number(link.dataset.score) : undefined;
+        const query = useAiStore.getState().lastKbQuery || undefined;
+        useKnowledgeStore.getState().viewChunk(chunkId, query, score);
         // Switch right panel to knowledge to show the source viewer
         useEditorStore.getState().setRightPanel("knowledge");
       }

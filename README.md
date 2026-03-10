@@ -20,7 +20,7 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
   - SQLite storage
   - semantic search / retrieval to inject context into prompts
   - **citation traceability** — AI outputs that use KB context automatically append a compact "Sources: [1] Doc Title" block so you can trace which knowledge base documents informed each response
-  - **clickable source recall** — click any citation link in AI output to view the original source chunk in the Knowledge Base panel, with surrounding context (previous/next chunks) and navigation
+  - **clickable source recall** — click any citation link in AI output to view the original source chunk in the Knowledge Base panel, with surrounding context (previous/next chunks), navigation, relevance score badge, and matched-term highlighting showing why the chunk was retrieved
   - **retrieval quality** — score threshold filtering (removes low-relevance noise), document diversity limits (max 2 chunks per document in results), and XML-safe prompt injection
   - **retrieval controls** — configure how many KB results are injected into AI prompts (1–10) and scope retrieval to all documents or only pinned documents
 - **Workspace file management** (open/save + file tree)
