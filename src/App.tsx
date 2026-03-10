@@ -41,6 +41,11 @@ const ShortcutHelpPanel = lazy(() =>
     default: m.ShortcutHelpPanel,
   })),
 );
+const VersionHistoryPanel = lazy(() =>
+  import("./components/panels/VersionHistoryPanel").then((m) => ({
+    default: m.VersionHistoryPanel,
+  })),
+);
 
 export default function App() {
   const showCommandPalette = useEditorStore((s) => s.showCommandPalette);
@@ -49,6 +54,8 @@ export default function App() {
   const setShowShortcutHelp = useEditorStore((s) => s.setShowShortcutHelp);
   const showFindReplace = useEditorStore((s) => s.showFindReplace);
   const showOutline = useEditorStore((s) => s.showOutline);
+  const showVersionHistory = useEditorStore((s) => s.showVersionHistory);
+  const setShowVersionHistory = useEditorStore((s) => s.setShowVersionHistory);
   const rightPanel = useEditorStore((s) => s.rightPanel);
   const setRightPanel = useEditorStore((s) => s.setRightPanel);
   const loadWorkspace = useFilesStore((s) => s.loadWorkspace);
@@ -105,6 +112,15 @@ export default function App() {
     if (e.shiftKey && e.key === "o") {
       e.preventDefault();
       const { showOutline: open, setShowOutline: setOpen } = useEditorStore.getState();
+      setOpen(!open);
+      return;
+    }
+
+    // Cmd+Shift+V — Version History
+    if (e.shiftKey && (e.key === "v" || e.key === "V")) {
+      e.preventDefault();
+      const { showVersionHistory: open, setShowVersionHistory: setOpen } =
+        useEditorStore.getState();
       setOpen(!open);
       return;
     }
@@ -305,6 +321,13 @@ export default function App() {
       {showShortcutHelp && (
         <Suspense fallback={null}>
           <ShortcutHelpPanel onClose={() => setShowShortcutHelp(false)} />
+        </Suspense>
+      )}
+
+      {/* Version History Panel */}
+      {showVersionHistory && (
+        <Suspense fallback={null}>
+          <VersionHistoryPanel onClose={() => setShowVersionHistory(false)} />
         </Suspense>
       )}
 

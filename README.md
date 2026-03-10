@@ -19,6 +19,7 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
 - **Find & Replace** — document-level search with match highlighting, next/prev navigation, case-sensitive toggle, replace one or all (`⌘F`)
 - **Document Outline** — toggleable sidebar listing H1–H3 headings for quick navigation; click to jump (`⌘⇧O`)
 - **Export** — Markdown, HTML (standalone document), and PDF (via native print dialog). Accessible from the toolbar export menu or keyboard shortcuts (`⌘⇧E` / `⌘⇧H` / `⌘⇧P`)
+- **Version History** — automatic local snapshots captured on save (deduplicated, rate-limited to every 5 minutes), with manual snapshot creation and restore-with-confirmation. Up to 50 snapshots per file, oldest pruned automatically (`⌘⇧V`)
 
 ## Tech Stack
 

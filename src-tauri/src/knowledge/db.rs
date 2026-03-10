@@ -49,6 +49,18 @@ pub struct SearchResult {
     pub score: f64,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct Snapshot {
+    pub id: i64,
+    #[serde(rename = "filePath")]
+    pub file_path: String,
+    pub preview: String,
+    #[serde(rename = "contentLength")]
+    pub content_length: usize,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
 impl Database {
     pub fn new(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
@@ -85,6 +97,17 @@ impl Database {
 
             CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash);
+
+            CREATE TABLE IF NOT EXISTS snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT NOT NULL,
+                content TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_snapshots_file_path ON snapshots(file_path);
+            CREATE INDEX IF NOT EXISTS idx_snapshots_file_path_created ON snapshots(file_path, created_at DESC);
             ",
         )?;
 
@@ -291,6 +314,92 @@ impl Database {
 
         Ok(result)
     }
+
+    // ── Snapshot methods ──
+
+    /// Create a snapshot if content differs from the latest one for this file.
+    /// Returns `Some(id)` if created, `None` if skipped (content unchanged).
+    /// Prunes oldest snapshots beyond `max_per_file`.
+    pub fn create_snapshot(
+        &self,
+        file_path: &str,
+        content: &str,
+        max_per_file: i64,
+    ) -> Result<Option<i64>> {
+        let hash = content_hash(content);
+
+        // Check if latest snapshot has the same content hash
+        let latest_hash: Option<String> = self
+            .conn
+            .prepare(
+                "SELECT content_hash FROM snapshots WHERE file_path = ?1 ORDER BY created_at DESC LIMIT 1",
+            )?
+            .query_row(params![file_path], |row| row.get(0))
+            .ok();
+
+        if latest_hash.as_deref() == Some(&hash) {
+            return Ok(None);
+        }
+
+        self.conn.execute(
+            "INSERT INTO snapshots (file_path, content, content_hash) VALUES (?1, ?2, ?3)",
+            params![file_path, content, hash],
+        )?;
+        let id = self.conn.last_insert_rowid();
+
+        // Prune oldest beyond cap
+        self.conn.execute(
+            "DELETE FROM snapshots WHERE file_path = ?1 AND id NOT IN (
+                SELECT id FROM snapshots WHERE file_path = ?1 ORDER BY created_at DESC LIMIT ?2
+            )",
+            params![file_path, max_per_file],
+        )?;
+
+        Ok(Some(id))
+    }
+
+    pub fn list_snapshots(&self, file_path: &str, limit: i64) -> Result<Vec<Snapshot>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, file_path, content, created_at FROM snapshots
+             WHERE file_path = ?1
+             ORDER BY created_at DESC
+             LIMIT ?2",
+        )?;
+
+        let snapshots = stmt
+            .query_map(params![file_path, limit], |row| {
+                let content: String = row.get(2)?;
+                let preview = if content.len() > 200 {
+                    format!("{}...", &content[..200])
+                } else {
+                    content.clone()
+                };
+                Ok(Snapshot {
+                    id: row.get(0)?,
+                    file_path: row.get(1)?,
+                    preview,
+                    content_length: content.len(),
+                    created_at: row.get(3)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(snapshots)
+    }
+
+    pub fn get_snapshot_content(&self, id: i64) -> Result<String> {
+        let content = self
+            .conn
+            .prepare("SELECT content FROM snapshots WHERE id = ?1")?
+            .query_row(params![id], |row| row.get::<_, String>(0))?;
+        Ok(content)
+    }
+
+    pub fn delete_snapshot(&self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM snapshots WHERE id = ?1", params![id])?;
+        Ok(())
+    }
 }
 
 fn content_hash(content: &str) -> String {
@@ -491,6 +600,96 @@ mod tests {
         let hash2 = content_hash("test content");
         assert_eq!(hash1, hash2);
         assert_ne!(hash1, content_hash("different content"));
+    }
+
+    // ── Snapshot tests ──
+
+    #[test]
+    fn create_snapshot_returns_id() {
+        let db = test_db();
+        let id = db.create_snapshot("/workspace/doc.md", "# Hello", 50).unwrap();
+        assert!(id.is_some());
+        assert!(id.unwrap() > 0);
+    }
+
+    #[test]
+    fn create_snapshot_deduplicates_unchanged_content() {
+        let db = test_db();
+        let first = db.create_snapshot("/workspace/doc.md", "content", 50).unwrap();
+        assert!(first.is_some());
+        let second = db.create_snapshot("/workspace/doc.md", "content", 50).unwrap();
+        assert!(second.is_none());
+    }
+
+    #[test]
+    fn create_snapshot_allows_different_content() {
+        let db = test_db();
+        let first = db.create_snapshot("/workspace/doc.md", "v1", 50).unwrap();
+        let second = db.create_snapshot("/workspace/doc.md", "v2", 50).unwrap();
+        assert!(first.is_some());
+        assert!(second.is_some());
+        assert_ne!(first.unwrap(), second.unwrap());
+    }
+
+    #[test]
+    fn create_snapshot_prunes_oldest_when_cap_exceeded() {
+        let db = test_db();
+        for i in 0..5 {
+            db.create_snapshot("/workspace/doc.md", &format!("content-{}", i), 3).unwrap();
+        }
+        let snapshots = db.list_snapshots("/workspace/doc.md", 50).unwrap();
+        assert_eq!(snapshots.len(), 3);
+    }
+
+    #[test]
+    fn list_snapshots_only_returns_matching_file() {
+        let db = test_db();
+        db.create_snapshot("/workspace/a.md", "content a", 50).unwrap();
+        db.create_snapshot("/workspace/b.md", "content b", 50).unwrap();
+        let snaps_a = db.list_snapshots("/workspace/a.md", 50).unwrap();
+        assert_eq!(snaps_a.len(), 1);
+    }
+
+    #[test]
+    fn get_snapshot_content_returns_full_content() {
+        let db = test_db();
+        let long_content = "x".repeat(1000);
+        let id = db.create_snapshot("/workspace/doc.md", &long_content, 50).unwrap().unwrap();
+        let content = db.get_snapshot_content(id).unwrap();
+        assert_eq!(content, long_content);
+    }
+
+    #[test]
+    fn get_snapshot_content_errors_on_missing_id() {
+        let db = test_db();
+        assert!(db.get_snapshot_content(9999).is_err());
+    }
+
+    #[test]
+    fn delete_snapshot_removes_entry() {
+        let db = test_db();
+        let id = db.create_snapshot("/workspace/doc.md", "to delete", 50).unwrap().unwrap();
+        db.delete_snapshot(id).unwrap();
+        let snaps = db.list_snapshots("/workspace/doc.md", 50).unwrap();
+        assert!(snaps.is_empty());
+    }
+
+    #[test]
+    fn snapshot_preview_truncated() {
+        let db = test_db();
+        let long = "a".repeat(500);
+        db.create_snapshot("/workspace/doc.md", &long, 50).unwrap();
+        let snaps = db.list_snapshots("/workspace/doc.md", 50).unwrap();
+        assert!(snaps[0].preview.len() <= 203); // 200 + "..."
+    }
+
+    #[test]
+    fn snapshot_content_length_correct() {
+        let db = test_db();
+        let content = "hello world";
+        db.create_snapshot("/workspace/doc.md", content, 50).unwrap();
+        let snaps = db.list_snapshots("/workspace/doc.md", 50).unwrap();
+        assert_eq!(snaps[0].content_length, content.len());
     }
 
     #[test]

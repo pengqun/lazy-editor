@@ -3,6 +3,7 @@ import {
   Bold,
   BookOpen,
   ChevronDown,
+  Clock,
   Code,
   Download,
   Expand,
@@ -246,6 +247,8 @@ export function Toolbar() {
   const setShowFindReplace = useEditorStore((s) => s.setShowFindReplace);
   const showOutline = useEditorStore((s) => s.showOutline);
   const setShowOutline = useEditorStore((s) => s.setShowOutline);
+  const showVersionHistory = useEditorStore((s) => s.showVersionHistory);
+  const setShowVersionHistory = useEditorStore((s) => s.setShowVersionHistory);
   const selectedText = useEditorStore((s) => s.selectedText);
 
   const isStreaming = useAiStore((s) => s.isStreaming);
@@ -487,6 +490,15 @@ export function Toolbar() {
 
       {/* Export dropdown */}
       <ExportMenu editor={editor} iconSize={iconSize} />
+
+      {/* Version History */}
+      <ToolbarButton
+        onClick={() => setShowVersionHistory(!showVersionHistory)}
+        isActive={showVersionHistory}
+        title={`Version History (${modKey}${shiftKey}V)`}
+      >
+        <Clock size={iconSize} />
+      </ToolbarButton>
 
       <Separator />
 

@@ -17,6 +17,9 @@ interface EditorState {
   showOutline: boolean;
   setShowOutline: (show: boolean) => void;
 
+  showVersionHistory: boolean;
+  setShowVersionHistory: (show: boolean) => void;
+
   rightPanel: "knowledge" | "research" | null;
   setRightPanel: (panel: "knowledge" | "research" | null) => void;
 
@@ -49,6 +52,9 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   showOutline: false,
   setShowOutline: (show) => set({ showOutline: show }),
+
+  showVersionHistory: false,
+  setShowVersionHistory: (show) => set({ showVersionHistory: show }),
 
   rightPanel: "knowledge",
   setRightPanel: (panel) => set({ rightPanel: panel }),

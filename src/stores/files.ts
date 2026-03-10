@@ -1,4 +1,5 @@
 import { criticalAlert } from "@/stores/alert";
+import { useSnapshotsStore } from "@/stores/snapshots";
 import { toast } from "@/stores/toast";
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
@@ -94,6 +95,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         content: activeFileContent,
       });
       set({ isDirty: false });
+      // Fire-and-forget auto-snapshot after successful save
+      useSnapshotsStore.getState().autoSnapshot(activeFilePath, activeFileContent);
     } catch (err) {
       console.error("Failed to save file:", err);
       toast.error(`Failed to save file: ${err}`);

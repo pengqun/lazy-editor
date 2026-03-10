@@ -220,6 +220,11 @@ pub fn run_with_context(context: tauri::Context) {
             commands::ai::ai_cancel_stream,
             commands::ai::save_ai_settings,
             commands::ai::load_ai_settings,
+            // Snapshot commands
+            commands::snapshots::create_snapshot,
+            commands::snapshots::list_snapshots,
+            commands::snapshots::get_snapshot_content,
+            commands::snapshots::delete_snapshot,
             // Utility (testing / startup)
             commands::util::get_startup_params,
             commands::util::exit_app,
