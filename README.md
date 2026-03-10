@@ -24,6 +24,7 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
   - **retrieval quality** — score threshold filtering (removes low-relevance noise), document diversity limits (max 2 chunks per document in results), and XML-safe prompt injection
   - **retrieval controls** — configure how many KB results are injected into AI prompts (1–10) and scope retrieval to all documents or only pinned documents
   - **retrieval presets** — switch between Writing (balanced, 5 results), Research (maximum context, 8 results), and Precision (focused, 3 results from pinned docs) modes; manual overrides are preserved, and the active preset is persisted across restarts. Retrieval settings are remembered per document — switching files automatically restores each file's last-used preset/config
+  - **citation notes** — after an AI action with KB sources, click "Insert references" in the status bar to append a formatted, deduplicated reference block (horizontal rule + numbered list with document titles, chunk positions, and relevance scores) at the end of your document
 - **Workspace file management** (open/save + file tree)
 - **Find & Replace** — document-level search with match highlighting, next/prev navigation, case-sensitive toggle, replace one or all (`⌘F`)
 - **Document Outline** — toggleable sidebar listing H1–H3 headings for quick navigation; click to jump (`⌘⇧O`)

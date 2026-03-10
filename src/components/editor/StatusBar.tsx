@@ -1,9 +1,11 @@
-import { AlertCircle, CheckCircle2, Loader2, Target } from "lucide-react";
+import { AlertCircle, CheckCircle2, ClipboardList, Loader2, Target } from "lucide-react";
 import { useMemo, useState } from "react";
+import { buildReferenceHtml } from "../../lib/citation-notes";
 import { goalLabel, goalProgress, readingTimeMinutes } from "../../lib/writing-metrics";
 import { useAiStore } from "../../stores/ai";
 import { useEditorStore } from "../../stores/editor";
 import { useFilesStore } from "../../stores/files";
+import { toast } from "../../stores/toast";
 import { useWritingGoalsStore } from "../../stores/writing-goals";
 import { WritingGoalPopover } from "./WritingGoalPopover";
 
@@ -23,13 +25,25 @@ const PHASE_PROGRESS: Record<string, number> = {
 
 export function StatusBar() {
   const wordCount = useEditorStore((s) => s.wordCount);
+  const editor = useEditorStore((s) => s.editor);
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
   const isDirty = useFilesStore((s) => s.isDirty);
   const aiPhase = useAiStore((s) => s.aiPhase);
   const currentAction = useAiStore((s) => s.currentAction);
+  const citations = useAiStore((s) => s.citations);
   const goal = useWritingGoalsStore((s) =>
     activeFilePath ? s.getGoal(activeFilePath) : null,
   );
+
+  const handleInsertReferences = () => {
+    if (!editor || editor.isDestroyed || citations.length === 0) return;
+    const html = buildReferenceHtml(citations);
+    if (html) {
+      editor.commands.focus("end");
+      editor.commands.insertContent(html);
+      toast.success("References inserted");
+    }
+  };
 
   const [showGoalPopover, setShowGoalPopover] = useState(false);
 
@@ -118,6 +132,18 @@ export function StatusBar() {
               style={{ width: `${progress}%` }}
             />
           </div>
+
+          {aiPhase === "done" && citations.length > 0 && (
+            <button
+              type="button"
+              onClick={handleInsertReferences}
+              title="Insert formatted reference block at end of document"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-accent hover:bg-surface-3 transition-colors"
+            >
+              <ClipboardList size={12} />
+              <span>Insert references</span>
+            </button>
+          )}
         </div>
       )}
 
