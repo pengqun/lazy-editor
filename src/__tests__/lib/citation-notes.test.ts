@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_FIELD_OPTIONS,
   buildReferenceHtml,
   copyReferencesToClipboard,
   deduplicateCitations,
   formatReferenceBlock,
+  loadFieldOptions,
   loadLastTemplate,
+  saveFieldOptions,
   saveLastTemplate,
 } from "@/lib/citation-notes";
 import type { CitationSource } from "@/lib/tauri";
@@ -328,5 +331,136 @@ describe("copyReferencesToClipboard", () => {
     const result = await copyReferencesToClipboard([]);
     expect(writeMock).not.toHaveBeenCalled();
     expect(result).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Field options — formatReferenceBlock
+// ---------------------------------------------------------------------------
+
+describe("formatReferenceBlock — field options", () => {
+  const cite = makeCitation({ documentTitle: "My Paper", chunkIndex: 2, score: 0.87 });
+
+  it("default field options match backward-compatible output", () => {
+    const withDefaults = formatReferenceBlock([cite], "compact", DEFAULT_FIELD_OPTIONS);
+    const withoutArgs = formatReferenceBlock([cite], "compact");
+    expect(withDefaults).toBe(withoutArgs);
+  });
+
+  // -- compact --
+  it("compact: hides relevance when showRelevance=false", () => {
+    const result = formatReferenceBlock([cite], "compact", { showRelevance: false, showChunkLabel: true });
+    expect(result).toContain("chunk 3");
+    expect(result).not.toContain("relevance");
+  });
+
+  it("compact: hides chunk label when showChunkLabel=false", () => {
+    const result = formatReferenceBlock([cite], "compact", { showRelevance: true, showChunkLabel: false });
+    expect(result).not.toContain("chunk");
+    expect(result).toContain("87% relevance");
+  });
+
+  it("compact: title only when both fields hidden", () => {
+    const result = formatReferenceBlock([cite], "compact", { showRelevance: false, showChunkLabel: false });
+    expect(result).toContain("[1] My Paper");
+    expect(result).not.toContain("(");
+    expect(result).not.toContain("chunk");
+    expect(result).not.toContain("relevance");
+  });
+
+  // -- academic --
+  it("academic: hides relevance when showRelevance=false", () => {
+    const result = formatReferenceBlock([cite], "academic", { showRelevance: false, showChunkLabel: true });
+    expect(result).toContain("Source: chunk 3");
+    expect(result).not.toContain("Relevance");
+  });
+
+  it("academic: hides chunk label when showChunkLabel=false", () => {
+    const result = formatReferenceBlock([cite], "academic", { showRelevance: true, showChunkLabel: false });
+    expect(result).not.toContain("Source:");
+    expect(result).toContain("Relevance: 87%");
+  });
+
+  it("academic: title only when both fields hidden", () => {
+    const result = formatReferenceBlock([cite], "academic", { showRelevance: false, showChunkLabel: false });
+    expect(result).toContain("[1] My Paper");
+    expect(result).not.toContain("Source:");
+    expect(result).not.toContain("Relevance");
+    // No metadata line at all
+    expect(result).not.toContain("\n      ");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Field options — buildReferenceHtml
+// ---------------------------------------------------------------------------
+
+describe("buildReferenceHtml — field options", () => {
+  const cite = makeCitation({ documentTitle: "My Paper", chunkIndex: 2, score: 0.87 });
+
+  it("compact HTML: hides relevance", () => {
+    const html = buildReferenceHtml([cite], "compact", { showRelevance: false, showChunkLabel: true });
+    expect(html).toContain("chunk 3");
+    expect(html).not.toContain("relevance");
+  });
+
+  it("compact HTML: hides chunk label", () => {
+    const html = buildReferenceHtml([cite], "compact", { showRelevance: true, showChunkLabel: false });
+    expect(html).not.toContain("chunk");
+    expect(html).toContain("87% relevance");
+  });
+
+  it("compact HTML: title only when both hidden", () => {
+    const html = buildReferenceHtml([cite], "compact", { showRelevance: false, showChunkLabel: false });
+    expect(html).toContain("[1] My Paper");
+    expect(html).not.toContain("<em>");
+  });
+
+  it("academic HTML: hides relevance", () => {
+    const html = buildReferenceHtml([cite], "academic", { showRelevance: false, showChunkLabel: true });
+    expect(html).toContain("Source: chunk 3");
+    expect(html).not.toContain("Relevance");
+  });
+
+  it("academic HTML: title only when both hidden — no metadata span", () => {
+    const html = buildReferenceHtml([cite], "academic", { showRelevance: false, showChunkLabel: false });
+    expect(html).toContain("<strong>My Paper</strong>");
+    expect(html).not.toContain("<br/>");
+    expect(html).not.toContain("opacity");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Field options — persistence
+// ---------------------------------------------------------------------------
+
+describe("field options persistence", () => {
+  afterEach(() => localStorage.clear());
+
+  it("defaults to all fields shown", () => {
+    const opts = loadFieldOptions();
+    expect(opts.showRelevance).toBe(true);
+    expect(opts.showChunkLabel).toBe(true);
+  });
+
+  it("round-trips saved field options", () => {
+    saveFieldOptions({ showRelevance: false, showChunkLabel: true });
+    const opts = loadFieldOptions();
+    expect(opts.showRelevance).toBe(false);
+    expect(opts.showChunkLabel).toBe(true);
+  });
+
+  it("returns defaults for corrupted JSON", () => {
+    localStorage.setItem("lazy-editor:citation-fields", "not json");
+    const opts = loadFieldOptions();
+    expect(opts.showRelevance).toBe(true);
+    expect(opts.showChunkLabel).toBe(true);
+  });
+
+  it("fills missing keys with true", () => {
+    localStorage.setItem("lazy-editor:citation-fields", JSON.stringify({ showRelevance: false }));
+    const opts = loadFieldOptions();
+    expect(opts.showRelevance).toBe(false);
+    expect(opts.showChunkLabel).toBe(true);
   });
 });

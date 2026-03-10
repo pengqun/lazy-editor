@@ -1,12 +1,15 @@
 import { AlertCircle, CheckCircle2, ClipboardList, Copy, Loader2, Target } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
+  type CitationFieldOptions,
   type CitationTemplateId,
   CITATION_TEMPLATES,
   TEMPLATE_IDS,
   buildReferenceHtml,
   copyReferencesToClipboard,
+  loadFieldOptions,
   loadLastTemplate,
+  saveFieldOptions,
   saveLastTemplate,
 } from "../../lib/citation-notes";
 import { goalLabel, goalProgress, readingTimeMinutes } from "../../lib/writing-metrics";
@@ -44,27 +47,36 @@ export function StatusBar() {
   );
 
   const [templateId, setTemplateId] = useState<CitationTemplateId>(loadLastTemplate);
+  const [fieldOpts, setFieldOpts] = useState<CitationFieldOptions>(loadFieldOptions);
 
   const handleTemplateChange = useCallback((id: CitationTemplateId) => {
     setTemplateId(id);
     saveLastTemplate(id);
   }, []);
 
+  const handleFieldToggle = useCallback((key: keyof CitationFieldOptions) => {
+    setFieldOpts((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      saveFieldOptions(next);
+      return next;
+    });
+  }, []);
+
   const handleInsertReferences = useCallback(() => {
     if (!editor || editor.isDestroyed || citations.length === 0) return;
-    const html = buildReferenceHtml(citations, templateId);
+    const html = buildReferenceHtml(citations, templateId, fieldOpts);
     if (html) {
       editor.commands.focus("end");
       editor.commands.insertContent(html);
       toast.success("References inserted");
     }
-  }, [editor, citations, templateId]);
+  }, [editor, citations, templateId, fieldOpts]);
 
   const handleCopyReferences = useCallback(async () => {
     if (citations.length === 0) return;
-    const text = await copyReferencesToClipboard(citations, templateId);
+    const text = await copyReferencesToClipboard(citations, templateId, fieldOpts);
     if (text) toast.success("References copied to clipboard");
-  }, [citations, templateId]);
+  }, [citations, templateId, fieldOpts]);
 
   const [showGoalPopover, setShowGoalPopover] = useState(false);
 
@@ -168,6 +180,22 @@ export function StatusBar() {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => handleFieldToggle("showChunkLabel")}
+                title="Toggle chunk label in references"
+                className={`px-1 py-0.5 rounded text-[10px] transition-colors ${fieldOpts.showChunkLabel ? "bg-accent/20 text-accent" : "text-text-tertiary hover:text-text-secondary"}`}
+              >
+                Chunk
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFieldToggle("showRelevance")}
+                title="Toggle relevance score in references"
+                className={`px-1 py-0.5 rounded text-[10px] transition-colors ${fieldOpts.showRelevance ? "bg-accent/20 text-accent" : "text-text-tertiary hover:text-text-secondary"}`}
+              >
+                Rel%
+              </button>
               <button
                 type="button"
                 onClick={handleInsertReferences}
