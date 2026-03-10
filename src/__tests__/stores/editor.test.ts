@@ -7,6 +7,8 @@ function resetStore() {
     editor: null,
     showCommandPalette: false,
     showShortcutHelp: false,
+    showFindReplace: false,
+    showOutline: false,
     rightPanel: "knowledge",
     isAiStreaming: false,
     aiStreamContent: "",
@@ -22,6 +24,8 @@ describe("useEditorStore", () => {
     expect(state.editor).toBeNull();
     expect(state.showCommandPalette).toBe(false);
     expect(state.showShortcutHelp).toBe(false);
+    expect(state.showFindReplace).toBe(false);
+    expect(state.showOutline).toBe(false);
     expect(state.rightPanel).toBe("knowledge");
     expect(state.isAiStreaming).toBe(false);
     expect(state.aiStreamContent).toBe("");
@@ -73,5 +77,21 @@ describe("useEditorStore", () => {
   it("setSelectedText stores selected text", () => {
     useEditorStore.getState().setSelectedText("selected paragraph");
     expect(useEditorStore.getState().selectedText).toBe("selected paragraph");
+  });
+
+  it("setShowFindReplace toggles visibility", () => {
+    useEditorStore.getState().setShowFindReplace(true);
+    expect(useEditorStore.getState().showFindReplace).toBe(true);
+
+    useEditorStore.getState().setShowFindReplace(false);
+    expect(useEditorStore.getState().showFindReplace).toBe(false);
+  });
+
+  it("setShowOutline toggles visibility", () => {
+    useEditorStore.getState().setShowOutline(true);
+    expect(useEditorStore.getState().showOutline).toBe(true);
+
+    useEditorStore.getState().setShowOutline(false);
+    expect(useEditorStore.getState().showOutline).toBe(false);
   });
 });

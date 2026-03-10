@@ -2,6 +2,8 @@ import { Settings } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { CriticalAlert } from "./components/CriticalAlert";
 import { ToastContainer } from "./components/Toast";
+import { FindReplaceBar } from "./components/editor/FindReplaceBar";
+import { OutlinePanel } from "./components/editor/OutlinePanel";
 import { StatusBar } from "./components/editor/StatusBar";
 import { Toolbar } from "./components/editor/Toolbar";
 import { FileTree } from "./components/sidebar/FileTree";
@@ -45,6 +47,8 @@ export default function App() {
   const setShowCommandPalette = useEditorStore((s) => s.setShowCommandPalette);
   const showShortcutHelp = useEditorStore((s) => s.showShortcutHelp);
   const setShowShortcutHelp = useEditorStore((s) => s.setShowShortcutHelp);
+  const showFindReplace = useEditorStore((s) => s.showFindReplace);
+  const showOutline = useEditorStore((s) => s.showOutline);
   const rightPanel = useEditorStore((s) => s.rightPanel);
   const setRightPanel = useEditorStore((s) => s.setRightPanel);
   const loadWorkspace = useFilesStore((s) => s.loadWorkspace);
@@ -79,11 +83,28 @@ export default function App() {
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
 
+    // Cmd+F — Find & Replace
+    if (e.key === "f" && !e.shiftKey) {
+      e.preventDefault();
+      const { showFindReplace: open, setShowFindReplace: setOpen } =
+        useEditorStore.getState();
+      setOpen(!open);
+      return;
+    }
+
     // Cmd+K — Command palette
     if (e.key === "k") {
       e.preventDefault();
       const { showCommandPalette: open, setShowCommandPalette: setOpen } =
         useEditorStore.getState();
+      setOpen(!open);
+      return;
+    }
+
+    // Cmd+Shift+O — Toggle outline
+    if (e.shiftKey && e.key === "o") {
+      e.preventDefault();
+      const { showOutline: open, setShowOutline: setOpen } = useEditorStore.getState();
       setOpen(!open);
       return;
     }
@@ -233,16 +254,20 @@ export default function App() {
       {/* Center — Editor */}
       <div className="flex-1 flex flex-col min-w-0">
         <Toolbar />
-        <div className="flex-1 overflow-y-auto relative">
-          <Suspense
-            fallback={
-              <div className="h-full flex items-center justify-center text-text-tertiary text-sm">
-                Loading editor…
-              </div>
-            }
-          >
-            <Editor />
-          </Suspense>
+        {showFindReplace && <FindReplaceBar />}
+        <div className="flex-1 flex min-h-0">
+          {showOutline && <OutlinePanel />}
+          <div className="flex-1 overflow-y-auto relative">
+            <Suspense
+              fallback={
+                <div className="h-full flex items-center justify-center text-text-tertiary text-sm">
+                  Loading editor…
+                </div>
+              }
+            >
+              <Editor />
+            </Suspense>
+          </div>
         </div>
         <StatusBar />
       </div>

@@ -7,6 +7,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
 import { useAIStream } from "../../hooks/useAI";
 import { useAutoSave } from "../../hooks/useAutoSave";
+import { SearchAndReplace } from "../../lib/find-replace";
 import { loadLanguagesForDoc, lowlight } from "../../lib/lowlight-loader";
 import { modKey } from "../../lib/shortcuts";
 import { useEditorStore } from "../../stores/editor";
@@ -43,6 +44,7 @@ export function Editor() {
       CodeBlockLowlight.configure({
         lowlight,
       }),
+      SearchAndReplace,
     ],
     content: "",
     onUpdate: ({ editor }) => {

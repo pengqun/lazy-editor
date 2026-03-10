@@ -142,6 +142,17 @@ body,
   font-style: italic;
 }
 
+/* Find & Replace highlights */
+.find-match {
+  background: rgba(234, 179, 8, 0.25);
+  border-radius: 2px;
+}
+
+.find-match-current {
+  background: rgba(234, 179, 8, 0.55);
+  outline: 1px solid rgba(234, 179, 8, 0.7);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

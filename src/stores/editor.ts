@@ -11,6 +11,12 @@ interface EditorState {
   showShortcutHelp: boolean;
   setShowShortcutHelp: (show: boolean) => void;
 
+  showFindReplace: boolean;
+  setShowFindReplace: (show: boolean) => void;
+
+  showOutline: boolean;
+  setShowOutline: (show: boolean) => void;
+
   rightPanel: "knowledge" | "research" | null;
   setRightPanel: (panel: "knowledge" | "research" | null) => void;
 
@@ -37,6 +43,12 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   showShortcutHelp: false,
   setShowShortcutHelp: (show) => set({ showShortcutHelp: show }),
+
+  showFindReplace: false,
+  setShowFindReplace: (show) => set({ showFindReplace: show }),
+
+  showOutline: false,
+  setShowOutline: (show) => set({ showOutline: show }),
 
   rightPanel: "knowledge",
   setRightPanel: (panel) => set({ rightPanel: panel }),

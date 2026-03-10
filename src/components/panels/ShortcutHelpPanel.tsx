@@ -52,7 +52,16 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ],
   },
   {
-    title: "Navigation & General",
+    title: "Find & Navigation",
+    shortcuts: [
+      { keys: `${modKey}F`, label: "Find & Replace" },
+      { keys: `${modKey}${shiftKey}O`, label: "Document outline" },
+      { keys: "Enter", label: "Next match (in Find bar)" },
+      { keys: `${shiftKey}Enter`, label: "Previous match (in Find bar)" },
+    ],
+  },
+  {
+    title: "General",
     shortcuts: [
       { keys: `${modKey},`, label: "Open settings" },
       { keys: `${modKey}/`, label: "Shortcut help" },

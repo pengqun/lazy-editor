@@ -16,6 +16,8 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
   - **citation traceability** — AI outputs that use KB context automatically append a compact "Sources: [1] Doc Title" block so you can trace which knowledge base documents informed each response
   - **retrieval controls** — configure how many KB results are injected into AI prompts (1–10) and scope retrieval to all documents or only pinned documents
 - **Workspace file management** (open/save + file tree)
+- **Find & Replace** — document-level search with match highlighting, next/prev navigation, case-sensitive toggle, replace one or all (`⌘F`)
+- **Document Outline** — toggleable sidebar listing H1–H3 headings for quick navigation; click to jump (`⌘⇧O`)
 - **Export** — Markdown, HTML (standalone document), and PDF (via native print dialog). Accessible from the toolbar export menu or keyboard shortcuts (`⌘⇧E` / `⌘⇧H` / `⌘⇧P`)
 
 ## Tech Stack

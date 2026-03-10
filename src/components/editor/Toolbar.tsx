@@ -15,6 +15,7 @@ import {
   Italic,
   List,
   ListOrdered,
+  ListTree,
   Loader2,
   Minus,
   MousePointerClick,
@@ -241,6 +242,10 @@ export function Toolbar() {
   const setRightPanel = useEditorStore((s) => s.setRightPanel);
   const setShowCommandPalette = useEditorStore((s) => s.setShowCommandPalette);
   const setShowShortcutHelp = useEditorStore((s) => s.setShowShortcutHelp);
+  const showFindReplace = useEditorStore((s) => s.showFindReplace);
+  const setShowFindReplace = useEditorStore((s) => s.setShowFindReplace);
+  const showOutline = useEditorStore((s) => s.showOutline);
+  const setShowOutline = useEditorStore((s) => s.setShowOutline);
   const selectedText = useEditorStore((s) => s.selectedText);
 
   const isStreaming = useAiStore((s) => s.isStreaming);
@@ -482,6 +487,24 @@ export function Toolbar() {
 
       {/* Export dropdown */}
       <ExportMenu editor={editor} iconSize={iconSize} />
+
+      <Separator />
+
+      {/* Find/Replace & Outline */}
+      <ToolbarButton
+        onClick={() => setShowFindReplace(!showFindReplace)}
+        isActive={showFindReplace}
+        title={`Find & Replace (${modKey}F)`}
+      >
+        <Search size={iconSize} />
+      </ToolbarButton>
+      <ToolbarButton
+        onClick={() => setShowOutline(!showOutline)}
+        isActive={showOutline}
+        title={`Document Outline (${modKey}${shiftKey}O)`}
+      >
+        <ListTree size={iconSize} />
+      </ToolbarButton>
 
       <Separator />
 
