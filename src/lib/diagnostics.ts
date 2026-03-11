@@ -66,12 +66,35 @@ export function formatDiagnosticsReport(info: DiagnosticsInfo): string {
   return lines.join("\n");
 }
 
+/**
+ * Build a deterministic, human-readable export filename.
+ *
+ * Format: `lazy-editor-diagnostics-YYYY-MM-DDTHH-MM-SS-vX.Y.Z.md`
+ *
+ * Colons in the ISO timestamp are replaced with hyphens so the filename is
+ * safe on all major filesystems (Windows forbids colons in filenames).
+ *
+ * @param version - The app version string (e.g. "0.1.0").
+ * @param now     - Optional Date for deterministic testing; defaults to `new Date()`.
+ */
+export function buildExportFilename(version: string, now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const y = now.getFullYear();
+  const mo = pad(now.getMonth() + 1);
+  const d = pad(now.getDate());
+  const h = pad(now.getHours());
+  const mi = pad(now.getMinutes());
+  const s = pad(now.getSeconds());
+  const timestamp = `${y}-${mo}-${d}T${h}-${mi}-${s}`;
+  return `lazy-editor-diagnostics-${timestamp}-v${version}.md`;
+}
+
 export async function exportDiagnostics(): Promise<string | null> {
   const info = await collectDiagnostics();
   const report = formatDiagnosticsReport(info);
 
   const filePath = await save({
-    defaultPath: `lazy-editor-diagnostics-${Date.now()}.md`,
+    defaultPath: buildExportFilename(info.app_version),
     filters: [{ name: "Markdown", extensions: ["md"] }],
   });
 

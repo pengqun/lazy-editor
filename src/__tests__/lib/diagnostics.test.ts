@@ -1,4 +1,4 @@
-import { formatDiagnosticsReport } from "@/lib/diagnostics";
+import { buildExportFilename, formatDiagnosticsReport } from "@/lib/diagnostics";
 import type { DiagnosticsInfo } from "@/lib/diagnostics";
 import { describe, expect, it } from "vitest";
 
@@ -89,5 +89,58 @@ describe("formatDiagnosticsReport", () => {
     expect(report).not.toContain("sk-");
     expect(report).not.toContain("apiKey");
     expect(report).not.toContain("api_key");
+  });
+});
+
+describe("buildExportFilename", () => {
+  it("produces the expected format with date, time, and version", () => {
+    const date = new Date(2026, 2, 11, 16, 38, 17); // March 11, 2026, 16:38:17
+    const filename = buildExportFilename("0.1.0", date);
+    expect(filename).toBe("lazy-editor-diagnostics-2026-03-11T16-38-17-v0.1.0.md");
+  });
+
+  it("zero-pads single-digit month, day, hour, minute, second", () => {
+    const date = new Date(2026, 0, 5, 3, 7, 9); // Jan 5, 2026, 03:07:09
+    const filename = buildExportFilename("1.2.3", date);
+    expect(filename).toBe("lazy-editor-diagnostics-2026-01-05T03-07-09-v1.2.3.md");
+  });
+
+  it("ends with .md extension", () => {
+    const filename = buildExportFilename("0.1.0", new Date(2026, 5, 15, 12, 0, 0));
+    expect(filename).toMatch(/\.md$/);
+  });
+
+  it("contains the version prefixed with v", () => {
+    const filename = buildExportFilename("2.0.0-beta.1", new Date(2026, 0, 1, 0, 0, 0));
+    expect(filename).toContain("-v2.0.0-beta.1.md");
+  });
+
+  it("does not contain colons (filesystem-safe)", () => {
+    const filename = buildExportFilename("0.1.0", new Date());
+    expect(filename).not.toContain(":");
+  });
+
+  it("starts with lazy-editor-diagnostics prefix", () => {
+    const filename = buildExportFilename("0.1.0", new Date());
+    expect(filename).toMatch(/^lazy-editor-diagnostics-/);
+  });
+
+  it("handles midnight correctly", () => {
+    const date = new Date(2026, 11, 31, 0, 0, 0); // Dec 31, 2026, 00:00:00
+    const filename = buildExportFilename("0.1.0", date);
+    expect(filename).toBe("lazy-editor-diagnostics-2026-12-31T00-00-00-v0.1.0.md");
+  });
+
+  it("handles end-of-day correctly", () => {
+    const date = new Date(2026, 11, 31, 23, 59, 59); // Dec 31, 2026, 23:59:59
+    const filename = buildExportFilename("0.1.0", date);
+    expect(filename).toBe("lazy-editor-diagnostics-2026-12-31T23-59-59-v0.1.0.md");
+  });
+
+  it("does not include sensitive keys", () => {
+    const filename = buildExportFilename("0.1.0", new Date());
+    expect(filename).not.toContain("sk-");
+    expect(filename).not.toContain("apiKey");
+    expect(filename).not.toContain("api_key");
   });
 });
