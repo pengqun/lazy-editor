@@ -48,7 +48,8 @@ const compactTemplate: CitationTemplate = {
     if (fields.showChunkLabel) parts.push(`chunk ${c.chunkIndex + 1}`);
     if (fields.showRelevance) parts.push(`${Math.round(c.score * 100)}% relevance`);
     const suffix = parts.length > 0 ? ` <em>(${parts.join(", ")})</em>` : "";
-    return `<li>[${i + 1}] ${escapeHtml(c.documentTitle)}${suffix}</li>`;
+    const attrs = citationDataAttrs(c);
+    return `<li><a href="#" class="citation-link" ${attrs}>[${i + 1}] ${escapeHtml(c.documentTitle)}</a>${suffix}</li>`;
   },
 };
 
@@ -69,7 +70,8 @@ const academicTemplate: CitationTemplate = {
     const metaHtml = meta.length > 0
       ? `<br/><span style="opacity:0.7">${meta.join(" · ")}</span>`
       : "";
-    return `<li>[${i + 1}] <strong>${escapeHtml(c.documentTitle)}</strong>${metaHtml}</li>`;
+    const attrs = citationDataAttrs(c);
+    return `<li><a href="#" class="citation-link" ${attrs}>[${i + 1}] <strong>${escapeHtml(c.documentTitle)}</strong></a>${metaHtml}</li>`;
   },
 };
 
@@ -169,18 +171,23 @@ export function formatReferenceBlock(
 /**
  * Build TipTap-compatible HTML for the reference block.
  * Defaults to compact template for backward compatibility.
+ * When `query` is provided, it is embedded as a `data-query` attribute on the
+ * reference list so citation deep-links can restore highlight state even after
+ * the originating AI action is no longer active.
  */
 export function buildReferenceHtml(
   citations: CitationSource[],
   templateId: CitationTemplateId = "compact",
   fields: CitationFieldOptions = DEFAULT_FIELD_OPTIONS,
+  query?: string,
 ): string {
   const deduped = deduplicateCitations(citations);
   if (deduped.length === 0) return "";
 
   const tmpl = CITATION_TEMPLATES[templateId];
   const items = deduped.map((c, i) => tmpl.formatHtmlEntry(c, i, fields)).join("");
-  return `<hr><p><strong>References</strong></p><ol>${items}</ol>`;
+  const queryAttr = query ? ` data-query="${escapeHtml(query)}"` : "";
+  return `<hr><p><strong>References</strong></p><ol class="citation-references"${queryAttr}>${items}</ol>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +208,38 @@ export async function copyReferencesToClipboard(
   if (!text) return "";
   await navigator.clipboard.writeText(text);
   return text;
+}
+
+// ---------------------------------------------------------------------------
+// Deep-link helpers
+// ---------------------------------------------------------------------------
+
+/** CSS selector for citation deep-link anchors inside the editor. */
+export const CITATION_LINK_SELECTOR = "a.citation-link[data-chunk-id]";
+
+/** Build data-* attribute string for a citation anchor element. */
+export function citationDataAttrs(c: CitationSource): string {
+  return [
+    `data-chunk-id="${c.chunkId}"`,
+    `data-document-id="${c.documentId}"`,
+    `data-score="${c.score}"`,
+  ].join(" ");
+}
+
+/**
+ * Parse deep-link metadata from a citation anchor element.
+ * Returns null if the required attributes are missing.
+ */
+export function parseCitationElement(el: HTMLElement): {
+  chunkId: number;
+  documentId: number;
+  score: number;
+} | null {
+  const chunkId = Number(el.dataset.chunkId);
+  const documentId = Number(el.dataset.documentId);
+  const score = Number(el.dataset.score);
+  if (Number.isNaN(chunkId) || Number.isNaN(documentId)) return null;
+  return { chunkId, documentId, score: Number.isNaN(score) ? 0 : score };
 }
 
 // ---------------------------------------------------------------------------

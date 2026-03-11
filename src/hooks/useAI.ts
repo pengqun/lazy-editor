@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import {
+  CITATION_LINK_SELECTOR,
+  parseCitationElement,
+} from "../lib/citation-notes";
+import {
   type CitationSource,
   listenToAiPhase,
   listenToAiSources,
@@ -44,6 +48,21 @@ export function buildCitationHtml(citations: CitationSource[]): string {
   return `<p><br></p><p><em>Sources: ${items}</em></p>`;
 }
 
+/**
+ * Navigate to a citation's source chunk in the Knowledge Panel.
+ * Opens the panel if closed and loads the chunk viewer with query/score context.
+ */
+export function navigateToCitationSource(
+  chunkId: number,
+  query?: string,
+  score?: number,
+): void {
+  const kbStore = useKnowledgeStore.getState();
+  kbStore.viewChunk(chunkId, query, score);
+  // Ensure the knowledge panel is visible
+  useEditorStore.getState().setRightPanel("knowledge");
+}
+
 export function useAIStream() {
   const setAiStreaming = useEditorStore((s) => s.setAiStreaming);
   const appendAiStream = useEditorStore((s) => s.appendAiStream);
@@ -59,19 +78,37 @@ export function useAIStream() {
 
     const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      const link = target.closest<HTMLAnchorElement>(".kb-source-link");
-      if (!link) return;
 
-      event.preventDefault();
-      event.stopPropagation();
+      // Handle inline citation links (.kb-source-link) from AI stream
+      const kbLink = target.closest<HTMLAnchorElement>(".kb-source-link");
+      if (kbLink) {
+        event.preventDefault();
+        event.stopPropagation();
 
-      const chunkId = Number(link.dataset.chunkId);
-      if (chunkId) {
-        const score = link.dataset.score ? Number(link.dataset.score) : undefined;
-        const query = useAiStore.getState().lastKbQuery || undefined;
-        useKnowledgeStore.getState().viewChunk(chunkId, query, score);
-        // Switch right panel to knowledge to show the source viewer
-        useEditorStore.getState().setRightPanel("knowledge");
+        const chunkId = Number(kbLink.dataset.chunkId);
+        if (chunkId) {
+          const score = kbLink.dataset.score ? Number(kbLink.dataset.score) : undefined;
+          const query = useAiStore.getState().lastKbQuery || undefined;
+          navigateToCitationSource(chunkId, query, score);
+        }
+        return;
+      }
+
+      // Handle reference block citation links (.citation-link) from buildReferenceHtml
+      const citationLink = target.closest<HTMLAnchorElement>(CITATION_LINK_SELECTOR);
+      if (citationLink) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const parsed = parseCitationElement(citationLink);
+        if (parsed) {
+          // Prefer the query embedded in the reference list (survives across AI actions
+          // and document switches); fall back to the current lastKbQuery.
+          const refList = citationLink.closest<HTMLOListElement>("ol.citation-references");
+          const query = refList?.dataset.query || useAiStore.getState().lastKbQuery || undefined;
+          navigateToCitationSource(parsed.chunkId, query, parsed.score);
+        }
+        return;
       }
     };
 

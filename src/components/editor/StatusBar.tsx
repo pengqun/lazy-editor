@@ -145,7 +145,8 @@ const CitationControls = memo(function CitationControls({
 
   const handleInsertReferences = useCallback(() => {
     if (!editor || editor.isDestroyed || citations.length === 0) return;
-    const html = buildReferenceHtml(citations, templateId, fieldOpts);
+    const query = useAiStore.getState().lastKbQuery || undefined;
+    const html = buildReferenceHtml(citations, templateId, fieldOpts, query);
     if (html) {
       editor.commands.focus("end");
       editor.commands.insertContent(html);

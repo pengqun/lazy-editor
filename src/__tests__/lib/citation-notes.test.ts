@@ -188,7 +188,7 @@ describe("buildReferenceHtml — compact", () => {
     ]);
     expect(html).toContain("<hr>");
     expect(html).toContain("<strong>References</strong>");
-    expect(html).toContain("<ol>");
+    expect(html).toMatch(/<ol[\s>]/);
     expect(html).toContain("[1] My Paper");
     expect(html).toContain("chunk 3, 87% relevance");
     expect(html).toContain("</ol>");
@@ -406,7 +406,8 @@ describe("buildReferenceHtml — field options", () => {
 
   it("compact HTML: hides chunk label", () => {
     const html = buildReferenceHtml([cite], "compact", { showRelevance: true, showChunkLabel: false });
-    expect(html).not.toContain("chunk");
+    // The text "chunk N" should not appear in visible content (data-chunk-id attrs are OK)
+    expect(html).not.toMatch(/chunk \d/);
     expect(html).toContain("87% relevance");
   });
 
