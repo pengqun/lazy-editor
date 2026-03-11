@@ -18,6 +18,19 @@ import {
 import { type UpdateState, checkForAppUpdate, getUpdateState } from "../../lib/updater";
 import { toast } from "../../stores/toast";
 
+/** Map raw subsystem names to human-friendly labels. */
+const subsystemLabels: Record<string, string> = {
+  workspace: "Workspace",
+  database: "Database",
+  embedder: "Embedder",
+  settings: "Settings",
+  ai_provider: "AI Provider",
+};
+
+function formatSubsystemName(name: string): string {
+  return subsystemLabels[name] ?? name.replace(/_/g, " ");
+}
+
 interface DiagnosticsPanelProps {
   onClose: () => void;
 }
@@ -155,7 +168,7 @@ export function DiagnosticsPanel({ onClose }: DiagnosticsPanelProps) {
                           <XCircle size={14} className="text-red-400 mt-0.5 flex-shrink-0" />
                         )}
                         <div className="min-w-0">
-                          <span className="text-sm text-text-primary capitalize">{s.name}</span>
+                          <span className="text-sm text-text-primary">{formatSubsystemName(s.name)}</span>
                           <p className="text-xs text-text-tertiary break-all">{s.detail}</p>
                         </div>
                       </div>
