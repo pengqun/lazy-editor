@@ -226,10 +226,12 @@ pub fn run_with_context(context: tauri::Context) {
             commands::snapshots::list_snapshots,
             commands::snapshots::get_snapshot_content,
             commands::snapshots::delete_snapshot,
-            // Utility (testing / startup)
+            // Utility (testing / startup / diagnostics)
             commands::util::get_startup_params,
             commands::util::exit_app,
             commands::util::selftest_ping,
+            commands::util::health_check,
+            commands::util::collect_diagnostics,
         ])
         .run(context)
         .unwrap_or_else(|e| {

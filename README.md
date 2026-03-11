@@ -33,6 +33,8 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
 - **Crash Recovery** — unsaved editor content is periodically checkpointed to local storage while you type. If the app exits unexpectedly, a recovery dialog offers to restore or discard the draft on next file open. Recovery drafts are bounded (max 20, auto-expired after 7 days) and cleared on successful save
 - **Writing Metrics** — live word count, estimated reading time (based on 200 WPM), and configurable per-file writing goals with progress tracking. Click the word count in the status bar to set a target; progress is shown as a compact bar + percentage. Goals persist across sessions via local storage
 - **Large document performance** — debounced word count, find/replace search, and outline extraction for smooth editing in long documents; memoized status bar calculations to reduce unnecessary re-renders
+- **Diagnostics & Health Check** — in-app diagnostics panel (`⌘⇧D`) with subsystem health checks (workspace access, KB database, embedder, settings store), app/runtime info display, and one-click export to a local Markdown report. No secrets or API keys are collected
+- **Update UX** — clear state progression for update checking/downloading/applying with actionable error messages; expected dev/staging failures are silenced gracefully
 
 ## Tech Stack
 
@@ -165,11 +167,16 @@ Unsigned apps are fine for internal testing but may show macOS security warnings
 - Embeddings are generated locally via fastembed.
 - AI requests are sent only to the provider you configure (Claude/OpenAI/Ollama).
 
+## Release Readiness
+
+- In-app diagnostics panel with health checks and exportable reports
+- Subsystem validation: workspace, KB database, embedder, settings store
+- Update flow with clear state progression and error handling
+- 295 frontend unit tests (Vitest) + 52 Rust unit tests (cargo test)
+- CI release packaging for macOS Apple Silicon via GitHub Actions
+
 ## Roadmap (ideas)
 
-- Add formatter/linter (Biome/ESLint + Prettier)
-- Add basic tests
-- CI for builds/releases
 - Additional export formats (DOCX, EPUB)
 - More retrieval controls (collections, filters)
 - Keep prioritizing single-user workflow polish; defer multi-user collaboration to a future phase

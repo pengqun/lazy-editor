@@ -260,6 +260,13 @@ impl Database {
         Ok(docs)
     }
 
+    pub fn document_count(&self) -> Result<i64> {
+        let count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
+        Ok(count)
+    }
+
     pub fn remove_document(&self, id: i64) -> Result<()> {
         self.conn
             .execute("DELETE FROM documents WHERE id = ?1", params![id])?;

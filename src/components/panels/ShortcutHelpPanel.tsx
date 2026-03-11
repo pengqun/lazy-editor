@@ -64,6 +64,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: "General",
     shortcuts: [
       { keys: `${modKey},`, label: "Open settings" },
+      { keys: `${modKey}${shiftKey}D`, label: "Diagnostics & health check" },
       { keys: `${modKey}/`, label: "Shortcut help" },
       { keys: "Esc", label: "Close panel / modal" },
     ],

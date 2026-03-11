@@ -1,4 +1,4 @@
-import { Settings } from "lucide-react";
+import { Activity, Settings } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { CriticalAlert } from "./components/CriticalAlert";
 import { ToastContainer } from "./components/Toast";
@@ -52,6 +52,11 @@ const VersionHistoryPanel = lazy(() =>
     default: m.VersionHistoryPanel,
   })),
 );
+const DiagnosticsPanel = lazy(() =>
+  import("./components/panels/DiagnosticsPanel").then((m) => ({
+    default: m.DiagnosticsPanel,
+  })),
+);
 
 export default function App() {
   const showCommandPalette = useEditorStore((s) => s.showCommandPalette);
@@ -69,6 +74,7 @@ export default function App() {
   const workspacePath = useFilesStore((s) => s.workspacePath);
   const aiSettings = useAiStore((s) => s.settings);
   const [showSettings, setShowSettings] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Load workspace + AI settings on mount; detect first-run
@@ -220,6 +226,13 @@ export default function App() {
       setOpen(!open);
       return;
     }
+
+    // Cmd+Shift+D — Diagnostics
+    if (e.shiftKey && (e.key === "d" || e.key === "D")) {
+      e.preventDefault();
+      setShowDiagnostics((prev) => !prev);
+      return;
+    }
   }, []);
 
   useEffect(() => {
@@ -262,14 +275,24 @@ export default function App() {
           <span className="text-sm font-semibold text-text-secondary tracking-wide">
             LAZY EDITOR
           </span>
-          <button
-            type="button"
-            onClick={() => setShowSettings(true)}
-            className="p-1 hover:bg-surface-3 rounded transition-colors"
-            title={`AI Settings (${modKey},)`}
-          >
-            <Settings size={14} className="text-text-tertiary" />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => setShowDiagnostics(true)}
+              className="p-1 hover:bg-surface-3 rounded transition-colors"
+              title={`Diagnostics (${modKey}⇧D)`}
+            >
+              <Activity size={14} className="text-text-tertiary" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="p-1 hover:bg-surface-3 rounded transition-colors"
+              title={`AI Settings (${modKey},)`}
+            >
+              <Settings size={14} className="text-text-tertiary" />
+            </button>
+          </div>
         </div>
         <FileTree />
       </div>
@@ -335,6 +358,13 @@ export default function App() {
       {showVersionHistory && (
         <Suspense fallback={null}>
           <VersionHistoryPanel onClose={() => setShowVersionHistory(false)} />
+        </Suspense>
+      )}
+
+      {/* Diagnostics Panel */}
+      {showDiagnostics && (
+        <Suspense fallback={null}>
+          <DiagnosticsPanel onClose={() => setShowDiagnostics(false)} />
         </Suspense>
       )}
 
