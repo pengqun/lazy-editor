@@ -43,7 +43,7 @@ describe("StatusBar citation controls", () => {
     const controls = screen.getByRole("group", { name: "Citation reference controls" });
     const scoped = within(controls);
 
-    const profileSelect = scoped.getByRole("combobox", { name: "Reference profile" });
+    const profileSelect = scoped.getByRole("combobox", { name: "Citation reference profile" });
     const styleSelect = scoped.getByRole("combobox", { name: "Citation reference style" });
     const chunkToggle = scoped.getByRole("button", { name: "Chunk" });
     const relevanceToggle = scoped.getByRole("button", { name: "Relevance" });
@@ -66,16 +66,15 @@ describe("StatusBar citation controls", () => {
       ),
     );
 
-    // Profile select, save button, style select, chunk, relevance, insert, copy
-    // (no delete button when no custom profile is active)
-    expect(focusables.length).toBeGreaterThanOrEqual(7);
+    // Profile select, style select, save, delete, chunk, relevance, insert, copy
+    expect(focusables.length).toBeGreaterThanOrEqual(8);
     expect(focusables[0]).toBe(profileSelect);
-    // Save profile button is second
-    expect(focusables[2]).toBe(styleSelect);
-    expect(focusables[3]).toBe(chunkToggle);
-    expect(focusables[4]).toBe(relevanceToggle);
-    expect(focusables[5]).toBe(insertButton);
-    expect(focusables[6]).toBe(copyButton);
+    expect(focusables[1]).toBe(styleSelect);
+    // Save and delete buttons at indices 2-3
+    expect(focusables[4]).toBe(chunkToggle);
+    expect(focusables[5]).toBe(relevanceToggle);
+    expect(focusables[6]).toBe(insertButton);
+    expect(focusables[7]).toBe(copyButton);
 
     for (const el of focusables) {
       const tabIndex = el.getAttribute("tabindex");
