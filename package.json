@@ -16,7 +16,9 @@
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "format": "biome format src/",
-    "format:fix": "biome format --write src/"
+    "format:fix": "biome format --write src/",
+    "version:check": "node scripts/version-check.js",
+    "version:bump": "node scripts/version-bump.js"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",

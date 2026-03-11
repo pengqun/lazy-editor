@@ -128,6 +128,36 @@ cd src-tauri && cargo check
 cd src-tauri && cargo build
 ```
 
+## Versioning
+
+The app version lives in three files that must stay in sync:
+
+- `package.json`
+- `src-tauri/tauri.conf.json`
+- `src-tauri/Cargo.toml`
+
+**Check consistency:**
+
+```bash
+npm run version:check
+```
+
+**Bump all files at once:**
+
+```bash
+npm run version:bump -- 0.1.6
+```
+
+Then commit and tag:
+
+```bash
+git add -A && git commit -m "chore: bump version to 0.1.6"
+git tag v0.1.6
+git push origin main --tags
+```
+
+The CI release workflow runs `version:check` before building, so a mismatch will fail the job early with an actionable message.
+
 ## CI Release Packaging (macOS Apple Silicon)
 
 This repo ships a dedicated workflow at `.github/workflows/release.yml`.
