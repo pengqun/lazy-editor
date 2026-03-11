@@ -8,21 +8,60 @@ export interface SearchMatch {
   to: number;
 }
 
+/** Maximum number of matches returned by findMatches to avoid memory/UI issues. */
+export const MATCH_LIMIT = 1000;
+
+/** Document size thresholds (in characters) for adaptive debounce. */
+export const LARGE_DOC_THRESHOLD = 50_000;
+export const VERY_LARGE_DOC_THRESHOLD = 200_000;
+
+/** Estimate the character count of a ProseMirror document by summing text nodes. */
+export function estimateDocSize(doc: ProseMirrorNode): number {
+  let size = 0;
+  doc.descendants((node) => {
+    if (node.isText && node.text) {
+      size += node.text.length;
+    }
+  });
+  return size;
+}
+
+/** Return an appropriate search debounce (ms) based on document size. */
+export function adaptiveDebounce(docSize: number): number {
+  if (docSize >= VERY_LARGE_DOC_THRESHOLD) return 500;
+  if (docSize >= LARGE_DOC_THRESHOLD) return 350;
+  return 200;
+}
+
+export interface FindMatchesResult {
+  matches: SearchMatch[];
+  /** True when the result was truncated at MATCH_LIMIT. */
+  truncated: boolean;
+}
+
 /**
  * Find all occurrences of `query` in a ProseMirror document.
  * Searches within individual text nodes.
+ *
+ * Accepts an optional `limit` (defaults to {@link MATCH_LIMIT}).
+ * When the limit is reached the search terminates early and
+ * the returned result is marked as `truncated`.
  */
 export function findMatches(
   doc: ProseMirrorNode,
   query: string,
   caseSensitive: boolean,
-): SearchMatch[] {
-  if (!query) return [];
+  limit: number = MATCH_LIMIT,
+): FindMatchesResult {
+  if (!query) return { matches: [], truncated: false };
 
   const matches: SearchMatch[] = [];
   const search = caseSensitive ? query : query.toLowerCase();
+  let truncated = false;
 
   doc.descendants((node, pos) => {
+    // Early termination: stop traversing when limit reached
+    if (truncated) return false;
     if (!node.isText || !node.text) return;
     const text = caseSensitive ? node.text : node.text.toLowerCase();
     let idx = 0;
@@ -30,11 +69,15 @@ export function findMatches(
       const found = text.indexOf(search, idx);
       if (found === -1) break;
       matches.push({ from: pos + found, to: pos + found + search.length });
+      if (matches.length >= limit) {
+        truncated = true;
+        return false;
+      }
       idx = found + 1;
     }
   });
 
-  return matches;
+  return { matches, truncated };
 }
 
 /** Wrap an index into [0, length) with modular arithmetic. */
@@ -47,11 +90,13 @@ export function wrapIndex(index: number, length: number): number {
 
 export const searchPluginKey = new PluginKey("searchAndReplace");
 
-interface SearchPluginState {
+export interface SearchPluginState {
   query: string;
   caseSensitive: boolean;
   matches: SearchMatch[];
   currentIndex: number;
+  /** True when findMatches truncated results at MATCH_LIMIT. */
+  truncated: boolean;
   decorations: DecorationSet;
 }
 
@@ -92,6 +137,7 @@ export const SearchAndReplace = Extension.create({
               caseSensitive: false,
               matches: [],
               currentIndex: 0,
+              truncated: false,
               decorations: DecorationSet.empty,
             };
           },
@@ -110,13 +156,14 @@ export const SearchAndReplace = Extension.create({
                 query !== prev.query ||
                 caseSensitive !== prev.caseSensitive
               ) {
-                const matches = findMatches(newState.doc, query, caseSensitive);
+                const { matches, truncated } = findMatches(newState.doc, query, caseSensitive);
                 currentIndex = wrapIndex(currentIndex, matches.length);
                 return {
                   query,
                   caseSensitive,
                   matches,
                   currentIndex,
+                  truncated,
                   decorations: buildDecorations(newState.doc, matches, currentIndex),
                 };
               }
@@ -136,7 +183,7 @@ export const SearchAndReplace = Extension.create({
 
             // Doc changed while search active → recompute
             if (tr.docChanged && prev.query) {
-              const matches = findMatches(
+              const { matches, truncated } = findMatches(
                 newState.doc,
                 prev.query,
                 prev.caseSensitive,
@@ -146,6 +193,7 @@ export const SearchAndReplace = Extension.create({
                 ...prev,
                 matches,
                 currentIndex,
+                truncated,
                 decorations: buildDecorations(newState.doc, matches, currentIndex),
               };
             }

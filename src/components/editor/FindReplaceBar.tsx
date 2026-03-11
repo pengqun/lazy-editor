@@ -3,6 +3,7 @@ import {
   ArrowUp,
   CaseSensitive,
   ChevronRight,
+  Loader2,
   Replace,
   ReplaceAll,
   X,
@@ -10,11 +11,12 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TextSelection } from "@tiptap/pm/state";
 import { cn } from "../../lib/cn";
-import { searchPluginKey } from "../../lib/find-replace";
+import {
+  adaptiveDebounce,
+  estimateDocSize,
+  searchPluginKey,
+} from "../../lib/find-replace";
 import { useEditorStore } from "../../stores/editor";
-
-/** Debounce delay (ms) for search-as-you-type to avoid per-keystroke full-doc scans. */
-const SEARCH_DEBOUNCE_MS = 200;
 
 export function FindReplaceBar() {
   const editor = useEditorStore((s) => s.editor);
@@ -26,6 +28,8 @@ export function FindReplaceBar() {
   const [showReplace, setShowReplace] = useState(false);
   const [matchCount, setMatchCount] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [searching, setSearching] = useState(false);
+  const [truncated, setTruncated] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,18 +63,28 @@ export function FindReplaceBar() {
       if (pluginState) {
         setMatchCount(pluginState.matches.length);
         setCurrentIndex(pluginState.currentIndex);
+        setTruncated(pluginState.truncated);
       }
+      setSearching(false);
     },
     [editor],
   );
 
-  // Debounced search when query or case-sensitivity changes
+  // Debounced search when query or case-sensitivity changes.
+  // Debounce delay adapts to document size to keep the UI responsive.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (query) setSearching(true);
+
+    const debounceMs = editor
+      ? adaptiveDebounce(estimateDocSize(editor.state.doc))
+      : 200;
+
     debounceRef.current = setTimeout(() => {
       dispatchSearch(query, caseSensitive);
-    }, SEARCH_DEBOUNCE_MS);
-  }, [query, caseSensitive, dispatchSearch]);
+    }, debounceMs);
+  }, [query, caseSensitive, dispatchSearch, editor]);
 
   // Scroll editor to make the current match visible
   const scrollToCurrentMatch = useCallback(
@@ -117,6 +131,7 @@ export function FindReplaceBar() {
     if (newState) {
       setMatchCount(newState.matches.length);
       setCurrentIndex(newState.currentIndex);
+      setTruncated(newState.truncated);
       if (newState.matches.length > 0) {
         scrollToCurrentMatch(newState.currentIndex);
       }
@@ -141,6 +156,7 @@ export function FindReplaceBar() {
     if (newState) {
       setMatchCount(newState.matches.length);
       setCurrentIndex(0);
+      setTruncated(newState.truncated);
     }
   }, [editor, matchCount, replacement]);
 
@@ -203,10 +219,17 @@ export function FindReplaceBar() {
             className="flex-1 bg-transparent text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none min-w-0"
           />
           {query && (
-            <span className="text-[10px] text-text-tertiary whitespace-nowrap">
-              {matchCount > 0
-                ? `${currentIndex + 1} of ${matchCount}`
-                : "No results"}
+            <span className="text-[10px] text-text-tertiary whitespace-nowrap flex items-center gap-1">
+              {searching ? (
+                <>
+                  <Loader2 size={10} className="animate-spin" />
+                  Searching...
+                </>
+              ) : matchCount > 0 ? (
+                `${currentIndex + 1} of ${truncated ? `${matchCount}+` : matchCount}`
+              ) : (
+                "No results"
+              )}
             </span>
           )}
         </div>
