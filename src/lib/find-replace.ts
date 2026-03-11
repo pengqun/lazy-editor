@@ -39,6 +39,14 @@ export interface FindMatchesResult {
   truncated: boolean;
 }
 
+export interface AsyncFindMatchesResult extends FindMatchesResult {
+  /** True when the search was aborted via AbortSignal before completion. */
+  cancelled: boolean;
+}
+
+/** Number of text nodes to process before yielding to the event loop. */
+export const YIELD_BATCH_SIZE = 500;
+
 /**
  * Find all occurrences of `query` in a ProseMirror document.
  * Searches within individual text nodes.
@@ -78,6 +86,80 @@ export function findMatches(
   });
 
   return { matches, truncated };
+}
+
+/** Collect text nodes from a ProseMirror document into an array for batch processing. */
+function collectTextNodes(doc: ProseMirrorNode): { text: string; pos: number }[] {
+  const nodes: { text: string; pos: number }[] = [];
+  doc.descendants((node, pos) => {
+    if (node.isText && node.text) {
+      nodes.push({ text: node.text, pos });
+    }
+  });
+  return nodes;
+}
+
+/**
+ * Async, cancellable version of {@link findMatches}.
+ *
+ * For documents smaller than {@link LARGE_DOC_THRESHOLD}, this runs
+ * synchronously (no yielding overhead). For larger documents, it yields
+ * to the event loop every {@link YIELD_BATCH_SIZE} text nodes.
+ *
+ * @param signal - Optional AbortSignal to cancel mid-search.
+ * @param onProgress - Optional callback invoked with partial match count during yielding.
+ */
+export async function findMatchesAsync(
+  doc: ProseMirrorNode,
+  query: string,
+  caseSensitive: boolean,
+  limit: number = MATCH_LIMIT,
+  signal?: AbortSignal,
+  onProgress?: (count: number) => void,
+): Promise<AsyncFindMatchesResult> {
+  if (!query) return { matches: [], truncated: false, cancelled: false };
+
+  // For small docs, run synchronously — no yielding overhead
+  const docSize = estimateDocSize(doc);
+  if (docSize < LARGE_DOC_THRESHOLD) {
+    const result = findMatches(doc, query, caseSensitive, limit);
+    return { ...result, cancelled: false };
+  }
+
+  // Collect text nodes (fast sync pass), then process in batches
+  const textNodes = collectTextNodes(doc);
+  const matches: SearchMatch[] = [];
+  const search = caseSensitive ? query : query.toLowerCase();
+  let truncated = false;
+
+  for (let i = 0; i < textNodes.length; i++) {
+    if (signal?.aborted) {
+      return { matches, truncated, cancelled: true };
+    }
+
+    const { text: rawText, pos } = textNodes[i];
+    const text = caseSensitive ? rawText : rawText.toLowerCase();
+    let idx = 0;
+    while (idx <= text.length - search.length) {
+      const found = text.indexOf(search, idx);
+      if (found === -1) break;
+      matches.push({ from: pos + found, to: pos + found + search.length });
+      if (matches.length >= limit) {
+        truncated = true;
+        break;
+      }
+      idx = found + 1;
+    }
+    if (truncated) break;
+
+    // Yield every YIELD_BATCH_SIZE nodes
+    if ((i + 1) % YIELD_BATCH_SIZE === 0) {
+      onProgress?.(matches.length);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+
+  return { matches, truncated, cancelled: false };
 }
 
 /** Wrap an index into [0, length) with modular arithmetic. */
@@ -151,7 +233,22 @@ export const SearchAndReplace = Extension.create({
               const caseSensitive = meta.caseSensitive ?? prev.caseSensitive;
               let currentIndex = meta.currentIndex ?? prev.currentIndex;
 
-              // Query or case-sensitivity changed → recompute matches
+              // Pre-computed matches supplied (from async search flow)
+              if (meta.matches !== undefined) {
+                const matches = meta.matches;
+                const truncated = meta.truncated ?? false;
+                currentIndex = wrapIndex(currentIndex, matches.length);
+                return {
+                  query,
+                  caseSensitive,
+                  matches,
+                  currentIndex,
+                  truncated,
+                  decorations: buildDecorations(newState.doc, matches, currentIndex),
+                };
+              }
+
+              // Query or case-sensitivity changed → recompute matches (sync path)
               if (
                 query !== prev.query ||
                 caseSensitive !== prev.caseSensitive

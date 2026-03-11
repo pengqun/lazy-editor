@@ -1,13 +1,15 @@
 import {
   MATCH_LIMIT,
+  YIELD_BATCH_SIZE,
   adaptiveDebounce,
   estimateDocSize,
   findMatches,
+  findMatchesAsync,
   wrapIndex,
   LARGE_DOC_THRESHOLD,
   VERY_LARGE_DOC_THRESHOLD,
 } from "@/lib/find-replace";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 // Minimal ProseMirror-like document mock for testing findMatches.
 // The real ProseMirror Node.descendants(fn) calls fn(node, pos) for each node.
@@ -238,5 +240,90 @@ describe("adaptiveDebounce", () => {
   it("returns 500 for very large documents", () => {
     expect(adaptiveDebounce(VERY_LARGE_DOC_THRESHOLD)).toBe(500);
     expect(adaptiveDebounce(1_000_000)).toBe(500);
+  });
+});
+
+// Helper to build a large mock doc that exceeds LARGE_DOC_THRESHOLD.
+// Uses one match per node ("needle" prefix) to avoid hitting MATCH_LIMIT
+// before the yield point, allowing cancellation and progress tests to work.
+function mockLargeDoc(nodeCount: number, charsPerNode: number) {
+  const text = "needle" + "a".repeat(Math.max(0, charsPerNode - 6));
+  const nodes = Array.from({ length: nodeCount }, (_, i) => ({
+    text,
+    pos: i * (charsPerNode + 2),
+  }));
+  return mockDoc(nodes);
+}
+
+describe("findMatchesAsync", () => {
+  it("returns same results as sync findMatches for small docs", async () => {
+    const doc = mockDoc([{ text: "hello world hello", pos: 1 }]);
+    const syncResult = findMatches(doc, "hello", false);
+    const asyncResult = await findMatchesAsync(doc, "hello", false);
+    expect(asyncResult.matches).toEqual(syncResult.matches);
+    expect(asyncResult.truncated).toBe(syncResult.truncated);
+    expect(asyncResult.cancelled).toBe(false);
+  });
+
+  it("returns empty for empty query", async () => {
+    const doc = mockDoc([{ text: "hello", pos: 0 }]);
+    const result = await findMatchesAsync(doc, "", false);
+    expect(result.matches).toEqual([]);
+    expect(result.cancelled).toBe(false);
+  });
+
+  it("cancels mid-search when signal is aborted", async () => {
+    // Create a large doc to trigger async path (1 match per node = won't hit MATCH_LIMIT)
+    const doc = mockLargeDoc(YIELD_BATCH_SIZE + 100, 200);
+    const controller = new AbortController();
+
+    // Abort after yielding starts (very short delay)
+    setTimeout(() => controller.abort(), 1);
+
+    const result = await findMatchesAsync(doc, "needle", false, MATCH_LIMIT, controller.signal);
+    expect(result.cancelled).toBe(true);
+    // Should have partial results (some but not all)
+    expect(result.matches.length).toBeGreaterThan(0);
+  });
+
+  it("calls onProgress during large doc search", async () => {
+    const doc = mockLargeDoc(YIELD_BATCH_SIZE * 2, 200);
+    const progressCalls: number[] = [];
+
+    await findMatchesAsync(doc, "needle", false, MATCH_LIMIT, undefined, (count) => {
+      progressCalls.push(count);
+    });
+
+    // Should have been called at least once (after first batch)
+    expect(progressCalls.length).toBeGreaterThanOrEqual(1);
+    // Each progress call should have an increasing count
+    for (let i = 1; i < progressCalls.length; i++) {
+      expect(progressCalls[i]).toBeGreaterThanOrEqual(progressCalls[i - 1]);
+    }
+  });
+
+  it("skips yielding for small docs (< LARGE_DOC_THRESHOLD)", async () => {
+    const smallDoc = mockDoc([{ text: "hello", pos: 0 }]);
+    const spy = vi.spyOn(globalThis, "setTimeout");
+    const callsBefore = spy.mock.calls.length;
+
+    await findMatchesAsync(smallDoc, "hello", false);
+
+    // No setTimeout(0) calls for yielding in small doc path
+    const yieldCalls = spy.mock.calls
+      .slice(callsBefore)
+      .filter(([_, ms]) => ms === 0);
+    expect(yieldCalls.length).toBe(0);
+    spy.mockRestore();
+  });
+
+  it("already-aborted signal returns immediately with cancelled", async () => {
+    const doc = mockLargeDoc(YIELD_BATCH_SIZE + 10, 200);
+    const controller = new AbortController();
+    controller.abort(); // Pre-abort
+
+    const result = await findMatchesAsync(doc, "needle", false, MATCH_LIMIT, controller.signal);
+    expect(result.cancelled).toBe(true);
+    expect(result.matches).toEqual([]);
   });
 });

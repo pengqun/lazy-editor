@@ -2,6 +2,7 @@ import {
   HEADING_LIMIT,
   adaptiveOutlineDebounce,
   extractHeadings,
+  extractHeadingsAsync,
   OUTLINE_LARGE_THRESHOLD,
 } from "@/lib/outline";
 import { describe, expect, it } from "vitest";
@@ -182,5 +183,41 @@ describe("adaptiveOutlineDebounce", () => {
   it("returns 600 for large heading counts", () => {
     expect(adaptiveOutlineDebounce(OUTLINE_LARGE_THRESHOLD)).toBe(600);
     expect(adaptiveOutlineDebounce(500)).toBe(600);
+  });
+});
+
+// Helper: mock doc with enough text to exceed 50K char threshold
+function mockLargeOutlineDoc(nodeCount: number) {
+  const longText = "x".repeat(200); // 200 chars per node
+  const nodes: { type: string; attrs?: Record<string, unknown>; textContent: string }[] = [];
+  for (let i = 0; i < nodeCount; i++) {
+    nodes.push(
+      { type: "paragraph", textContent: longText },
+      { type: "heading", attrs: { level: 1 }, textContent: `H${i}` },
+    );
+  }
+  return mockDoc(nodes);
+}
+
+describe("extractHeadingsAsync", () => {
+  it("matches sync extractHeadings for small docs", async () => {
+    const doc = mockDoc([
+      { type: "heading", attrs: { level: 1 }, textContent: "Title" },
+      { type: "paragraph", textContent: "body" },
+    ]);
+    const syncResult = extractHeadings(doc);
+    const asyncResult = await extractHeadingsAsync(doc);
+    expect(asyncResult.headings).toEqual(syncResult.headings);
+    expect(asyncResult.cancelled).toBe(false);
+  });
+
+  it("cancels with AbortSignal on large docs", async () => {
+    // Need enough text nodes to exceed 50K chars and trigger yielding
+    const doc = mockLargeOutlineDoc(300); // 300 * 200 = 60K chars
+    const controller = new AbortController();
+    controller.abort(); // Pre-abort
+
+    const result = await extractHeadingsAsync(doc, HEADING_LIMIT, controller.signal);
+    expect(result.cancelled).toBe(true);
   });
 });
