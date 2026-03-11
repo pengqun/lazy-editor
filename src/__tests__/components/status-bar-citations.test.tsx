@@ -1,5 +1,5 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StatusBar } from "@/components/editor/StatusBar";
 import { useAiStore } from "@/stores/ai";
 import { useEditorStore } from "@/stores/editor";
@@ -34,6 +34,7 @@ describe("StatusBar citation controls", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
   });
 
@@ -80,5 +81,74 @@ describe("StatusBar citation controls", () => {
       const tabIndex = el.getAttribute("tabindex");
       expect(tabIndex === null || Number(tabIndex) >= 0).toBe(true);
     }
+  });
+
+  it("auto-switches to manual when toggling fields with a built-in profile selected", () => {
+    render(<StatusBar />);
+
+    const controls = screen.getByRole("group", { name: "Citation reference controls" });
+    const scoped = within(controls);
+    const profileSelect = scoped.getByRole("combobox", { name: "Citation reference profile" }) as HTMLSelectElement;
+    const chunkToggle = scoped.getByRole("button", { name: "Chunk" });
+
+    fireEvent.change(profileSelect, { target: { value: "builtin:compact-default" } });
+    expect(profileSelect.value).toBe("builtin:compact-default");
+
+    fireEvent.click(chunkToggle);
+
+    expect(profileSelect.value).toBe("");
+    expect(scoped.getByText("Switched to manual mode")).toBeTruthy();
+  });
+
+  it("shows and clears a temporary profile-select flash on built-in auto-switch", () => {
+    vi.useFakeTimers();
+    render(<StatusBar />);
+
+    const controls = screen.getByRole("group", { name: "Citation reference controls" });
+    const scoped = within(controls);
+    const profileSelect = scoped.getByRole("combobox", { name: "Citation reference profile" }) as HTMLSelectElement;
+    const relevanceToggle = scoped.getByRole("button", { name: "Relevance" });
+
+    fireEvent.change(profileSelect, { target: { value: "builtin:academic-full" } });
+    fireEvent.click(relevanceToggle);
+
+    expect(profileSelect.className.includes("bg-accent/20")).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(1600);
+    });
+
+    expect(profileSelect.className.includes("bg-accent/20")).toBe(false);
+    expect(scoped.queryByText("Switched to manual mode")).toBeNull();
+  });
+
+  it("does not auto-switch custom profiles when toggling fields", () => {
+    localStorage.setItem(
+      "lazy-editor:reference-profiles",
+      JSON.stringify([
+        {
+          id: "custom:test-profile",
+          name: "My Profile",
+          templateId: "compact",
+          fields: { showChunkLabel: true, showRelevance: true },
+        },
+      ]),
+    );
+
+    render(<StatusBar />);
+
+    const controls = screen.getByRole("group", { name: "Citation reference controls" });
+    const scoped = within(controls);
+    const profileSelect = scoped.getByRole("combobox", { name: "Citation reference profile" }) as HTMLSelectElement;
+    const chunkToggle = scoped.getByRole("button", { name: "Chunk" });
+
+    fireEvent.change(profileSelect, { target: { value: "custom:test-profile" } });
+    expect(profileSelect.value).toBe("custom:test-profile");
+
+    fireEvent.click(chunkToggle);
+
+    expect(profileSelect.value).toBe("custom:test-profile");
+    expect(scoped.queryByText("Switched to manual mode")).toBeNull();
+    expect(profileSelect.className.includes("bg-accent/20")).toBe(false);
   });
 });

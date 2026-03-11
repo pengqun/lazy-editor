@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, ClipboardList, Copy, Loader2, Save, Target, Trash2 } from "lucide-react";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   type CitationFieldOptions,
   type CitationTemplateId,
@@ -43,6 +43,7 @@ const PHASE_PROGRESS: Record<string, number> = {
 
 /** Debounce interval (ms) for word-count display in the status bar. */
 const WORD_COUNT_DEBOUNCE_MS = 300;
+const PROFILE_SWITCH_FLASH_MS = 1500;
 
 /* ------------------------------------------------------------------ */
 /*  WordCountSection — isolated so word-count debounce only triggers  */
@@ -138,8 +139,19 @@ const CitationControls = memo(function CitationControls({
   const [fieldOpts, setFieldOpts] = useState<CitationFieldOptions>(initialSettings.fields);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(initialSettings.activeProfileId);
   const [profiles, setProfiles] = useState<ReferenceProfile[]>(listProfiles);
+  const [profileSwitchFlash, setProfileSwitchFlash] = useState(false);
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
 
   const refreshProfiles = useCallback(() => setProfiles(listProfiles()), []);
+
+  useEffect(() => {
+    if (!profileSwitchFlash) return;
+    const timer = window.setTimeout(() => {
+      setProfileSwitchFlash(false);
+      setLiveAnnouncement("");
+    }, PROFILE_SWITCH_FLASH_MS);
+    return () => window.clearTimeout(timer);
+  }, [profileSwitchFlash]);
 
   const handleProfileChange = useCallback((profileId: string) => {
     if (profileId === "") {
@@ -165,15 +177,26 @@ const CitationControls = memo(function CitationControls({
   }, [fieldOpts]);
 
   const handleFieldToggle = useCallback((key: keyof CitationFieldOptions) => {
+    const activeProfile = activeProfileId ? getProfileById(activeProfileId) : null;
+    const shouldAutoSwitchToManual = activeProfile?.isBuiltin ?? false;
+
     setFieldOpts((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       saveFieldOptions(next);
-      // Toggling a field manually clears active profile
-      setActiveProfileId(null);
-      saveCitationSettings(templateId, next, null);
+      if (shouldAutoSwitchToManual) {
+        setActiveProfileId(null);
+        saveCitationSettings(templateId, next, null);
+      } else {
+        saveCitationSettings(templateId, next, activeProfileId);
+      }
       return next;
     });
-  }, [templateId]);
+
+    if (shouldAutoSwitchToManual) {
+      setProfileSwitchFlash(true);
+      setLiveAnnouncement("Switched to manual mode");
+    }
+  }, [templateId, activeProfileId]);
 
   const handleSaveProfile = useCallback(() => {
     const name = window.prompt("Profile name:");
@@ -240,7 +263,9 @@ const CitationControls = memo(function CitationControls({
         aria-label="Citation reference profile"
         aria-describedby="citation-controls-help"
         title="Choose reference profile"
-        className="h-5 text-[10px] bg-surface-2 border border-border rounded text-text-secondary px-1 outline-none focus:border-accent"
+        className={`h-5 text-[10px] bg-surface-2 border border-border rounded text-text-secondary px-1 outline-none focus:border-accent transition-colors ${
+          profileSwitchFlash ? "bg-accent/20 border-accent" : ""
+        }`}
       >
         <option value="">Manual</option>
         {profiles.map((p) => (
@@ -249,6 +274,9 @@ const CitationControls = memo(function CitationControls({
           </option>
         ))}
       </select>
+      <span aria-live="polite" className="sr-only">
+        {liveAnnouncement}
+      </span>
       <label
         htmlFor="citation-template-select"
         className="text-[10px] text-text-tertiary whitespace-nowrap"
