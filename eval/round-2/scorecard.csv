@@ -1,7 +1,7 @@
 round,task_id,agent_combo,baseline_commit,start_time,end_time,duration_min,time_to_first_green_min,acceptance_passed,tests_passed,defects_found_post_run,rework_loops,manual_intervention_count,manual_intervention_minutes,quality_score,efficiency_score,hygiene_score,total_score,notes
-2,R2-T1,A,,,,,,,,,,,,,,,,
-2,R2-T1,B,,,,,,,,,,,,,,,,
-2,R2-T2,A,,,,,,,,,,,,,,,,
-2,R2-T2,B,,,,,,,,,,,,,,,,
-2,R2-T3,A,,,,,,,,,,,,,,,,
-2,R2-T3,B,,,,,,,,,,,,,,,,
+2,R2-T1,A,5e26f1c,,,2.0,2.0,yes,445,2,0,0,0,3.0,4.0,3.5,3.35,"Side effects in setState updater; aria-live never cleared"
+2,R2-T1,B,5e26f1c,,,2.3,2.3,yes,445,0,0,0,0,4.5,3.5,4.0,4.15,"Idiomatic useEffect timer; aria-live clears; clean tests"
+2,R2-T2,A,f29b5c0,,,3.0,3.0,partial,445,1,0,0,0,3.0,4.5,3.5,3.55,"Routing defect: KnowledgePanel omits viewChunkError from mount condition"
+2,R2-T2,B,f29b5c0,,,7.5,7.5,yes,445,0,0,0,0,4.5,2.5,4.0,3.80,"Fixed routing; component tests; polished error UI"
+2,R2-T3,A,4bf948e,,,6.0,6.0,yes,445,0,1,0,0,3.5,3.5,3.5,3.50,"No OutlinePanel integration; no progressive decorations; no cleanup on close"
+2,R2-T3,B,4bf948e,,,5.3,5.3,yes,445,0,0,0,0,4.5,4.0,4.0,4.25,"Progressive decorations; OutlinePanel async; race protection; thorough cleanup"
