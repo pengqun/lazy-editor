@@ -27,6 +27,7 @@ Compare two model+tool combinations on **real lazy-editor development tasks**:
    - `npm test`
    - `cd src-tauri && cargo test -q`
 6. Record outputs in `eval/round-1/results.md` and `eval/round-1/scorecard.csv`.
+7. Compare A/B and **keep the winner commit in the main repo** (cherry-pick or fast-forward) instead of discarding both.
 
 ## Fairness Controls
 - Use identical prompt template (`eval/round-1/prompt-template.md`).
