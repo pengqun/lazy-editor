@@ -4,8 +4,11 @@ import {
   detectMatchingPreset,
   loadDocRetrievalSettings,
   loadPresetFromStorage,
+  loadWorkspaceRetrievalSettings,
+  resolveRetrievalSettings,
   saveDocRetrievalSettings,
   savePresetToStorage,
+  saveWorkspaceRetrievalSettings,
 } from "@/lib/retrieval-presets";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -142,6 +145,125 @@ describe("retrieval-presets", () => {
       );
       const loaded = loadDocRetrievalSettings("/bad3.md");
       expect(loaded?.preset).toBeNull();
+    });
+  });
+
+  describe("per-workspace persistence", () => {
+    it("loadWorkspaceRetrievalSettings returns null when empty", () => {
+      expect(loadWorkspaceRetrievalSettings("/workspace")).toBeNull();
+    });
+
+    it("saveWorkspaceRetrievalSettings + loadWorkspaceRetrievalSettings round-trips", () => {
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "research", topK: 8, scope: "all" });
+      const loaded = loadWorkspaceRetrievalSettings("/workspace");
+      expect(loaded).toEqual({ preset: "research", topK: 8, scope: "all" });
+    });
+
+    it("stores different settings for different workspaces", () => {
+      saveWorkspaceRetrievalSettings("/ws-a", { preset: "writing", topK: 5, scope: "all" });
+      saveWorkspaceRetrievalSettings("/ws-b", { preset: "precision", topK: 3, scope: "pinned" });
+      expect(loadWorkspaceRetrievalSettings("/ws-a")?.preset).toBe("writing");
+      expect(loadWorkspaceRetrievalSettings("/ws-b")?.preset).toBe("precision");
+    });
+
+    it("stores custom (null preset) settings", () => {
+      saveWorkspaceRetrievalSettings("/ws", { preset: null, topK: 6, scope: "pinned" });
+      const loaded = loadWorkspaceRetrievalSettings("/ws");
+      expect(loaded).toEqual({ preset: null, topK: 6, scope: "pinned" });
+    });
+
+    it("clamps topK on load", () => {
+      localStorage.setItem(
+        "lazy-editor:workspace-retrieval:/bad-ws",
+        JSON.stringify({ preset: null, topK: 99, scope: "all" }),
+      );
+      expect(loadWorkspaceRetrievalSettings("/bad-ws")?.topK).toBe(10);
+    });
+
+    it("returns null for invalid scope on load", () => {
+      localStorage.setItem(
+        "lazy-editor:workspace-retrieval:/bad-ws2",
+        JSON.stringify({ preset: null, topK: 5, scope: "invalid" }),
+      );
+      expect(loadWorkspaceRetrievalSettings("/bad-ws2")).toBeNull();
+    });
+
+    it("returns null for invalid preset on load (falls to null)", () => {
+      localStorage.setItem(
+        "lazy-editor:workspace-retrieval:/bad-ws3",
+        JSON.stringify({ preset: "nonexistent", topK: 5, scope: "all" }),
+      );
+      const loaded = loadWorkspaceRetrievalSettings("/bad-ws3");
+      expect(loaded?.preset).toBeNull();
+    });
+  });
+
+  describe("resolveRetrievalSettings — precedence chain", () => {
+    it("returns global defaults when nothing is stored", () => {
+      const { settings, source } = resolveRetrievalSettings(null, null);
+      expect(source).toBe("global");
+      expect(settings.preset).toBeNull();
+      expect(settings.topK).toBe(5);
+      expect(settings.scope).toBe("all");
+    });
+
+    it("returns global preset when only global is set", () => {
+      savePresetToStorage("research");
+      const { settings, source } = resolveRetrievalSettings("/file.md", "/workspace");
+      expect(source).toBe("global");
+      expect(settings.preset).toBe("research");
+      expect(settings.topK).toBe(8);
+    });
+
+    it("workspace overrides global", () => {
+      savePresetToStorage("research");
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+      const { settings, source } = resolveRetrievalSettings("/file.md", "/workspace");
+      expect(source).toBe("workspace");
+      expect(settings.preset).toBe("precision");
+      expect(settings.topK).toBe(3);
+      expect(settings.scope).toBe("pinned");
+    });
+
+    it("per-doc overrides workspace", () => {
+      savePresetToStorage("research");
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+      saveDocRetrievalSettings("/file.md", { preset: "writing", topK: 5, scope: "all" });
+      const { settings, source } = resolveRetrievalSettings("/file.md", "/workspace");
+      expect(source).toBe("doc");
+      expect(settings.preset).toBe("writing");
+      expect(settings.topK).toBe(5);
+      expect(settings.scope).toBe("all");
+    });
+
+    it("per-doc overrides global (no workspace)", () => {
+      savePresetToStorage("research");
+      saveDocRetrievalSettings("/file.md", { preset: "writing", topK: 5, scope: "all" });
+      const { settings, source } = resolveRetrievalSettings("/file.md", null);
+      expect(source).toBe("doc");
+      expect(settings.preset).toBe("writing");
+    });
+
+    it("workspace is used when file has no per-doc settings", () => {
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+      const { settings, source } = resolveRetrievalSettings("/new-file.md", "/workspace");
+      expect(source).toBe("workspace");
+      expect(settings.preset).toBe("precision");
+    });
+
+    it("skips workspace when workspacePath is null", () => {
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+      savePresetToStorage("research");
+      const { settings, source } = resolveRetrievalSettings("/file.md", null);
+      expect(source).toBe("global");
+      expect(settings.preset).toBe("research");
+    });
+
+    it("skips doc when filePath is null, uses workspace", () => {
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "writing", topK: 5, scope: "all" });
+      const { settings, source } = resolveRetrievalSettings(null, "/workspace");
+      expect(source).toBe("workspace");
+      expect(settings.preset).toBe("writing");
     });
   });
 });

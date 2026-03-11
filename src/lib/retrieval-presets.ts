@@ -91,7 +91,11 @@ export interface DocRetrievalSettings {
   scope: RetrievalScope;
 }
 
+/** The source that provided the active retrieval settings. */
+export type RetrievalSettingsSource = "doc" | "workspace" | "global";
+
 const DOC_STORAGE_PREFIX = "lazy-editor:doc-retrieval:";
+const WORKSPACE_STORAGE_PREFIX = "lazy-editor:workspace-retrieval:";
 
 /** Load persisted retrieval settings for a specific document (null = not stored). */
 export function loadDocRetrievalSettings(filePath: string): DocRetrievalSettings | null {
@@ -117,4 +121,72 @@ export function saveDocRetrievalSettings(filePath: string, settings: DocRetrieva
   } catch {
     // localStorage full or disabled — silently skip
   }
+}
+
+// ---------------------------------------------------------------------------
+// Per-workspace retrieval defaults
+// ---------------------------------------------------------------------------
+
+/** Load persisted retrieval defaults for a specific workspace (null = not stored). */
+export function loadWorkspaceRetrievalSettings(workspacePath: string): DocRetrievalSettings | null {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_STORAGE_PREFIX + workspacePath);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.topK !== "number" || !["all", "pinned"].includes(parsed.scope)) return null;
+    return {
+      preset: parsed.preset && parsed.preset in RETRIEVAL_PRESETS ? parsed.preset : null,
+      topK: Math.max(1, Math.min(10, parsed.topK)),
+      scope: parsed.scope,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Persist retrieval defaults for a specific workspace. */
+export function saveWorkspaceRetrievalSettings(workspacePath: string, settings: DocRetrievalSettings): void {
+  try {
+    localStorage.setItem(WORKSPACE_STORAGE_PREFIX + workspacePath, JSON.stringify(settings));
+  } catch {
+    // localStorage full or disabled — silently skip
+  }
+}
+
+/**
+ * Resolve retrieval settings using the precedence chain:
+ * per-doc > workspace default > global default.
+ * Returns the resolved settings and the source that provided them.
+ */
+export function resolveRetrievalSettings(
+  filePath: string | null,
+  workspacePath: string | null,
+): { settings: DocRetrievalSettings; source: RetrievalSettingsSource } {
+  // 1. Per-document settings (highest priority)
+  if (filePath) {
+    const docSettings = loadDocRetrievalSettings(filePath);
+    if (docSettings) {
+      return { settings: docSettings, source: "doc" };
+    }
+  }
+
+  // 2. Workspace-level defaults
+  if (workspacePath) {
+    const wsSettings = loadWorkspaceRetrievalSettings(workspacePath);
+    if (wsSettings) {
+      return { settings: wsSettings, source: "workspace" };
+    }
+  }
+
+  // 3. Global default
+  const globalPreset = loadPresetFromStorage();
+  const config = globalPreset ? RETRIEVAL_PRESETS[globalPreset] : null;
+  return {
+    settings: {
+      preset: globalPreset,
+      topK: config?.topK ?? 5,
+      scope: (config?.scope ?? "all") as RetrievalScope,
+    },
+    source: "global",
+  };
 }

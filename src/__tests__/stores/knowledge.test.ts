@@ -1,4 +1,8 @@
-import { loadDocRetrievalSettings } from "@/lib/retrieval-presets";
+import {
+  loadDocRetrievalSettings,
+  loadWorkspaceRetrievalSettings,
+  saveWorkspaceRetrievalSettings,
+} from "@/lib/retrieval-presets";
 import { useKnowledgeStore } from "@/stores/knowledge";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +21,8 @@ function resetStore() {
     retrievalScope: "all",
     activePreset: null,
     _activeDocPath: null,
+    _workspacePath: null,
+    settingsSource: "global",
     viewedChunk: null,
     viewedChunkQuery: null,
     viewedChunkScore: null,
@@ -461,6 +467,133 @@ describe("useKnowledgeStore", () => {
       // Now change to match a preset
       useKnowledgeStore.getState().setRetrievalTopK(5);
       expect(useKnowledgeStore.getState().activePreset).toBe("writing");
+    });
+  });
+
+  describe("workspace-level retrieval defaults", () => {
+    beforeEach(() => {
+      // Clear all storage to avoid cross-test leakage
+      localStorage.clear();
+    });
+
+    it("setWorkspacePath updates _workspacePath", () => {
+      useKnowledgeStore.getState().setWorkspacePath("/my-workspace");
+      expect(useKnowledgeStore.getState()._workspacePath).toBe("/my-workspace");
+    });
+
+    it("settingsSource defaults to global", () => {
+      expect(useKnowledgeStore.getState().settingsSource).toBe("global");
+    });
+
+    it("restoreForDocument uses workspace default when no per-doc settings exist", () => {
+      useKnowledgeStore.getState().setWorkspacePath("/workspace");
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+
+      useKnowledgeStore.getState().restoreForDocument("/new-file.md");
+      const state = useKnowledgeStore.getState();
+      expect(state.settingsSource).toBe("workspace");
+      expect(state.activePreset).toBe("precision");
+      expect(state.retrievalTopK).toBe(3);
+      expect(state.retrievalScope).toBe("pinned");
+    });
+
+    it("restoreForDocument prefers per-doc over workspace", () => {
+      useKnowledgeStore.getState().setWorkspacePath("/workspace");
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+
+      // Set up per-doc settings
+      useKnowledgeStore.getState().restoreForDocument("/essay.md");
+      useKnowledgeStore.getState().setPreset("research");
+
+      // Switch away and back
+      useKnowledgeStore.getState().restoreForDocument("/other.md");
+      useKnowledgeStore.getState().restoreForDocument("/essay.md");
+
+      const state = useKnowledgeStore.getState();
+      expect(state.settingsSource).toBe("doc");
+      expect(state.activePreset).toBe("research");
+      expect(state.retrievalTopK).toBe(8);
+    });
+
+    it("restoreForDocument falls back to global when no workspace settings", () => {
+      useKnowledgeStore.getState().setWorkspacePath("/workspace");
+      localStorage.setItem("lazy-editor:retrieval-preset", "writing");
+
+      useKnowledgeStore.getState().restoreForDocument("/file.md");
+      const state = useKnowledgeStore.getState();
+      expect(state.settingsSource).toBe("global");
+      expect(state.activePreset).toBe("writing");
+    });
+
+    it("three-tier precedence: per-doc > workspace > global", () => {
+      useKnowledgeStore.getState().setWorkspacePath("/workspace");
+      localStorage.setItem("lazy-editor:retrieval-preset", "writing");
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "research", topK: 8, scope: "all" });
+
+      // File with no per-doc settings => workspace
+      useKnowledgeStore.getState().restoreForDocument("/new.md");
+      expect(useKnowledgeStore.getState().settingsSource).toBe("workspace");
+      expect(useKnowledgeStore.getState().activePreset).toBe("research");
+
+      // Save per-doc override
+      useKnowledgeStore.getState().setPreset("precision");
+      expect(useKnowledgeStore.getState().settingsSource).toBe("doc");
+
+      // Switch away and back — per-doc should still win
+      useKnowledgeStore.getState().restoreForDocument("/other.md");
+      useKnowledgeStore.getState().restoreForDocument("/new.md");
+      expect(useKnowledgeStore.getState().settingsSource).toBe("doc");
+      expect(useKnowledgeStore.getState().activePreset).toBe("precision");
+    });
+
+    it("saveAsWorkspaceDefault persists current settings to workspace storage", () => {
+      useKnowledgeStore.getState().setWorkspacePath("/workspace");
+      useKnowledgeStore.getState().setPreset("precision");
+      useKnowledgeStore.getState().saveAsWorkspaceDefault();
+
+      const loaded = loadWorkspaceRetrievalSettings("/workspace");
+      expect(loaded).toEqual({ preset: "precision", topK: 3, scope: "pinned" });
+    });
+
+    it("saveAsWorkspaceDefault does nothing when no workspace path", () => {
+      useKnowledgeStore.getState().setPreset("research");
+      useKnowledgeStore.getState().saveAsWorkspaceDefault();
+
+      // No workspace keys should exist
+      const keys = Object.keys(localStorage).filter((k) =>
+        k.startsWith("lazy-editor:workspace-retrieval:"),
+      );
+      expect(keys).toHaveLength(0);
+    });
+
+    it("manual changes set settingsSource to doc when activeDocPath exists", () => {
+      useKnowledgeStore.getState().setWorkspacePath("/workspace");
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "writing", topK: 5, scope: "all" });
+
+      useKnowledgeStore.getState().restoreForDocument("/file.md");
+      expect(useKnowledgeStore.getState().settingsSource).toBe("workspace");
+
+      // Manual change promotes to per-doc
+      useKnowledgeStore.getState().setRetrievalTopK(7);
+      expect(useKnowledgeStore.getState().settingsSource).toBe("doc");
+    });
+
+    it("workspace defaults apply to all new documents in that workspace", () => {
+      useKnowledgeStore.getState().setWorkspacePath("/workspace");
+      saveWorkspaceRetrievalSettings("/workspace", { preset: "research", topK: 8, scope: "all" });
+
+      // Multiple new files should all get workspace defaults
+      useKnowledgeStore.getState().restoreForDocument("/file-a.md");
+      expect(useKnowledgeStore.getState().settingsSource).toBe("workspace");
+      expect(useKnowledgeStore.getState().activePreset).toBe("research");
+
+      useKnowledgeStore.getState().restoreForDocument("/file-b.md");
+      expect(useKnowledgeStore.getState().settingsSource).toBe("workspace");
+      expect(useKnowledgeStore.getState().activePreset).toBe("research");
+
+      useKnowledgeStore.getState().restoreForDocument("/file-c.md");
+      expect(useKnowledgeStore.getState().settingsSource).toBe("workspace");
+      expect(useKnowledgeStore.getState().activePreset).toBe("research");
     });
   });
 });

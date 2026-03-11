@@ -16,7 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
-import { PRESET_IDS, RETRIEVAL_PRESETS } from "../../lib/retrieval-presets";
+import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
 import { useFilesStore } from "../../stores/files";
 import { type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
@@ -41,6 +41,9 @@ export function KnowledgePanel() {
     setRetrievalScope,
     activePreset,
     setPreset,
+    settingsSource,
+    saveAsWorkspaceDefault,
+    _workspacePath,
     viewedChunk,
     viewChunkLoading,
     viewChunk,
@@ -150,6 +153,7 @@ export function KnowledgePanel() {
               <span className="text-xs text-text-tertiary uppercase tracking-wider">
                 Retrieval Settings
               </span>
+              <SettingsSourceBadge source={settingsSource} />
               {activeFilePath && (
                 <span className="text-[10px] text-text-tertiary truncate max-w-[100px]" title={activeFilePath}>
                   — {activeFilePath.split("/").pop()}
@@ -240,6 +244,18 @@ export function KnowledgePanel() {
               </p>
             )}
           </div>
+
+          {/* Save as workspace default */}
+          {_workspacePath && (
+            <button
+              type="button"
+              onClick={saveAsWorkspaceDefault}
+              className="w-full text-[11px] px-2 py-1 rounded border border-border text-text-tertiary hover:bg-surface-3 hover:text-text-secondary transition-colors"
+              title="Save current settings as the default for this workspace"
+            >
+              Save as workspace default
+            </button>
+          )}
         </div>
       )}
 
@@ -577,6 +593,38 @@ function ChunkViewer() {
         </button>
       </div>
     </div>
+  );
+}
+
+const SOURCE_BADGE_STYLES: Record<RetrievalSettingsSource, string> = {
+  doc: "bg-blue-500/15 text-blue-400",
+  workspace: "bg-emerald-500/15 text-emerald-400",
+  global: "bg-surface-3 text-text-tertiary",
+};
+
+const SOURCE_BADGE_LABELS: Record<RetrievalSettingsSource, string> = {
+  doc: "doc",
+  workspace: "workspace",
+  global: "global",
+};
+
+const SOURCE_BADGE_TITLES: Record<RetrievalSettingsSource, string> = {
+  doc: "Settings saved for this document",
+  workspace: "Using workspace default settings",
+  global: "Using global default settings",
+};
+
+function SettingsSourceBadge({ source }: { source: RetrievalSettingsSource }) {
+  return (
+    <span
+      className={cn(
+        "text-[10px] px-1.5 py-0.5 rounded font-medium",
+        SOURCE_BADGE_STYLES[source],
+      )}
+      title={SOURCE_BADGE_TITLES[source]}
+    >
+      {SOURCE_BADGE_LABELS[source]}
+    </span>
   );
 }
 

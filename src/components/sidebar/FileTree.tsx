@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
 import { openFolderDialog, setWorkspacePath } from "../../lib/tauri";
 import { useFilesStore } from "../../stores/files";
+import { useKnowledgeStore } from "../../stores/knowledge";
 
 export function FileTree() {
   const files = useFilesStore((s) => s.files);
@@ -28,6 +29,7 @@ export function FileTree() {
     if (path) {
       await setWorkspacePath(path);
       await loadWorkspace();
+      useKnowledgeStore.getState().setWorkspacePath(path);
     }
   };
 

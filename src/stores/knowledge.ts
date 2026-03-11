@@ -2,12 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import {
   type RetrievalPresetId,
+  type RetrievalSettingsSource,
   RETRIEVAL_PRESETS,
   detectMatchingPreset,
-  loadDocRetrievalSettings,
   loadPresetFromStorage,
+  resolveRetrievalSettings,
   saveDocRetrievalSettings,
   savePresetToStorage,
+  saveWorkspaceRetrievalSettings,
 } from "../lib/retrieval-presets";
 import { toast } from "./toast";
 
@@ -64,8 +66,16 @@ interface KnowledgeState {
 
   /** File path whose retrieval settings are currently active (null = global/untitled). */
   _activeDocPath: string | null;
+  /** Workspace path used for workspace-level retrieval defaults. */
+  _workspacePath: string | null;
+  /** Source that provided the current retrieval settings ("doc" | "workspace" | "global"). */
+  settingsSource: RetrievalSettingsSource;
+  /** Update the workspace path (called when workspace changes). */
+  setWorkspacePath: (path: string | null) => void;
   /** Restore retrieval settings for a document (called on file switch). */
   restoreForDocument: (filePath: string | null) => void;
+  /** Save current settings as workspace defaults. */
+  saveAsWorkspaceDefault: () => void;
 
   /** Compute the scope_doc_ids to send to the backend based on current settings. */
   getScopeDocIds: () => number[] | undefined;
@@ -113,6 +123,19 @@ function _persistSettings(state: {
   }
 }
 
+/** Build the settings payload from current state. */
+function _currentSettings(state: {
+  activePreset: RetrievalPresetId | null;
+  retrievalTopK: number;
+  retrievalScope: RetrievalScope;
+}) {
+  return {
+    preset: state.activePreset,
+    topK: state.retrievalTopK,
+    scope: state.retrievalScope,
+  };
+}
+
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   documents: [],
   isIngesting: false,
@@ -123,6 +146,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   retrievalScope: (_initialConfig?.scope ?? "all") as RetrievalScope,
   activePreset: _initialPreset,
   _activeDocPath: null,
+  _workspacePath: null,
+  settingsSource: "global" as RetrievalSettingsSource,
   viewedChunk: null,
   viewChunkLoading: false,
   viewedChunkQuery: null,
@@ -131,43 +156,44 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   setRetrievalTopK: (topK) => {
     const clamped = Math.max(1, Math.min(10, topK));
     const newPreset = detectMatchingPreset(clamped, get().retrievalScope);
-    set({ retrievalTopK: clamped, activePreset: newPreset });
+    const source = get()._activeDocPath ? "doc" as RetrievalSettingsSource : get().settingsSource;
+    set({ retrievalTopK: clamped, activePreset: newPreset, settingsSource: source });
     _persistSettings(get());
   },
   setRetrievalScope: (scope) => {
     const newPreset = detectMatchingPreset(get().retrievalTopK, scope);
-    set({ retrievalScope: scope, activePreset: newPreset });
+    const source = get()._activeDocPath ? "doc" as RetrievalSettingsSource : get().settingsSource;
+    set({ retrievalScope: scope, activePreset: newPreset, settingsSource: source });
     _persistSettings(get());
   },
 
   setPreset: (id) => {
     const preset = RETRIEVAL_PRESETS[id];
-    set({ activePreset: id, retrievalTopK: preset.topK, retrievalScope: preset.scope });
+    const source = get()._activeDocPath ? "doc" as RetrievalSettingsSource : get().settingsSource;
+    set({ activePreset: id, retrievalTopK: preset.topK, retrievalScope: preset.scope, settingsSource: source });
     _persistSettings(get());
   },
 
+  setWorkspacePath: (path) => {
+    set({ _workspacePath: path });
+  },
+
   restoreForDocument: (filePath) => {
-    if (filePath) {
-      const docSettings = loadDocRetrievalSettings(filePath);
-      if (docSettings) {
-        set({
-          _activeDocPath: filePath,
-          activePreset: docSettings.preset,
-          retrievalTopK: docSettings.topK,
-          retrievalScope: docSettings.scope,
-        });
-        return;
-      }
-    }
-    // No per-doc settings or no file — fall back to global defaults
-    const globalPreset = loadPresetFromStorage();
-    const config = globalPreset ? RETRIEVAL_PRESETS[globalPreset] : null;
+    const workspacePath = get()._workspacePath;
+    const { settings, source } = resolveRetrievalSettings(filePath, workspacePath);
     set({
       _activeDocPath: filePath,
-      activePreset: globalPreset,
-      retrievalTopK: config?.topK ?? 5,
-      retrievalScope: (config?.scope ?? "all") as RetrievalScope,
+      activePreset: settings.preset,
+      retrievalTopK: settings.topK,
+      retrievalScope: settings.scope as RetrievalScope,
+      settingsSource: source,
     });
+  },
+
+  saveAsWorkspaceDefault: () => {
+    const { _workspacePath } = get();
+    if (!_workspacePath) return;
+    saveWorkspaceRetrievalSettings(_workspacePath, _currentSettings(get()));
   },
 
   getScopeDocIds: () => {

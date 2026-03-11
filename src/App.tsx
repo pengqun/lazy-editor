@@ -16,6 +16,7 @@ import { checkForAppUpdate } from "./lib/updater";
 import { useAiStore } from "./stores/ai";
 import { useEditorStore } from "./stores/editor";
 import { useFilesStore } from "./stores/files";
+import { useKnowledgeStore } from "./stores/knowledge";
 import { useRecoveryStore } from "./stores/recovery";
 import { toast } from "./stores/toast";
 
@@ -85,6 +86,8 @@ export default function App() {
       void checkForAppUpdate();
 
       const ws = useFilesStore.getState().workspacePath;
+      // Sync workspace path to knowledge store for workspace-level retrieval defaults
+      useKnowledgeStore.getState().setWorkspacePath(ws);
       const { claudeApiKey, openaiApiKey, provider } = useAiStore.getState().settings;
       const hasApiKey =
         provider === "ollama" ||
@@ -206,6 +209,7 @@ export default function App() {
         if (path) {
           await setWorkspacePath(path);
           await useFilesStore.getState().loadWorkspace();
+          useKnowledgeStore.getState().setWorkspacePath(path);
           toast.success("Workspace opened");
         }
       });
@@ -251,6 +255,7 @@ export default function App() {
     if (path) {
       await setWorkspacePath(path);
       await useFilesStore.getState().loadWorkspace();
+      useKnowledgeStore.getState().setWorkspacePath(path);
       toast.success("Workspace opened");
     }
   };
