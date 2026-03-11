@@ -83,11 +83,53 @@ export const CITATION_TEMPLATES: Record<CitationTemplateId, CitationTemplate> = 
 export const TEMPLATE_IDS: CitationTemplateId[] = ["compact", "academic"];
 
 // ---------------------------------------------------------------------------
+// Reference profile types
+// ---------------------------------------------------------------------------
+
+export interface ReferenceProfile {
+  id: string;
+  name: string;
+  templateId: CitationTemplateId;
+  fields: CitationFieldOptions;
+  isBuiltin: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Built-in profiles
+// ---------------------------------------------------------------------------
+
+export const BUILTIN_PROFILES: ReferenceProfile[] = [
+  {
+    id: "builtin:compact-default",
+    name: "Compact Default",
+    templateId: "compact",
+    fields: { showRelevance: true, showChunkLabel: true },
+    isBuiltin: true,
+  },
+  {
+    id: "builtin:academic-full",
+    name: "Academic Full",
+    templateId: "academic",
+    fields: { showRelevance: true, showChunkLabel: true },
+    isBuiltin: true,
+  },
+  {
+    id: "builtin:academic-minimal",
+    name: "Academic Minimal",
+    templateId: "academic",
+    fields: { showRelevance: false, showChunkLabel: false },
+    isBuiltin: true,
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
 const TEMPLATE_STORAGE_KEY = "lazy-editor:citation-template";
 const FIELDS_STORAGE_KEY = "lazy-editor:citation-fields";
+const PROFILES_STORAGE_KEY = "lazy-editor:reference-profiles";
+const ACTIVE_PROFILE_STORAGE_KEY = "lazy-editor:active-profile";
 
 export function loadLastTemplate(): CitationTemplateId {
   try {
@@ -129,6 +171,157 @@ export function saveFieldOptions(opts: CitationFieldOptions): void {
   } catch {
     // localStorage full or disabled — silently skip
   }
+}
+
+// ---------------------------------------------------------------------------
+// Profile persistence helpers
+// ---------------------------------------------------------------------------
+
+/** Load custom (user-created) profiles from localStorage. */
+export function loadCustomProfiles(): ReferenceProfile[] {
+  try {
+    const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (p: unknown): p is ReferenceProfile =>
+            typeof p === "object" &&
+            p !== null &&
+            typeof (p as ReferenceProfile).id === "string" &&
+            typeof (p as ReferenceProfile).name === "string" &&
+            typeof (p as ReferenceProfile).templateId === "string" &&
+            ((p as ReferenceProfile).templateId === "compact" ||
+              (p as ReferenceProfile).templateId === "academic") &&
+            typeof (p as ReferenceProfile).fields === "object" &&
+            (p as ReferenceProfile).fields !== null &&
+            typeof (p as ReferenceProfile).fields.showRelevance === "boolean" &&
+            typeof (p as ReferenceProfile).fields.showChunkLabel === "boolean",
+        ).map((p) => ({ ...p, isBuiltin: false }));
+      }
+    }
+  } catch {
+    // localStorage unavailable or corrupted JSON
+  }
+  return [];
+}
+
+/** Return all profiles: built-ins first, then custom. */
+export function listProfiles(): ReferenceProfile[] {
+  return [...BUILTIN_PROFILES, ...loadCustomProfiles()];
+}
+
+/** Find a profile by ID across built-in and custom profiles. */
+export function getProfileById(id: string): ReferenceProfile | undefined {
+  return listProfiles().find((p) => p.id === id);
+}
+
+/** Save a new custom profile. Returns the created profile. */
+export function saveCustomProfile(
+  name: string,
+  templateId: CitationTemplateId,
+  fields: CitationFieldOptions,
+): ReferenceProfile {
+  const id = `custom:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const profile: ReferenceProfile = {
+    id,
+    name,
+    templateId,
+    fields: { ...fields },
+    isBuiltin: false,
+  };
+  const existing = loadCustomProfiles();
+  existing.push(profile);
+  try {
+    localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(existing));
+  } catch {
+    // localStorage full or disabled — silently skip
+  }
+  return profile;
+}
+
+/** Delete a custom profile by ID. Returns true if the profile was found and deleted. */
+export function deleteCustomProfile(id: string): boolean {
+  // Prevent deletion of built-in profiles
+  if (BUILTIN_PROFILES.some((p) => p.id === id)) return false;
+  const existing = loadCustomProfiles();
+  const filtered = existing.filter((p) => p.id !== id);
+  if (filtered.length === existing.length) return false;
+  try {
+    localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(filtered));
+  } catch {
+    // localStorage full or disabled — silently skip
+  }
+  return true;
+}
+
+/** Load the active profile ID from localStorage. Returns null if none set. */
+export function loadActiveProfileId(): string | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_PROFILE_STORAGE_KEY);
+    if (raw && typeof raw === "string") return raw;
+  } catch {
+    // localStorage unavailable
+  }
+  return null;
+}
+
+/** Save the active profile ID to localStorage. */
+export function saveActiveProfileId(id: string | null): void {
+  try {
+    if (id === null) {
+      localStorage.removeItem(ACTIVE_PROFILE_STORAGE_KEY);
+    } else {
+      localStorage.setItem(ACTIVE_PROFILE_STORAGE_KEY, id);
+    }
+  } catch {
+    // localStorage full or disabled — silently skip
+  }
+}
+
+/**
+ * Load citation settings, using the active profile if one is set,
+ * otherwise falling back to legacy per-field settings for backward
+ * compatibility. Returns the resolved template ID, field options,
+ * and the active profile ID (if any).
+ */
+export function loadCitationSettings(): {
+  templateId: CitationTemplateId;
+  fields: CitationFieldOptions;
+  activeProfileId: string | null;
+} {
+  const profileId = loadActiveProfileId();
+  if (profileId) {
+    const profile = getProfileById(profileId);
+    if (profile) {
+      return {
+        templateId: profile.templateId,
+        fields: { ...profile.fields },
+        activeProfileId: profile.id,
+      };
+    }
+  }
+  // Fallback to legacy settings for backward compatibility
+  return {
+    templateId: loadLastTemplate(),
+    fields: loadFieldOptions(),
+    activeProfileId: null,
+  };
+}
+
+/**
+ * Save citation settings. If a profile ID is provided, persist it as the
+ * active profile. Also mirrors the template/field values to legacy keys
+ * so older reads still work.
+ */
+export function saveCitationSettings(
+  templateId: CitationTemplateId,
+  fields: CitationFieldOptions,
+  profileId: string | null = null,
+): void {
+  saveLastTemplate(templateId);
+  saveFieldOptions(fields);
+  saveActiveProfileId(profileId);
 }
 
 // ---------------------------------------------------------------------------

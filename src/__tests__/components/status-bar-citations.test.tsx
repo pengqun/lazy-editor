@@ -43,13 +43,15 @@ describe("StatusBar citation controls", () => {
     const controls = screen.getByRole("group", { name: "Citation reference controls" });
     const scoped = within(controls);
 
+    const profileSelect = scoped.getByRole("combobox", { name: "Reference profile" });
     const styleSelect = scoped.getByRole("combobox", { name: "Citation reference style" });
     const chunkToggle = scoped.getByRole("button", { name: "Chunk" });
     const relevanceToggle = scoped.getByRole("button", { name: "Relevance" });
     const insertButton = scoped.getByRole("button", { name: "Insert refs" });
     const copyButton = scoped.getByRole("button", { name: "Copy references" });
 
-    expect(scoped.getByText(/select a reference style/i)).toBeTruthy();
+    expect(scoped.getByText(/select a reference profile or style/i)).toBeTruthy();
+    expect(profileSelect.getAttribute("aria-describedby")).toBe("citation-controls-help");
     expect(styleSelect.getAttribute("aria-describedby")).toBe("citation-controls-help");
     expect(chunkToggle.getAttribute("aria-describedby")).toBe("citation-controls-help");
     expect(relevanceToggle.getAttribute("aria-describedby")).toBe("citation-controls-help");
@@ -63,13 +65,17 @@ describe("StatusBar citation controls", () => {
         "select, button, a[href], input, textarea, [tabindex]:not([tabindex='-1'])",
       ),
     );
-    expect(focusables).toEqual([
-      styleSelect,
-      chunkToggle,
-      relevanceToggle,
-      insertButton,
-      copyButton,
-    ]);
+
+    // Profile select, save button, style select, chunk, relevance, insert, copy
+    // (no delete button when no custom profile is active)
+    expect(focusables.length).toBeGreaterThanOrEqual(7);
+    expect(focusables[0]).toBe(profileSelect);
+    // Save profile button is second
+    expect(focusables[2]).toBe(styleSelect);
+    expect(focusables[3]).toBe(chunkToggle);
+    expect(focusables[4]).toBe(relevanceToggle);
+    expect(focusables[5]).toBe(insertButton);
+    expect(focusables[6]).toBe(copyButton);
 
     for (const el of focusables) {
       const tabIndex = el.getAttribute("tabindex");

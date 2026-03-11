@@ -1,16 +1,21 @@
-import { AlertCircle, CheckCircle2, ClipboardList, Copy, Loader2, Target } from "lucide-react";
+import { AlertCircle, CheckCircle2, ClipboardList, Copy, Loader2, Save, Target, Trash2 } from "lucide-react";
 import { memo, useCallback, useMemo, useState } from "react";
 import {
   type CitationFieldOptions,
   type CitationTemplateId,
+  type ReferenceProfile,
   CITATION_TEMPLATES,
   TEMPLATE_IDS,
   buildReferenceHtml,
   copyReferencesToClipboard,
-  loadFieldOptions,
-  loadLastTemplate,
+  deleteCustomProfile,
+  getProfileById,
+  listProfiles,
+  loadCitationSettings,
   saveFieldOptions,
   saveLastTemplate,
+  saveCitationSettings,
+  saveCustomProfile,
 } from "../../lib/citation-notes";
 import { goalLabel, goalProgress, readingTimeMinutes } from "../../lib/writing-metrics";
 import { type AiPhase, useAiStore } from "../../stores/ai";
@@ -127,21 +132,71 @@ const CitationControls = memo(function CitationControls({
   editor,
   citations,
 }: CitationControlsProps) {
-  const [templateId, setTemplateId] = useState<CitationTemplateId>(loadLastTemplate);
-  const [fieldOpts, setFieldOpts] = useState<CitationFieldOptions>(loadFieldOptions);
+  // Load initial settings (profile-aware with backward-compat fallback)
+  const [initialSettings] = useState(() => loadCitationSettings());
+  const [templateId, setTemplateId] = useState<CitationTemplateId>(initialSettings.templateId);
+  const [fieldOpts, setFieldOpts] = useState<CitationFieldOptions>(initialSettings.fields);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(initialSettings.activeProfileId);
+  const [profiles, setProfiles] = useState<ReferenceProfile[]>(listProfiles);
+
+  const refreshProfiles = useCallback(() => setProfiles(listProfiles()), []);
+
+  const handleProfileChange = useCallback((profileId: string) => {
+    if (profileId === "") {
+      // "Manual" mode — clear active profile, keep current template/fields
+      setActiveProfileId(null);
+      saveCitationSettings(templateId, fieldOpts, null);
+      return;
+    }
+    const profile = getProfileById(profileId);
+    if (!profile) return;
+    setActiveProfileId(profile.id);
+    setTemplateId(profile.templateId);
+    setFieldOpts({ ...profile.fields });
+    saveCitationSettings(profile.templateId, profile.fields, profile.id);
+  }, [templateId, fieldOpts]);
 
   const handleTemplateChange = useCallback((id: CitationTemplateId) => {
     setTemplateId(id);
     saveLastTemplate(id);
-  }, []);
+    // Switching template manually clears active profile
+    setActiveProfileId(null);
+    saveCitationSettings(id, fieldOpts, null);
+  }, [fieldOpts]);
 
   const handleFieldToggle = useCallback((key: keyof CitationFieldOptions) => {
     setFieldOpts((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       saveFieldOptions(next);
+      // Toggling a field manually clears active profile
+      setActiveProfileId(null);
+      saveCitationSettings(templateId, next, null);
       return next;
     });
-  }, []);
+  }, [templateId]);
+
+  const handleSaveProfile = useCallback(() => {
+    const name = window.prompt("Profile name:");
+    if (!name || !name.trim()) return;
+    const profile = saveCustomProfile(name.trim(), templateId, fieldOpts);
+    refreshProfiles();
+    setActiveProfileId(profile.id);
+    saveCitationSettings(templateId, fieldOpts, profile.id);
+    toast.success(`Profile "${profile.name}" saved`);
+  }, [templateId, fieldOpts, refreshProfiles]);
+
+  const handleDeleteProfile = useCallback(() => {
+    if (!activeProfileId) return;
+    const profile = getProfileById(activeProfileId);
+    if (!profile || profile.isBuiltin) return;
+    const deleted = deleteCustomProfile(activeProfileId);
+    if (deleted) {
+      refreshProfiles();
+      setActiveProfileId(null);
+      saveCitationSettings(templateId, fieldOpts, null);
+      toast.success(`Profile "${profile.name}" deleted`);
+    }
+  }, [activeProfileId, templateId, fieldOpts, refreshProfiles]);
 
   const handleInsertReferences = useCallback(() => {
     if (!editor || editor.isDestroyed || citations.length === 0) return;
@@ -160,6 +215,9 @@ const CitationControls = memo(function CitationControls({
     if (text) toast.success("References copied to clipboard");
   }, [citations, templateId, fieldOpts]);
 
+  const activeProfile = activeProfileId ? getProfileById(activeProfileId) ?? null : null;
+  const canDeleteProfile = activeProfile !== null && !activeProfile.isBuiltin;
+
   return (
     <div
       role="group"
@@ -167,8 +225,30 @@ const CitationControls = memo(function CitationControls({
       className="flex items-center gap-1"
     >
       <span id="citation-controls-help" className="sr-only">
-        Select a reference style, choose which metadata to include, then insert or copy.
+        Select a reference profile or style, choose which metadata to include, then insert or copy.
       </span>
+      <label
+        htmlFor="citation-profile-select"
+        className="text-[10px] text-text-tertiary whitespace-nowrap"
+      >
+        Profile
+      </label>
+      <select
+        id="citation-profile-select"
+        value={activeProfileId ?? ""}
+        onChange={(e) => handleProfileChange(e.target.value)}
+        aria-label="Citation reference profile"
+        aria-describedby="citation-controls-help"
+        title="Choose reference profile"
+        className="h-5 text-[10px] bg-surface-2 border border-border rounded text-text-secondary px-1 outline-none focus:border-accent"
+      >
+        <option value="">Manual</option>
+        {profiles.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}{p.isBuiltin ? "" : " *"}
+          </option>
+        ))}
+      </select>
       <label
         htmlFor="citation-template-select"
         className="text-[10px] text-text-tertiary whitespace-nowrap"
@@ -190,6 +270,28 @@ const CitationControls = memo(function CitationControls({
           </option>
         ))}
       </select>
+      <button
+        type="button"
+        onClick={handleSaveProfile}
+        aria-label="Save profile"
+        aria-describedby="citation-controls-help"
+        title="Save current settings as a new profile"
+        className="flex items-center gap-0.5 px-1 py-0.5 rounded text-text-secondary hover:text-accent hover:bg-surface-3 transition-colors"
+      >
+        <Save size={11} />
+      </button>
+      <button
+        type="button"
+        onClick={handleDeleteProfile}
+        disabled={!canDeleteProfile}
+        aria-label="Delete profile"
+        aria-describedby="citation-controls-help"
+        title={canDeleteProfile ? `Delete profile "${activeProfile?.name}"` : "Select a custom profile to delete"}
+        className="flex items-center gap-0.5 px-1 py-0.5 rounded text-text-secondary hover:text-red-400 hover:bg-surface-3 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+      >
+        <Trash2 size={11} />
+      </button>
+      <span className="w-px h-3 bg-border mx-0.5" />
       <button
         type="button"
         onClick={() => handleFieldToggle("showChunkLabel")}
