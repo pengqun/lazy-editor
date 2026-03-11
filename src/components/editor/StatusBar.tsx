@@ -167,11 +167,27 @@ export function StatusBar() {
           </div>
 
           {aiPhase === "done" && citations.length > 0 && (
-            <div className="flex items-center gap-1">
+            <div
+              role="group"
+              aria-label="Citation reference controls"
+              className="flex items-center gap-1"
+            >
+              <span id="citation-controls-help" className="sr-only">
+                Select a reference style, choose which metadata to include, then insert or copy.
+              </span>
+              <label
+                htmlFor="citation-template-select"
+                className="text-[10px] text-text-tertiary whitespace-nowrap"
+              >
+                Style
+              </label>
               <select
+                id="citation-template-select"
                 value={templateId}
                 onChange={(e) => handleTemplateChange(e.target.value as CitationTemplateId)}
-                title="Citation template"
+                aria-label="Citation reference style"
+                aria-describedby="citation-controls-help"
+                title="Choose reference style"
                 className="h-5 text-[10px] bg-surface-2 border border-border rounded text-text-secondary px-1 outline-none focus:border-accent"
               >
                 {TEMPLATE_IDS.map((id) => (
@@ -183,7 +199,9 @@ export function StatusBar() {
               <button
                 type="button"
                 onClick={() => handleFieldToggle("showChunkLabel")}
-                title="Toggle chunk label in references"
+                aria-pressed={fieldOpts.showChunkLabel}
+                aria-describedby="citation-controls-help"
+                title="Show chunk label in references"
                 className={`px-1 py-0.5 rounded text-[10px] transition-colors ${fieldOpts.showChunkLabel ? "bg-accent/20 text-accent" : "text-text-tertiary hover:text-text-secondary"}`}
               >
                 Chunk
@@ -191,24 +209,29 @@ export function StatusBar() {
               <button
                 type="button"
                 onClick={() => handleFieldToggle("showRelevance")}
-                title="Toggle relevance score in references"
+                aria-pressed={fieldOpts.showRelevance}
+                aria-describedby="citation-controls-help"
+                title="Show relevance percentage in references"
                 className={`px-1 py-0.5 rounded text-[10px] transition-colors ${fieldOpts.showRelevance ? "bg-accent/20 text-accent" : "text-text-tertiary hover:text-text-secondary"}`}
               >
-                Rel%
+                Relevance
               </button>
               <button
                 type="button"
                 onClick={handleInsertReferences}
-                title="Insert formatted reference block at end of document"
+                aria-describedby="citation-controls-help"
+                title="Insert reference block at end of document"
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded text-accent hover:bg-surface-3 transition-colors"
               >
                 <ClipboardList size={12} />
-                <span>Insert</span>
+                <span>Insert refs</span>
               </button>
               <button
                 type="button"
                 onClick={handleCopyReferences}
-                title="Copy formatted references to clipboard"
+                aria-label="Copy references"
+                aria-describedby="citation-controls-help"
+                title="Copy references to clipboard"
                 className="flex items-center gap-0.5 px-1 py-0.5 rounded text-text-secondary hover:text-accent hover:bg-surface-3 transition-colors"
               >
                 <Copy size={11} />
