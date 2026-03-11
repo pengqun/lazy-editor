@@ -1,4 +1,5 @@
 import {
+  AlertCircle,
   BookOpen,
   ChevronLeft,
   ChevronRight,
@@ -46,6 +47,7 @@ export function KnowledgePanel() {
     _workspacePath,
     viewedChunk,
     viewChunkLoading,
+    viewChunkError,
     viewChunk,
   } = useKnowledgeStore();
 
@@ -91,7 +93,7 @@ export function KnowledgePanel() {
   const showEmptyState = documents.length === 0 && searchResults.length === 0;
 
   // If viewing a chunk, show the source viewer overlay
-  if (viewedChunk || viewChunkLoading) {
+  if (viewedChunk || viewChunkLoading || viewChunkError) {
     return <ChunkViewer />;
   }
 
@@ -462,13 +464,49 @@ export function KnowledgePanel() {
 
 /** Source chunk viewer — shows full chunk content with prev/next navigation and matched-term highlighting. */
 function ChunkViewer() {
-  const { viewedChunk, viewChunkLoading, viewChunk, closeChunkViewer, viewedChunkQuery, viewedChunkScore } = useKnowledgeStore();
+  const {
+    viewedChunk,
+    viewChunkLoading,
+    viewChunkError,
+    viewChunk,
+    closeChunkViewer,
+    dismissChunkError,
+    viewedChunkQuery,
+    viewedChunkScore,
+  } = useKnowledgeStore();
 
   if (viewChunkLoading) {
     return (
       <div className="flex flex-col h-full items-center justify-center">
         <Loader2 size={16} className="text-accent animate-spin" />
         <span className="text-xs text-text-tertiary mt-2">Loading source...</span>
+      </div>
+    );
+  }
+
+  if (viewChunkError) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="h-10 flex items-center gap-2 px-3 border-b border-border">
+          <span className="text-xs font-medium text-text-secondary truncate flex-1">
+            Source Viewer
+          </span>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-lg border border-border bg-surface-1 p-4 text-center">
+            <div className="mx-auto mb-2 w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center">
+              <AlertCircle size={16} className="text-amber-400" />
+            </div>
+            <p className="text-xs text-text-secondary leading-relaxed">{viewChunkError}</p>
+            <button
+              type="button"
+              onClick={dismissChunkError}
+              className="mt-3 text-xs px-2.5 py-1 rounded border border-border text-text-secondary hover:bg-surface-2 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

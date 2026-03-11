@@ -83,6 +83,7 @@ interface KnowledgeState {
   /** Currently viewed source chunk (for source recall from citations). */
   viewedChunk: ChunkContext | null;
   viewChunkLoading: boolean;
+  viewChunkError: string | null;
 
   /** Query text that led to this chunk being cited (for matched-term highlighting). */
   viewedChunkQuery: string | null;
@@ -100,6 +101,7 @@ interface KnowledgeState {
   /** Fetch and display a specific chunk for source recall. Optional query/score for highlighting. */
   viewChunk: (chunkId: number, query?: string, score?: number) => Promise<void>;
   closeChunkViewer: () => void;
+  dismissChunkError: () => void;
 }
 
 // Initialise from persisted preset (if any), falling back to defaults
@@ -150,6 +152,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   settingsSource: "global" as RetrievalSettingsSource,
   viewedChunk: null,
   viewChunkLoading: false,
+  viewChunkError: null,
   viewedChunkQuery: null,
   viewedChunkScore: null,
 
@@ -281,23 +284,34 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   },
 
   viewChunk: async (chunkId, query, score) => {
-    set({ viewChunkLoading: true });
+    set({ viewChunkLoading: true, viewChunkError: null });
     try {
       const chunk = await invoke<ChunkContext>("get_kb_chunk", { chunkId });
       set({
         viewedChunk: chunk,
         viewChunkLoading: false,
+        viewChunkError: null,
         // Preserve query/score context when navigating between chunks (pass undefined to keep previous)
         ...(query !== undefined ? { viewedChunkQuery: query || null } : {}),
         ...(score !== undefined ? { viewedChunkScore: score } : {}),
       });
     } catch (err) {
       console.error("Failed to load chunk:", err);
-      toast.error("Failed to load source chunk");
-      set({ viewChunkLoading: false });
+      set({
+        viewedChunk: null,
+        viewChunkLoading: false,
+        viewChunkError: "Source not found — the document may have been removed from the knowledge base.",
+      });
     }
   },
 
   closeChunkViewer: () =>
-    set({ viewedChunk: null, viewedChunkQuery: null, viewedChunkScore: null }),
+    set({
+      viewedChunk: null,
+      viewChunkError: null,
+      viewedChunkQuery: null,
+      viewedChunkScore: null,
+    }),
+
+  dismissChunkError: () => set({ viewChunkError: null }),
 }));

@@ -27,6 +27,7 @@ function resetStore() {
     viewedChunkQuery: null,
     viewedChunkScore: null,
     viewChunkLoading: false,
+    viewChunkError: null,
   });
 }
 
@@ -151,6 +152,7 @@ describe("useKnowledgeStore", () => {
       expect(state.viewedChunk).toEqual(mockChunk);
       expect(state.viewedChunkQuery).toBe("testing concepts");
       expect(state.viewedChunkScore).toBe(0.87);
+      expect(state.viewChunkError).toBeNull();
     });
 
     it("sets query/score to null when empty string query passed", async () => {
@@ -206,6 +208,7 @@ describe("useKnowledgeStore", () => {
           prevChunk: null,
           nextChunk: null,
         },
+        viewChunkError: "Source not found — the document may have been removed from the knowledge base.",
         viewedChunkQuery: "some query",
         viewedChunkScore: 0.75,
       });
@@ -214,8 +217,44 @@ describe("useKnowledgeStore", () => {
 
       const state = useKnowledgeStore.getState();
       expect(state.viewedChunk).toBeNull();
+      expect(state.viewChunkError).toBeNull();
       expect(state.viewedChunkQuery).toBeNull();
       expect(state.viewedChunkScore).toBeNull();
+    });
+
+    it("sets viewChunkError and clears loading when chunk lookup fails", async () => {
+      mockedInvoke.mockRejectedValueOnce(new Error("Query returned no rows"));
+
+      await useKnowledgeStore.getState().viewChunk(999);
+
+      const state = useKnowledgeStore.getState();
+      expect(state.viewChunkLoading).toBe(false);
+      expect(state.viewedChunk).toBeNull();
+      expect(state.viewChunkError).toBe(
+        "Source not found — the document may have been removed from the knowledge base.",
+      );
+    });
+
+    it("dismissChunkError clears only the chunk error state", () => {
+      useKnowledgeStore.setState({
+        viewedChunk: {
+          chunkContent: "c",
+          documentTitle: "D",
+          documentId: 1,
+          chunkId: 1,
+          chunkIndex: 0,
+          totalChunks: 1,
+          prevChunk: null,
+          nextChunk: null,
+        },
+        viewChunkError: "Source not found — the document may have been removed from the knowledge base.",
+      });
+
+      useKnowledgeStore.getState().dismissChunkError();
+      const state = useKnowledgeStore.getState();
+
+      expect(state.viewChunkError).toBeNull();
+      expect(state.viewedChunk).not.toBeNull();
     });
   });
 

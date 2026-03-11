@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { KnowledgePanel } from "@/components/sidebar/KnowledgePanel";
+import { createElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CITATION_LINK_SELECTOR,
   buildReferenceHtml,
@@ -10,6 +12,7 @@ import { navigateToCitationSource } from "@/hooks/useAI";
 import { useEditorStore } from "@/stores/editor";
 import { useKnowledgeStore } from "@/stores/knowledge";
 import { invoke } from "@tauri-apps/api/core";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -48,6 +51,7 @@ function resetStores() {
     viewedChunkQuery: null,
     viewedChunkScore: null,
     viewChunkLoading: false,
+    viewChunkError: null,
   });
 }
 
@@ -293,6 +297,87 @@ describe("navigateToCitationSource", () => {
       expect(useKnowledgeStore.getState().viewedChunk).toEqual(mockChunk);
     });
   });
+
+  it("sets viewChunkError when the source chunk no longer exists", async () => {
+    mockedInvoke.mockRejectedValueOnce(new Error("Failed to get chunk: Query returned no rows"));
+
+    navigateToCitationSource(9999, "stale query", 0.41);
+
+    await vi.waitFor(() => {
+      expect(useKnowledgeStore.getState().viewChunkLoading).toBe(false);
+    });
+
+    const state = useKnowledgeStore.getState();
+    expect(state.viewedChunk).toBeNull();
+    expect(state.viewChunkError).toBe(
+      "Source not found — the document may have been removed from the knowledge base.",
+    );
+    expect(useEditorStore.getState().rightPanel).toBe("knowledge");
+  });
+
+  it("stale citation deep-link still attempts navigation and stores error when missing", async () => {
+    const html = buildReferenceHtml([makeCitation({ chunkId: 321, documentId: 99 })], "compact", undefined, "old query");
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const link = container.querySelector("a.citation-link") as HTMLAnchorElement;
+    const chunkId = Number(link.dataset.chunkId);
+
+    mockedInvoke.mockRejectedValueOnce(new Error("missing chunk"));
+
+    navigateToCitationSource(chunkId, "old query", Number(link.dataset.score));
+
+    await vi.waitFor(() => {
+      expect(useKnowledgeStore.getState().viewChunkLoading).toBe(false);
+    });
+
+    expect(mockedInvoke).toHaveBeenCalledWith("get_kb_chunk", { chunkId: 321 });
+    expect(useKnowledgeStore.getState().viewChunkError).toBe(
+      "Source not found — the document may have been removed from the knowledge base.",
+    );
+  });
+});
+
+describe("ChunkViewer error UI", () => {
+  beforeEach(() => {
+    resetStores();
+    vi.clearAllMocks();
+    mockedInvoke.mockResolvedValue([]);
+  });
+
+  it("shows friendly missing-source message in ChunkViewer area", async () => {
+    useKnowledgeStore.setState({
+      viewChunkError: "Source not found — the document may have been removed from the knowledge base.",
+    });
+
+    render(createElement(KnowledgePanel));
+
+    expect(
+      await screen.findByText("Source not found — the document may have been removed from the knowledge base."),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Dismiss" })).toBeTruthy();
+  });
+
+  it("dismiss clears error and returns to normal knowledge panel view", async () => {
+    useKnowledgeStore.setState({
+      viewChunkError: "Source not found — the document may have been removed from the knowledge base.",
+      documents: [
+        {
+          id: 1,
+          title: "Doc 1",
+          sourceType: "paste",
+          sourcePath: null,
+          createdAt: "2024-01-01",
+          chunkCount: 1,
+        },
+      ],
+    });
+
+    render(createElement(KnowledgePanel));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(useKnowledgeStore.getState().viewChunkError).toBeNull();
+    expect(await screen.findByText("Knowledge Base")).toBeTruthy();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -431,4 +516,8 @@ describe("document switch does not break citation deep-links", () => {
     expect(state.viewedChunkQuery).toBe("query B");
     expect(state.viewedChunkScore).toBe(0.75);
   });
+});
+
+afterEach(() => {
+  cleanup();
 });

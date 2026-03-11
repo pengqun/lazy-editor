@@ -846,4 +846,15 @@ mod tests {
         assert!(ctx.prev_chunk.is_none());
         assert!(ctx.next_chunk.is_none());
     }
+
+    #[test]
+    fn get_chunk_with_context_returns_error_for_missing_chunk_id() {
+        let db = test_db();
+        let err = db.get_chunk_with_context(999_999).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("no rows") || msg.contains("Query returned no rows"),
+            "unexpected error message: {msg}"
+        );
+    }
 }
