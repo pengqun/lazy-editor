@@ -1,6 +1,5 @@
 import {
   MATCH_LIMIT,
-  YIELD_BATCH_SIZE,
   adaptiveDebounce,
   estimateDocSize,
   findMatches,
@@ -8,6 +7,7 @@ import {
   wrapIndex,
   LARGE_DOC_THRESHOLD,
   VERY_LARGE_DOC_THRESHOLD,
+  YIELD_BATCH_SIZE,
 } from "@/lib/find-replace";
 import { describe, expect, it, vi } from "vitest";
 
@@ -25,6 +25,18 @@ function mockDoc(textNodes: { text: string; pos: number }[]) {
     },
   // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
+}
+
+function mockLargeDoc(nodeCount = YIELD_BATCH_SIZE * 3, everyNthMatch = 10) {
+  const filler = "x".repeat(60);
+  const textNodes: { text: string; pos: number }[] = [];
+  let pos = 0;
+  for (let i = 0; i < nodeCount; i++) {
+    const text = i % everyNthMatch === 0 ? `needle ${filler}` : `filler ${filler}`;
+    textNodes.push({ text, pos });
+    pos += text.length + 1;
+  }
+  return mockDoc(textNodes);
 }
 
 describe("findMatches", () => {
@@ -189,6 +201,94 @@ describe("findMatches", () => {
   });
 });
 
+describe("findMatchesAsync", () => {
+  it("matches sync behavior for small docs", async () => {
+    const doc = mockDoc([
+      { text: "needle here", pos: 0 },
+      { text: "another needle", pos: 20 },
+    ]);
+    const sync = findMatches(doc, "needle", false);
+    const asyncResult = await findMatchesAsync(
+      doc,
+      "needle",
+      false,
+      new AbortController().signal,
+    );
+    expect(asyncResult).toEqual({ ...sync, cancelled: false });
+  });
+
+  it("returns empty result for empty query", async () => {
+    const doc = mockDoc([{ text: "hello world", pos: 0 }]);
+    const result = await findMatchesAsync(
+      doc,
+      "",
+      false,
+      new AbortController().signal,
+    );
+    expect(result).toEqual({ matches: [], truncated: false, cancelled: false });
+  });
+
+  it("returns cancelled immediately when signal is pre-aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const doc = mockDoc([{ text: "needle", pos: 0 }]);
+    const result = await findMatchesAsync(doc, "needle", false, controller.signal);
+    expect(result).toEqual({ matches: [], truncated: false, cancelled: true });
+  });
+
+  it("reports progress incrementally for large docs", async () => {
+    const doc = mockLargeDoc();
+    const progressCounts: number[] = [];
+    const result = await findMatchesAsync(
+      doc,
+      "needle",
+      false,
+      new AbortController().signal,
+      {
+        onProgress: ({ matches }) => {
+          progressCounts.push(matches.length);
+        },
+      },
+    );
+
+    expect(progressCounts.length).toBeGreaterThan(1);
+    expect(progressCounts[progressCounts.length - 1]).toBe(result.matches.length);
+    expect(progressCounts[0]).toBeGreaterThan(0);
+    expect(result.cancelled).toBe(false);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("cancels mid-search and returns partial results", async () => {
+    const doc = mockLargeDoc();
+    const controller = new AbortController();
+    const fullResult = findMatches(doc, "needle", false);
+    let progressCalls = 0;
+
+    const result = await findMatchesAsync(doc, "needle", false, controller.signal, {
+      onProgress: () => {
+        progressCalls += 1;
+        if (progressCalls === 1) controller.abort();
+      },
+    });
+
+    expect(progressCalls).toBeGreaterThan(0);
+    expect(result.cancelled).toBe(true);
+    expect(result.truncated).toBe(false);
+    expect(result.matches.length).toBeLessThan(fullResult.matches.length);
+  });
+
+  it("skips cooperative yielding for small docs", async () => {
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const doc = mockDoc([{ text: "needle ".repeat(20), pos: 0 }]);
+    expect(estimateDocSize(doc)).toBeLessThan(LARGE_DOC_THRESHOLD);
+
+    await findMatchesAsync(doc, "needle", false, new AbortController().signal);
+
+    expect(timeoutSpy).not.toHaveBeenCalled();
+    timeoutSpy.mockRestore();
+  });
+});
+
 describe("wrapIndex", () => {
   it("returns 0 for empty length", () => {
     expect(wrapIndex(5, 0)).toBe(0);
@@ -240,90 +340,5 @@ describe("adaptiveDebounce", () => {
   it("returns 500 for very large documents", () => {
     expect(adaptiveDebounce(VERY_LARGE_DOC_THRESHOLD)).toBe(500);
     expect(adaptiveDebounce(1_000_000)).toBe(500);
-  });
-});
-
-// Helper to build a large mock doc that exceeds LARGE_DOC_THRESHOLD.
-// Uses one match per node ("needle" prefix) to avoid hitting MATCH_LIMIT
-// before the yield point, allowing cancellation and progress tests to work.
-function mockLargeDoc(nodeCount: number, charsPerNode: number) {
-  const text = "needle" + "a".repeat(Math.max(0, charsPerNode - 6));
-  const nodes = Array.from({ length: nodeCount }, (_, i) => ({
-    text,
-    pos: i * (charsPerNode + 2),
-  }));
-  return mockDoc(nodes);
-}
-
-describe("findMatchesAsync", () => {
-  it("returns same results as sync findMatches for small docs", async () => {
-    const doc = mockDoc([{ text: "hello world hello", pos: 1 }]);
-    const syncResult = findMatches(doc, "hello", false);
-    const asyncResult = await findMatchesAsync(doc, "hello", false);
-    expect(asyncResult.matches).toEqual(syncResult.matches);
-    expect(asyncResult.truncated).toBe(syncResult.truncated);
-    expect(asyncResult.cancelled).toBe(false);
-  });
-
-  it("returns empty for empty query", async () => {
-    const doc = mockDoc([{ text: "hello", pos: 0 }]);
-    const result = await findMatchesAsync(doc, "", false);
-    expect(result.matches).toEqual([]);
-    expect(result.cancelled).toBe(false);
-  });
-
-  it("cancels mid-search when signal is aborted", async () => {
-    // Create a large doc to trigger async path (1 match per node = won't hit MATCH_LIMIT)
-    const doc = mockLargeDoc(YIELD_BATCH_SIZE + 100, 200);
-    const controller = new AbortController();
-
-    // Abort after yielding starts (very short delay)
-    setTimeout(() => controller.abort(), 1);
-
-    const result = await findMatchesAsync(doc, "needle", false, MATCH_LIMIT, controller.signal);
-    expect(result.cancelled).toBe(true);
-    // Should have partial results (some but not all)
-    expect(result.matches.length).toBeGreaterThan(0);
-  });
-
-  it("calls onProgress during large doc search", async () => {
-    const doc = mockLargeDoc(YIELD_BATCH_SIZE * 2, 200);
-    const progressCalls: number[] = [];
-
-    await findMatchesAsync(doc, "needle", false, MATCH_LIMIT, undefined, (count) => {
-      progressCalls.push(count);
-    });
-
-    // Should have been called at least once (after first batch)
-    expect(progressCalls.length).toBeGreaterThanOrEqual(1);
-    // Each progress call should have an increasing count
-    for (let i = 1; i < progressCalls.length; i++) {
-      expect(progressCalls[i]).toBeGreaterThanOrEqual(progressCalls[i - 1]);
-    }
-  });
-
-  it("skips yielding for small docs (< LARGE_DOC_THRESHOLD)", async () => {
-    const smallDoc = mockDoc([{ text: "hello", pos: 0 }]);
-    const spy = vi.spyOn(globalThis, "setTimeout");
-    const callsBefore = spy.mock.calls.length;
-
-    await findMatchesAsync(smallDoc, "hello", false);
-
-    // No setTimeout(0) calls for yielding in small doc path
-    const yieldCalls = spy.mock.calls
-      .slice(callsBefore)
-      .filter(([_, ms]) => ms === 0);
-    expect(yieldCalls.length).toBe(0);
-    spy.mockRestore();
-  });
-
-  it("already-aborted signal returns immediately with cancelled", async () => {
-    const doc = mockLargeDoc(YIELD_BATCH_SIZE + 10, 200);
-    const controller = new AbortController();
-    controller.abort(); // Pre-abort
-
-    const result = await findMatchesAsync(doc, "needle", false, MATCH_LIMIT, controller.signal);
-    expect(result.cancelled).toBe(true);
-    expect(result.matches).toEqual([]);
   });
 });

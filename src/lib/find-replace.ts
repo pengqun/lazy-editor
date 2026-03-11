@@ -14,6 +14,7 @@ export const MATCH_LIMIT = 1000;
 /** Document size thresholds (in characters) for adaptive debounce. */
 export const LARGE_DOC_THRESHOLD = 50_000;
 export const VERY_LARGE_DOC_THRESHOLD = 200_000;
+export const YIELD_BATCH_SIZE = 500;
 
 /** Estimate the character count of a ProseMirror document by summing text nodes. */
 export function estimateDocSize(doc: ProseMirrorNode): number {
@@ -39,13 +40,15 @@ export interface FindMatchesResult {
   truncated: boolean;
 }
 
-export interface AsyncFindMatchesResult extends FindMatchesResult {
-  /** True when the search was aborted via AbortSignal before completion. */
+export type AsyncFindMatchesResult = FindMatchesResult & {
   cancelled: boolean;
-}
+};
 
-/** Number of text nodes to process before yielding to the event loop. */
-export const YIELD_BATCH_SIZE = 500;
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
 
 /**
  * Find all occurrences of `query` in a ProseMirror document.
@@ -88,78 +91,81 @@ export function findMatches(
   return { matches, truncated };
 }
 
-/** Collect text nodes from a ProseMirror document into an array for batch processing. */
-function collectTextNodes(doc: ProseMirrorNode): { text: string; pos: number }[] {
-  const nodes: { text: string; pos: number }[] = [];
-  doc.descendants((node, pos) => {
-    if (node.isText && node.text) {
-      nodes.push({ text: node.text, pos });
-    }
-  });
-  return nodes;
-}
-
-/**
- * Async, cancellable version of {@link findMatches}.
- *
- * For documents smaller than {@link LARGE_DOC_THRESHOLD}, this runs
- * synchronously (no yielding overhead). For larger documents, it yields
- * to the event loop every {@link YIELD_BATCH_SIZE} text nodes.
- *
- * @param signal - Optional AbortSignal to cancel mid-search.
- * @param onProgress - Optional callback invoked with partial match count during yielding.
- */
 export async function findMatchesAsync(
   doc: ProseMirrorNode,
   query: string,
   caseSensitive: boolean,
-  limit: number = MATCH_LIMIT,
-  signal?: AbortSignal,
-  onProgress?: (count: number) => void,
+  signal: AbortSignal,
+  options?: {
+    limit?: number;
+    onProgress?: (result: FindMatchesResult) => void;
+  },
 ): Promise<AsyncFindMatchesResult> {
+  if (signal.aborted) {
+    return { matches: [], truncated: false, cancelled: true };
+  }
   if (!query) return { matches: [], truncated: false, cancelled: false };
 
-  // For small docs, run synchronously — no yielding overhead
+  const limit = options?.limit ?? MATCH_LIMIT;
+  const onProgress = options?.onProgress;
   const docSize = estimateDocSize(doc);
+
   if (docSize < LARGE_DOC_THRESHOLD) {
     const result = findMatches(doc, query, caseSensitive, limit);
+    onProgress?.(result);
     return { ...result, cancelled: false };
   }
 
-  // Collect text nodes (fast sync pass), then process in batches
-  const textNodes = collectTextNodes(doc);
+  const textNodes: { text: string; pos: number }[] = [];
+  doc.descendants((node, pos) => {
+    if (!node.isText || !node.text) return;
+    textNodes.push({ text: node.text, pos });
+  });
+
   const matches: SearchMatch[] = [];
   const search = caseSensitive ? query : query.toLowerCase();
   let truncated = false;
+  let cancelled = false;
+  let sinceYield = 0;
 
-  for (let i = 0; i < textNodes.length; i++) {
-    if (signal?.aborted) {
-      return { matches, truncated, cancelled: true };
+  for (const textNode of textNodes) {
+    if (signal.aborted) {
+      cancelled = true;
+      break;
     }
 
-    const { text: rawText, pos } = textNodes[i];
-    const text = caseSensitive ? rawText : rawText.toLowerCase();
+    const text = caseSensitive ? textNode.text : textNode.text.toLowerCase();
     let idx = 0;
     while (idx <= text.length - search.length) {
       const found = text.indexOf(search, idx);
       if (found === -1) break;
-      matches.push({ from: pos + found, to: pos + found + search.length });
+      matches.push({
+        from: textNode.pos + found,
+        to: textNode.pos + found + search.length,
+      });
       if (matches.length >= limit) {
         truncated = true;
         break;
       }
       idx = found + 1;
     }
+
     if (truncated) break;
 
-    // Yield every YIELD_BATCH_SIZE nodes
-    if ((i + 1) % YIELD_BATCH_SIZE === 0) {
-      onProgress?.(matches.length);
-      await new Promise((r) => setTimeout(r, 0));
+    sinceYield += 1;
+    if (sinceYield >= YIELD_BATCH_SIZE) {
+      onProgress?.({ matches: [...matches], truncated });
+      await yieldToEventLoop();
+      sinceYield = 0;
+      if (signal.aborted) {
+        cancelled = true;
+        break;
+      }
     }
   }
 
-  return { matches, truncated, cancelled: false };
+  onProgress?.({ matches: [...matches], truncated });
+  return { matches, truncated, cancelled };
 }
 
 /** Wrap an index into [0, length) with modular arithmetic. */
@@ -180,6 +186,14 @@ export interface SearchPluginState {
   /** True when findMatches truncated results at MATCH_LIMIT. */
   truncated: boolean;
   decorations: DecorationSet;
+}
+
+interface SearchPluginMeta {
+  query?: string;
+  caseSensitive?: boolean;
+  currentIndex?: number;
+  matches?: SearchMatch[];
+  truncated?: boolean;
 }
 
 function buildDecorations(
@@ -225,30 +239,33 @@ export const SearchAndReplace = Extension.create({
           },
 
           apply(tr, prev, _oldState, newState): SearchPluginState {
-            const meta: Partial<SearchPluginState> | undefined =
+            const meta: SearchPluginMeta | undefined =
               tr.getMeta(searchPluginKey);
 
             if (meta) {
               const query = meta.query ?? prev.query;
               const caseSensitive = meta.caseSensitive ?? prev.caseSensitive;
               let currentIndex = meta.currentIndex ?? prev.currentIndex;
+              const providedMatches = meta.matches;
 
-              // Pre-computed matches supplied (from async search flow)
-              if (meta.matches !== undefined) {
-                const matches = meta.matches;
+              if (providedMatches !== undefined) {
+                currentIndex = wrapIndex(currentIndex, providedMatches.length);
                 const truncated = meta.truncated ?? false;
-                currentIndex = wrapIndex(currentIndex, matches.length);
                 return {
                   query,
                   caseSensitive,
-                  matches,
+                  matches: providedMatches,
                   currentIndex,
                   truncated,
-                  decorations: buildDecorations(newState.doc, matches, currentIndex),
+                  decorations: buildDecorations(
+                    newState.doc,
+                    providedMatches,
+                    currentIndex,
+                  ),
                 };
               }
 
-              // Query or case-sensitivity changed → recompute matches (sync path)
+              // Query or case-sensitivity changed → recompute matches
               if (
                 query !== prev.query ||
                 caseSensitive !== prev.caseSensitive

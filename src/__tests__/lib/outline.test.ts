@@ -173,6 +173,48 @@ describe("extractHeadings", () => {
   });
 });
 
+describe("extractHeadingsAsync", () => {
+  it("matches sync behavior", async () => {
+    const doc = mockDoc([
+      { type: "heading", attrs: { level: 1 }, textContent: "Title" },
+      { type: "paragraph", textContent: "Body" },
+      { type: "heading", attrs: { level: 2 }, textContent: "Section" },
+    ]);
+    const sync = extractHeadings(doc);
+    const asyncResult = await extractHeadingsAsync(
+      doc,
+      new AbortController().signal,
+    );
+    expect(asyncResult).toEqual({ ...sync, cancelled: false });
+  });
+
+  it("cancels large extraction and returns partial headings", async () => {
+    const nodes: { type: string; attrs?: Record<string, unknown>; textContent: string }[] = [];
+    for (let i = 0; i < 1800; i++) {
+      nodes.push({ type: "paragraph", textContent: `p${i} ${"x".repeat(30)}` });
+      if (i % 10 === 0) {
+        nodes.push({ type: "heading", attrs: { level: 2 }, textContent: `Heading ${i}` });
+      }
+    }
+    const doc = mockDoc(nodes);
+    const full = extractHeadings(doc);
+    const controller = new AbortController();
+    let progressCalls = 0;
+
+    const result = await extractHeadingsAsync(doc, controller.signal, {
+      onProgress: () => {
+        progressCalls += 1;
+        if (progressCalls === 1) controller.abort();
+      },
+    });
+
+    expect(progressCalls).toBeGreaterThan(0);
+    expect(result.cancelled).toBe(true);
+    expect(result.truncated).toBe(false);
+    expect(result.headings.length).toBeLessThan(full.headings.length);
+  });
+});
+
 describe("adaptiveOutlineDebounce", () => {
   it("returns 300 for small heading counts", () => {
     expect(adaptiveOutlineDebounce(0)).toBe(300);
@@ -183,41 +225,5 @@ describe("adaptiveOutlineDebounce", () => {
   it("returns 600 for large heading counts", () => {
     expect(adaptiveOutlineDebounce(OUTLINE_LARGE_THRESHOLD)).toBe(600);
     expect(adaptiveOutlineDebounce(500)).toBe(600);
-  });
-});
-
-// Helper: mock doc with enough text to exceed 50K char threshold
-function mockLargeOutlineDoc(nodeCount: number) {
-  const longText = "x".repeat(200); // 200 chars per node
-  const nodes: { type: string; attrs?: Record<string, unknown>; textContent: string }[] = [];
-  for (let i = 0; i < nodeCount; i++) {
-    nodes.push(
-      { type: "paragraph", textContent: longText },
-      { type: "heading", attrs: { level: 1 }, textContent: `H${i}` },
-    );
-  }
-  return mockDoc(nodes);
-}
-
-describe("extractHeadingsAsync", () => {
-  it("matches sync extractHeadings for small docs", async () => {
-    const doc = mockDoc([
-      { type: "heading", attrs: { level: 1 }, textContent: "Title" },
-      { type: "paragraph", textContent: "body" },
-    ]);
-    const syncResult = extractHeadings(doc);
-    const asyncResult = await extractHeadingsAsync(doc);
-    expect(asyncResult.headings).toEqual(syncResult.headings);
-    expect(asyncResult.cancelled).toBe(false);
-  });
-
-  it("cancels with AbortSignal on large docs", async () => {
-    // Need enough text nodes to exceed 50K chars and trigger yielding
-    const doc = mockLargeOutlineDoc(300); // 300 * 200 = 60K chars
-    const controller = new AbortController();
-    controller.abort(); // Pre-abort
-
-    const result = await extractHeadingsAsync(doc, HEADING_LIMIT, controller.signal);
-    expect(result.cancelled).toBe(true);
   });
 });

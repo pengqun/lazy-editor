@@ -9,7 +9,7 @@ import { cn } from "../../lib/cn";
 import {
   type OutlineHeading,
   adaptiveOutlineDebounce,
-  extractHeadings,
+  extractHeadingsAsync,
 } from "../../lib/outline";
 import { useEditorStore } from "../../stores/editor";
 
@@ -37,6 +37,8 @@ export function OutlinePanel() {
   const [headings, setHeadings] = useState<OutlineHeading[]>([]);
   const [truncated, setTruncated] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
   const debounceMs = useRef(300);
 
   // Virtualisation state
@@ -47,20 +49,29 @@ export function OutlinePanel() {
   useEffect(() => {
     if (!editor) return;
 
+    const runExtract = () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
+
+      void extractHeadingsAsync(editor.state.doc, controller.signal).then((result) => {
+        if (controller.signal.aborted || requestIdRef.current !== requestId) return;
+        setHeadings(result.headings);
+        setTruncated(result.truncated);
+        debounceMs.current = adaptiveOutlineDebounce(result.headings.length);
+      });
+    };
+
     // Immediate extraction on mount / editor change
-    const initial = extractHeadings(editor.state.doc);
-    setHeadings(initial.headings);
-    setTruncated(initial.truncated);
-    debounceMs.current = adaptiveOutlineDebounce(initial.headings.length);
+    runExtract();
 
     const update = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         if (!editor.isDestroyed) {
-          const result = extractHeadings(editor.state.doc);
-          setHeadings(result.headings);
-          setTruncated(result.truncated);
-          debounceMs.current = adaptiveOutlineDebounce(result.headings.length);
+          runExtract();
         }
       }, debounceMs.current);
     };
@@ -69,6 +80,7 @@ export function OutlinePanel() {
     return () => {
       editor.off("update", update);
       if (timerRef.current) clearTimeout(timerRef.current);
+      abortRef.current?.abort();
     };
   }, [editor]);
 

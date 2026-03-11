@@ -16,6 +16,7 @@ import {
   estimateDocSize,
   findMatchesAsync,
   searchPluginKey,
+  type SearchMatch,
 } from "../../lib/find-replace";
 import { useEditorStore } from "../../stores/editor";
 
@@ -34,7 +35,8 @@ export function FindReplaceBar() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchRequestIdRef = useRef(0);
 
   // Focus search input on mount
   useEffect(() => {
@@ -45,109 +47,131 @@ export function FindReplaceBar() {
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      searchAbortRef.current?.abort();
     };
   }, []);
 
-  // Dispatch pre-computed matches to the ProseMirror plugin
+  const syncFromPluginState = useCallback(() => {
+    if (!editor) return;
+    const pluginState = searchPluginKey.getState(editor.view.state);
+    if (!pluginState) return;
+    setMatchCount(pluginState.matches.length);
+    setCurrentIndex(pluginState.currentIndex);
+    setTruncated(pluginState.truncated);
+  }, [editor]);
+
+  // Dispatch pre-computed matches to the ProseMirror plugin.
   const dispatchMatches = useCallback(
-    (q: string, cs: boolean, matches: { from: number; to: number }[], wasTruncated: boolean, idx?: number) => {
-      if (!editor) return;
-      const { view } = editor;
-      const tr = view.state.tr.setMeta(searchPluginKey, {
-        query: q,
-        caseSensitive: cs,
-        matches,
-        truncated: wasTruncated,
-        currentIndex: idx ?? 0,
-      });
-      view.dispatch(tr);
-
-      setMatchCount(matches.length);
-      setCurrentIndex(idx ?? 0);
-      setTruncated(wasTruncated);
-      setSearching(false);
-    },
-    [editor],
-  );
-
-  // Dispatch index-only changes to the plugin (no re-search)
-  const dispatchIndex = useCallback(
-    (q: string, cs: boolean, idx: number) => {
+    (
+      q: string,
+      cs: boolean,
+      matches: SearchMatch[],
+      isTruncated: boolean,
+      idx: number = 0,
+    ) => {
       if (!editor) return;
       const { view } = editor;
       const tr = view.state.tr.setMeta(searchPluginKey, {
         query: q,
         caseSensitive: cs,
         currentIndex: idx,
+        matches,
+        truncated: isTruncated,
       });
       view.dispatch(tr);
-
-      const pluginState = searchPluginKey.getState(view.state);
-      if (pluginState) {
-        setMatchCount(pluginState.matches.length);
-        setCurrentIndex(pluginState.currentIndex);
-        setTruncated(pluginState.truncated);
-      }
+      syncFromPluginState();
     },
-    [editor],
+    [editor, syncFromPluginState],
   );
 
-  // Debounced async search when query or case-sensitivity changes.
-  // Aborts previous in-flight search when query changes.
+  // Dispatch search state to the ProseMirror plugin
+  const dispatchSearch = useCallback(
+    (q: string, cs: boolean, idx?: number) => {
+      if (!editor) return;
+      const { view } = editor;
+      const tr = view.state.tr.setMeta(searchPluginKey, {
+        query: q,
+        caseSensitive: cs,
+        currentIndex: idx ?? 0,
+      });
+      view.dispatch(tr);
+      syncFromPluginState();
+      setSearching(false);
+    },
+    [editor, syncFromPluginState],
+  );
+
+  // Debounced search when query or case-sensitivity changes.
+  // Debounce delay adapts to document size to keep the UI responsive.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = null;
 
-    // Abort previous search
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
-    }
-
+    if (!editor) return;
     if (!query) {
-      // Clear search state
-      if (editor) {
-        const { view } = editor;
-        const tr = view.state.tr.setMeta(searchPluginKey, {
-          query: "",
-          caseSensitive: false,
-          matches: [],
-          truncated: false,
-          currentIndex: 0,
-        });
-        view.dispatch(tr);
-      }
-      setMatchCount(0);
-      setCurrentIndex(0);
-      setTruncated(false);
       setSearching(false);
+      dispatchMatches("", caseSensitive, [], false, 0);
       return;
     }
 
     setSearching(true);
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
+    const nextQuery = query;
+    const nextCaseSensitive = caseSensitive;
 
-    const debounceMs = editor
-      ? adaptiveDebounce(estimateDocSize(editor.state.doc))
-      : 200;
+    const debounceMs = adaptiveDebounce(estimateDocSize(editor.state.doc));
 
-    debounceRef.current = setTimeout(async () => {
-      if (!editor) return;
+    debounceRef.current = setTimeout(() => {
       const controller = new AbortController();
-      abortRef.current = controller;
+      searchAbortRef.current = controller;
+      const doc = editor.state.doc;
+      dispatchMatches(nextQuery, nextCaseSensitive, [], false, 0);
 
-      const result = await findMatchesAsync(
-        editor.state.doc,
-        query,
-        caseSensitive,
-        undefined,
+      void findMatchesAsync(
+        doc,
+        nextQuery,
+        nextCaseSensitive,
         controller.signal,
-        (partialCount) => setMatchCount(partialCount),
-      );
-
-      if (!result.cancelled) {
-        dispatchMatches(query, caseSensitive, result.matches, result.truncated);
-      }
+        {
+          onProgress: ({ matches, truncated: progressTruncated }) => {
+            if (
+              controller.signal.aborted ||
+              searchRequestIdRef.current !== requestId
+            ) {
+              return;
+            }
+            dispatchMatches(
+              nextQuery,
+              nextCaseSensitive,
+              matches,
+              progressTruncated,
+              0,
+            );
+          },
+        },
+      )
+        .then((result) => {
+          if (searchRequestIdRef.current !== requestId) return;
+          if (!result.cancelled) {
+            dispatchMatches(
+              nextQuery,
+              nextCaseSensitive,
+              result.matches,
+              result.truncated,
+              0,
+            );
+            setSearching(false);
+          }
+        })
+        .catch(() => {
+          if (searchRequestIdRef.current === requestId) {
+            setSearching(false);
+          }
+        });
     }, debounceMs);
-  }, [query, caseSensitive, editor, dispatchMatches]);
+  }, [query, caseSensitive, dispatchMatches, editor]);
 
   // Scroll editor to make the current match visible
   const scrollToCurrentMatch = useCallback(
@@ -172,10 +196,10 @@ export function FindReplaceBar() {
       if (!editor || matchCount === 0) return;
       const nextIndex =
         ((currentIndex + direction) % matchCount + matchCount) % matchCount;
-      dispatchIndex(query, caseSensitive, nextIndex);
+      dispatchSearch(query, caseSensitive, nextIndex);
       scrollToCurrentMatch(nextIndex);
     },
-    [editor, matchCount, currentIndex, query, caseSensitive, dispatchIndex, scrollToCurrentMatch],
+    [editor, matchCount, currentIndex, query, caseSensitive, dispatchSearch, scrollToCurrentMatch],
   );
 
   const handleReplaceCurrent = useCallback(() => {
@@ -225,6 +249,7 @@ export function FindReplaceBar() {
 
   const handleClose = useCallback(() => {
     // Clear search decorations
+    searchAbortRef.current?.abort();
     if (editor) {
       const { view } = editor;
       const tr = view.state.tr.setMeta(searchPluginKey, {
