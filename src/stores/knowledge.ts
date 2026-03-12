@@ -25,6 +25,7 @@ import {
   loadReminderSettings,
   saveReminderSettings,
 } from "../lib/integrity-reminder";
+import { type HealthCheckReport, buildHealthCheckReport } from "../lib/integrity-healthcheck";
 import {
   type RetrievalPresetId,
   type RetrievalSettingsSource,
@@ -201,6 +202,15 @@ interface KnowledgeState {
   exportThresholdConfig: () => string;
   /** Import threshold config from JSON string. Returns null on success, error string on failure. */
   importThresholdConfig: (jsonString: string) => string | null;
+
+  /** Latest health check report (from one-click health check). */
+  healthCheckReport: HealthCheckReport | null;
+  /** Whether a health check is currently running. */
+  healthCheckLoading: boolean;
+  /** Run a full health check: scan + metrics + recommendations in one pass. */
+  runHealthCheck: () => Promise<void>;
+  /** Clear the health check report. */
+  clearHealthCheck: () => void;
 }
 
 // Initialise from persisted preset (if any), falling back to defaults
@@ -576,4 +586,44 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     set({ healthThresholds: settings, healthThresholdSource: source });
     return null;
   },
+
+  healthCheckReport: null,
+  healthCheckLoading: false,
+
+  runHealthCheck: async () => {
+    set({ healthCheckLoading: true, healthCheckReport: null });
+    try {
+      // 1. Run integrity scan (persists snapshot + refreshes history)
+      const report = await invoke<IntegrityReport>("check_kb_integrity");
+      set({ integrityReport: report, integrityLoading: false });
+
+      // 2. Refresh history (auto-saved by backend)
+      const history = await invoke<IntegrityScanSnapshot[]>("get_integrity_history");
+      const safeHistory = Array.isArray(history) ? history : [];
+      set({ integrityHistory: safeHistory });
+
+      // Re-evaluate reminder
+      const lastScanAt = safeHistory.length > 0 ? safeHistory[0].scannedAt : null;
+      set({ reminderDue: isReminderDue(get().reminderSettings, lastScanAt) });
+
+      // 3. Build health check report
+      const { healthThresholds, reminderSettings } = get();
+      const hcReport = buildHealthCheckReport(
+        report,
+        safeHistory,
+        healthThresholds,
+        reminderSettings,
+      );
+
+      set({ healthCheckReport: hcReport, healthCheckLoading: false });
+      toast.success("Health check complete");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Health check failed:", message);
+      toast.error(`Health check failed: ${message}`);
+      set({ healthCheckLoading: false });
+    }
+  },
+
+  clearHealthCheck: () => set({ healthCheckReport: null }),
 }));

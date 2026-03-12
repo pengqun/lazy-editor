@@ -1,10 +1,12 @@
 import type { IntegrityEntry, IntegrityReport, IntegrityScanSnapshot } from "@/stores/knowledge";
+import type { HealthCheckReport } from "./integrity-healthcheck";
 
 export interface IntegrityExportPayload {
   scanTimestamp: string;
   summary: { total: number; healthy: number; missing: number; moved: number };
   entries: IntegrityEntry[];
   history?: IntegrityScanSnapshot[];
+  healthCheck?: HealthCheckReport;
 }
 
 export interface IntegrityTrend {
@@ -36,6 +38,7 @@ export function formatDelta(delta: number): string {
 export function buildExportPayload(
   report: IntegrityReport,
   history?: IntegrityScanSnapshot[],
+  healthCheck?: HealthCheckReport,
 ): IntegrityExportPayload {
   return {
     scanTimestamp: new Date().toISOString(),
@@ -47,6 +50,7 @@ export function buildExportPayload(
     },
     entries: report.entries,
     ...(history && history.length > 0 ? { history } : {}),
+    ...(healthCheck ? { healthCheck } : {}),
   };
 }
 
@@ -54,8 +58,21 @@ export function formatJSON(payload: IntegrityExportPayload): string {
   return JSON.stringify(payload, null, 2);
 }
 
+const TIER_LABEL_MAP: Record<string, string> = {
+  good: "Good",
+  warning: "Fair",
+  poor: "Poor",
+};
+
+const PRIORITY_LABEL_MAP: Record<string, string> = {
+  high: "HIGH",
+  medium: "MEDIUM",
+  low: "LOW",
+  info: "INFO",
+};
+
 export function formatMarkdown(payload: IntegrityExportPayload): string {
-  const { scanTimestamp, summary, entries, history } = payload;
+  const { scanTimestamp, summary, entries, history, healthCheck } = payload;
   const lines: string[] = [];
 
   lines.push("# KB Integrity Report");
@@ -101,6 +118,23 @@ export function formatMarkdown(payload: IntegrityExportPayload): string {
       const h = history[i];
       const notes = h.notes ? h.notes.replace(/\|/g, "\\|") : "";
       lines.push(`| ${i + 1} | ${h.scannedAt} | ${h.total} | ${h.healthy} | ${h.missing} | ${h.moved} | ${notes} |`);
+    }
+  }
+
+  // Health check section (if available)
+  if (healthCheck) {
+    lines.push("");
+    lines.push("## Health Check");
+    lines.push("");
+    lines.push(`**Status:** ${TIER_LABEL_MAP[healthCheck.tier] ?? healthCheck.tier}`);
+    lines.push(`**Last scan:** ${healthCheck.metrics.latestScanAgeMs !== null ? `${Math.round(healthCheck.metrics.latestScanAgeMs / 3600000)}h ago` : "never"}`);
+    lines.push(`**7-day scans:** ${healthCheck.metrics.scansLast7d} | **30-day scans:** ${healthCheck.metrics.scansLast30d} | **Streak:** ${healthCheck.metrics.streak}d`);
+    lines.push("");
+    lines.push("### Recommendations");
+    lines.push("");
+    for (const rec of healthCheck.recommendations) {
+      const pLabel = PRIORITY_LABEL_MAP[rec.priority] ?? rec.priority;
+      lines.push(`- **[${pLabel}]** ${rec.title} — ${rec.description}`);
     }
   }
 

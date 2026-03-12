@@ -11,6 +11,7 @@ import {
   Clock,
   Download,
   FilePlus2,
+  HeartPulse,
   Link2,
   Loader2,
   Pin,
@@ -23,17 +24,19 @@ import {
   Trash2,
   Upload,
   X,
+  Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdown } from "../../lib/integrity-export";
 import { type HealthThresholdSettings, type ThresholdSource, DEFAULT_THRESHOLD_SETTINGS, TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge, toHealthThresholds } from "../../lib/integrity-health";
 import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
+import type { HealthCheckReport, RecommendationAction } from "../../lib/integrity-healthcheck";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
 import { useFilesStore } from "../../stores/files";
-import { type IntegrityEntry, type IntegrityScanSnapshot, type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
+import { type IntegrityEntry, type IntegrityReport, type IntegrityScanSnapshot, type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
 
 export function KnowledgePanel() {
   const {
@@ -75,6 +78,10 @@ export function KnowledgePanel() {
     setReminderSettings,
     snoozeReminder,
     refreshReminderDue,
+    healthCheckReport,
+    healthCheckLoading,
+    runHealthCheck,
+    clearHealthCheck,
   } = useKnowledgeStore();
 
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
@@ -174,6 +181,24 @@ export function KnowledgePanel() {
             )}
             {reminderDue && !integrityReport && (
               <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={runHealthCheck}
+            disabled={healthCheckLoading}
+            className={cn(
+              "p-1 rounded transition-colors",
+              healthCheckReport
+                ? "bg-accent/20 text-accent"
+                : "hover:bg-surface-3 text-text-tertiary",
+            )}
+            title="Run full health check (scan + recommendations)"
+          >
+            {healthCheckLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <HeartPulse size={14} />
             )}
           </button>
           <button
@@ -376,8 +401,22 @@ export function KnowledgePanel() {
         </div>
       )}
 
+      {/* Health Check Result Card */}
+      {healthCheckReport && (
+        <HealthCheckCard
+          report={healthCheckReport}
+          integrityReport={integrityReport}
+          integrityHistory={integrityHistory}
+          onRelink={relinkDocument}
+          onRemoveStale={removeStaleDocuments}
+          onEnableReminders={() => setReminderSettings({ enabled: true })}
+          onAdjustFrequency={(freq) => setReminderSettings({ frequency: freq })}
+          onClose={clearHealthCheck}
+        />
+      )}
+
       {/* Integrity Report */}
-      {integrityReport && (
+      {integrityReport && !healthCheckReport && (
         <IntegritySection
           report={integrityReport}
           history={integrityHistory}
@@ -762,6 +801,163 @@ function SettingsSourceBadge({ source }: { source: RetrievalSettingsSource }) {
     >
       {SOURCE_BADGE_LABELS[source]}
     </span>
+  );
+}
+
+const PRIORITY_COLORS: Record<string, string> = {
+  high: "text-red-400",
+  medium: "text-amber-400",
+  low: "text-blue-400",
+  info: "text-emerald-400",
+};
+
+function HealthCheckCard({
+  report: hcReport,
+  integrityReport,
+  integrityHistory,
+  onRelink,
+  onRemoveStale,
+  onEnableReminders,
+  onAdjustFrequency,
+  onClose,
+}: {
+  report: HealthCheckReport;
+  integrityReport: IntegrityReport | null;
+  integrityHistory: IntegrityScanSnapshot[];
+  onRelink: (id: number, newPath: string) => Promise<void>;
+  onRemoveStale: (ids: number[]) => Promise<void>;
+  onEnableReminders: () => void;
+  onAdjustFrequency: (freq: import("../../lib/integrity-reminder").ReminderFrequency) => void;
+  onClose: () => void;
+}) {
+  const handleExport = async (format: "json" | "md") => {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+
+    const ir = integrityReport ?? { entries: [], healthy: 0, missing: 0, moved: 0 };
+    const payload = buildExportPayload(ir, integrityHistory, hcReport);
+    const content = format === "json" ? formatJSON(payload) : formatMarkdown(payload);
+    const ext = format === "json" ? "json" : "md";
+
+    const filePath = await save({
+      defaultPath: `kb-health-check.${ext}`,
+      filters: [{ name: format === "json" ? "JSON" : "Markdown", extensions: [ext] }],
+    });
+    if (!filePath) return;
+    await writeTextFile(filePath, content);
+  };
+
+  const handleQuickAction = (action: RecommendationAction) => {
+    switch (action.type) {
+      case "relink-all": {
+        const movedEntries = integrityReport?.entries.filter((e) => e.status === "moved") ?? [];
+        for (const e of movedEntries) {
+          if (e.movedCandidate) onRelink(e.id, e.movedCandidate);
+        }
+        break;
+      }
+      case "remove-stale":
+        onRemoveStale(action.ids);
+        break;
+      case "enable-reminders":
+        onEnableReminders();
+        break;
+      case "adjust-frequency":
+        onAdjustFrequency(action.suggested);
+        break;
+    }
+  };
+
+  return (
+    <div className="border-b border-border">
+      <div className="p-3 space-y-2">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <HeartPulse size={12} className={TIER_COLORS[hcReport.tier]} />
+            <span className="text-xs text-text-tertiary uppercase tracking-wider">
+              Health Check
+            </span>
+            <span className={cn("text-xs font-medium", TIER_COLORS[hcReport.tier])}>
+              {TIER_LABELS[hcReport.tier]}
+            </span>
+          </div>
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => handleExport("json")}
+              className="p-0.5 hover:bg-surface-3 rounded"
+              title="Export health check as JSON"
+            >
+              <Download size={12} className="text-text-tertiary" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExport("md")}
+              className="p-0.5 hover:bg-surface-3 rounded"
+              title="Export health check as Markdown"
+            >
+              <BookOpen size={12} className="text-text-tertiary" />
+            </button>
+            <button type="button" onClick={onClose} className="p-0.5 hover:bg-surface-3 rounded">
+              <X size={12} className="text-text-tertiary" />
+            </button>
+          </div>
+        </div>
+
+        {/* Key counts */}
+        <div className={cn("rounded px-2 py-1.5", TIER_BG_COLORS[hcReport.tier])}>
+          <div className="grid grid-cols-4 gap-1 text-center">
+            <div>
+              <div className="text-sm font-medium text-text-primary tabular-nums">{hcReport.counts.total}</div>
+              <div className="text-[9px] text-text-tertiary uppercase">Total</div>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-emerald-400 tabular-nums">{hcReport.counts.healthy}</div>
+              <div className="text-[9px] text-text-tertiary uppercase">Healthy</div>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-amber-400 tabular-nums">{hcReport.counts.moved}</div>
+              <div className="text-[9px] text-text-tertiary uppercase">Moved</div>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-red-400 tabular-nums">{hcReport.counts.missing}</div>
+              <div className="text-[9px] text-text-tertiary uppercase">Missing</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Recommendations */}
+        <div className="space-y-1">
+          <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
+            Recommendations
+          </span>
+          {hcReport.recommendations.map((rec) => (
+            <div
+              key={rec.id}
+              className="flex items-start gap-1.5 py-1 px-1.5 rounded bg-surface-2"
+            >
+              <span className={cn("text-[10px] font-medium shrink-0 mt-px", PRIORITY_COLORS[rec.priority])}>
+                {rec.priority === "info" ? <CheckCircle2 size={10} className="inline" /> : <Zap size={10} className="inline" />}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-text-primary">{rec.title}</p>
+                <p className="text-[10px] text-text-tertiary leading-snug">{rec.description}</p>
+                {rec.action && (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickAction(rec.action!)}
+                    className="mt-0.5 text-[10px] text-accent hover:text-accent/80 transition-colors"
+                  >
+                    Apply fix
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
