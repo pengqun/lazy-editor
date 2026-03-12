@@ -2,10 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import {
   type HealthThresholdSettings,
+  type ThresholdSource,
   DEFAULT_THRESHOLD_SETTINGS,
   clampThresholdSettings,
   loadThresholdSettings,
+  removeWorkspaceThresholdSettings,
+  resolveThresholdSettings,
   saveThresholdSettings,
+  saveWorkspaceThresholdSettings,
   toHealthThresholds,
 } from "../lib/integrity-health";
 import {
@@ -174,12 +178,18 @@ interface KnowledgeState {
 
   /** Health threshold settings (user-configurable). */
   healthThresholds: HealthThresholdSettings;
-  /** Update health thresholds (clamped + persisted). */
+  /** Source of the active health thresholds ("global" or "workspace"). */
+  healthThresholdSource: ThresholdSource;
+  /** Update health thresholds (clamped + persisted to active source). */
   setHealthThresholds: (patch: Partial<HealthThresholdSettings>) => void;
-  /** Reset health thresholds to defaults. */
+  /** Reset health thresholds to global defaults. */
   resetHealthThresholds: () => void;
   /** Get internal HealthThresholds derived from current settings. */
   getHealthThresholds: () => ReturnType<typeof toHealthThresholds>;
+  /** Save current thresholds as a workspace-specific override. */
+  saveThresholdsForWorkspace: () => void;
+  /** Remove workspace threshold override (fall back to global). */
+  resetWorkspaceThresholds: () => void;
 }
 
 // Initialise from persisted preset (if any), falling back to defaults
@@ -257,6 +267,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
 
   setWorkspacePath: (path) => {
     set({ _workspacePath: path });
+    // Re-resolve health thresholds for new workspace
+    const { settings, source } = resolveThresholdSettings(path);
+    set({ healthThresholds: settings, healthThresholdSource: source });
   },
 
   restoreForDocument: (filePath) => {
@@ -493,19 +506,47 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   },
 
   healthThresholds: loadThresholdSettings(),
+  healthThresholdSource: "global" as ThresholdSource,
 
   setHealthThresholds: (patch) => {
     const current = get().healthThresholds;
     const updated = clampThresholdSettings({ ...current, ...patch });
-    saveThresholdSettings(updated);
+    const { _workspacePath, healthThresholdSource } = get();
+    // Persist to the active source layer
+    if (healthThresholdSource === "workspace" && _workspacePath) {
+      saveWorkspaceThresholdSettings(_workspacePath, updated);
+    } else {
+      saveThresholdSettings(updated);
+    }
     set({ healthThresholds: updated });
   },
 
   resetHealthThresholds: () => {
     const defaults = { ...DEFAULT_THRESHOLD_SETTINGS };
     saveThresholdSettings(defaults);
-    set({ healthThresholds: defaults });
+    // Also clear workspace override if active
+    const { _workspacePath } = get();
+    if (_workspacePath) {
+      removeWorkspaceThresholdSettings(_workspacePath);
+    }
+    set({ healthThresholds: defaults, healthThresholdSource: "global" });
   },
 
   getHealthThresholds: () => toHealthThresholds(get().healthThresholds),
+
+  saveThresholdsForWorkspace: () => {
+    const { _workspacePath, healthThresholds } = get();
+    if (!_workspacePath) return;
+    saveWorkspaceThresholdSettings(_workspacePath, healthThresholds);
+    set({ healthThresholdSource: "workspace" });
+  },
+
+  resetWorkspaceThresholds: () => {
+    const { _workspacePath } = get();
+    if (!_workspacePath) return;
+    removeWorkspaceThresholdSettings(_workspacePath);
+    // Fall back to global
+    const globalSettings = loadThresholdSettings();
+    set({ healthThresholds: globalSettings, healthThresholdSource: "global" });
+  },
 }));

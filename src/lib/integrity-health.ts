@@ -202,6 +202,7 @@ export function toHealthThresholds(settings: HealthThresholdSettings): HealthThr
 // --- Threshold persistence ---
 
 const THRESHOLD_STORAGE_KEY = "lazy-editor:integrity-health-thresholds";
+const WORKSPACE_THRESHOLD_PREFIX = "lazy-editor:integrity-health-thresholds:ws:";
 
 export function loadThresholdSettings(): HealthThresholdSettings {
   try {
@@ -225,6 +226,59 @@ export function saveThresholdSettings(settings: HealthThresholdSettings): void {
   } catch {
     // localStorage full or disabled — silently skip
   }
+}
+
+// --- Workspace-scoped threshold persistence ---
+
+export type ThresholdSource = "global" | "workspace";
+
+/** Load workspace-specific threshold override (null if none set). */
+export function loadWorkspaceThresholdSettings(workspacePath: string): HealthThresholdSettings | null {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_THRESHOLD_PREFIX + workspacePath);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    return clampThresholdSettings({
+      goodMinScans7d: typeof parsed.goodMinScans7d === "number" ? parsed.goodMinScans7d : DEFAULT_THRESHOLD_SETTINGS.goodMinScans7d,
+      goodMaxAgeDays: typeof parsed.goodMaxAgeDays === "number" ? parsed.goodMaxAgeDays : DEFAULT_THRESHOLD_SETTINGS.goodMaxAgeDays,
+      poorMaxAgeDays: typeof parsed.poorMaxAgeDays === "number" ? parsed.poorMaxAgeDays : DEFAULT_THRESHOLD_SETTINGS.poorMaxAgeDays,
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Save threshold settings as a workspace-specific override. */
+export function saveWorkspaceThresholdSettings(workspacePath: string, settings: HealthThresholdSettings): void {
+  try {
+    localStorage.setItem(WORKSPACE_THRESHOLD_PREFIX + workspacePath, JSON.stringify(settings));
+  } catch {
+    // localStorage full or disabled — silently skip
+  }
+}
+
+/** Remove workspace-specific threshold override (falls back to global). */
+export function removeWorkspaceThresholdSettings(workspacePath: string): void {
+  try {
+    localStorage.removeItem(WORKSPACE_THRESHOLD_PREFIX + workspacePath);
+  } catch {
+    // silently skip
+  }
+}
+
+/**
+ * Resolve effective threshold settings: workspace override → global defaults.
+ * Returns the settings and their source.
+ */
+export function resolveThresholdSettings(
+  workspacePath: string | null,
+): { settings: HealthThresholdSettings; source: ThresholdSource } {
+  if (workspacePath) {
+    const ws = loadWorkspaceThresholdSettings(workspacePath);
+    if (ws) return { settings: ws, source: "workspace" };
+  }
+  return { settings: loadThresholdSettings(), source: "global" };
 }
 
 // --- Tier display helpers ---

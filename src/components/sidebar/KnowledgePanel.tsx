@@ -16,6 +16,7 @@ import {
   Pin,
   PinOff,
   RotateCcw,
+  Save,
   Search,
   Settings2,
   ShieldCheck,
@@ -26,7 +27,7 @@ import {
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdown } from "../../lib/integrity-export";
-import { type HealthThresholdSettings, DEFAULT_THRESHOLD_SETTINGS, TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge, toHealthThresholds } from "../../lib/integrity-health";
+import { type HealthThresholdSettings, type ThresholdSource, DEFAULT_THRESHOLD_SETTINGS, TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge, toHealthThresholds } from "../../lib/integrity-health";
 import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
@@ -386,8 +387,12 @@ export function KnowledgePanel() {
           reminderSettings={reminderSettings}
           onReminderChange={setReminderSettings}
           healthThresholds={useKnowledgeStore.getState().healthThresholds}
+          healthThresholdSource={useKnowledgeStore.getState().healthThresholdSource}
+          hasWorkspace={!!useKnowledgeStore.getState()._workspacePath}
           onThresholdsChange={useKnowledgeStore.getState().setHealthThresholds}
           onThresholdsReset={useKnowledgeStore.getState().resetHealthThresholds}
+          onSaveForWorkspace={useKnowledgeStore.getState().saveThresholdsForWorkspace}
+          onResetWorkspace={useKnowledgeStore.getState().resetWorkspaceThresholds}
         />
       )}
 
@@ -767,8 +772,12 @@ function IntegritySection({
   reminderSettings,
   onReminderChange,
   healthThresholds,
+  healthThresholdSource,
+  hasWorkspace,
   onThresholdsChange,
   onThresholdsReset,
+  onSaveForWorkspace,
+  onResetWorkspace,
 }: {
   report: { entries: IntegrityEntry[]; healthy: number; missing: number; moved: number };
   history: IntegrityScanSnapshot[];
@@ -778,8 +787,12 @@ function IntegritySection({
   reminderSettings: { enabled: boolean; frequency: ReminderFrequency };
   onReminderChange: (patch: Partial<{ enabled: boolean; frequency: ReminderFrequency }>) => void;
   healthThresholds: HealthThresholdSettings;
+  healthThresholdSource: ThresholdSource;
+  hasWorkspace: boolean;
   onThresholdsChange: (patch: Partial<HealthThresholdSettings>) => void;
   onThresholdsReset: () => void;
+  onSaveForWorkspace: () => void;
+  onResetWorkspace: () => void;
 }) {
   const [showHistory, setShowHistory] = useState(false);
   const [showHealth, setShowHealth] = useState(false);
@@ -943,6 +956,11 @@ function IntegritySection({
             </button>
             {showThresholds && (
               <div className="space-y-1 pt-0.5">
+                {healthThresholdSource === "workspace" && (
+                  <span className="inline-block text-[9px] px-1 py-px rounded bg-accent/15 text-accent">
+                    Workspace
+                  </span>
+                )}
                 <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1 text-[10px] items-center">
                   <label className="text-text-tertiary" title="Minimum scans in the last 7 days for 'Good' tier">
                     Good: min scans/7d
@@ -978,17 +996,41 @@ function IntegritySection({
                     className="w-12 text-[10px] bg-surface-2 border border-border rounded px-1 py-0.5 text-text-secondary text-right tabular-nums focus:outline-none focus:border-accent"
                   />
                 </div>
-                {!isDefaultThresholds && (
-                  <button
-                    type="button"
-                    onClick={onThresholdsReset}
-                    className="flex items-center gap-0.5 text-[10px] text-text-tertiary hover:text-accent transition-colors"
-                    title="Reset thresholds to defaults"
-                  >
-                    <RotateCcw size={9} />
-                    Reset to defaults
-                  </button>
-                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {!isDefaultThresholds && (
+                    <button
+                      type="button"
+                      onClick={onThresholdsReset}
+                      className="flex items-center gap-0.5 text-[10px] text-text-tertiary hover:text-accent transition-colors"
+                      title="Reset thresholds to defaults"
+                    >
+                      <RotateCcw size={9} />
+                      Reset to defaults
+                    </button>
+                  )}
+                  {hasWorkspace && healthThresholdSource === "global" && (
+                    <button
+                      type="button"
+                      onClick={onSaveForWorkspace}
+                      className="flex items-center gap-0.5 text-[10px] text-text-tertiary hover:text-accent transition-colors"
+                      title="Save these thresholds for the current workspace only"
+                    >
+                      <Save size={9} />
+                      Save for workspace
+                    </button>
+                  )}
+                  {healthThresholdSource === "workspace" && (
+                    <button
+                      type="button"
+                      onClick={onResetWorkspace}
+                      className="flex items-center gap-0.5 text-[10px] text-text-tertiary hover:text-accent transition-colors"
+                      title="Remove workspace override and use global defaults"
+                    >
+                      <RotateCcw size={9} />
+                      Use global defaults
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
