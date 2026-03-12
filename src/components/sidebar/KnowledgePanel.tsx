@@ -1,4 +1,5 @@
 import {
+  Activity,
   AlertCircle,
   Bell,
   BellOff,
@@ -24,6 +25,7 @@ import {
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdown } from "../../lib/integrity-export";
+import { TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge } from "../../lib/integrity-health";
 import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
@@ -770,11 +772,14 @@ function IntegritySection({
   onReminderChange: (patch: Partial<{ enabled: boolean; frequency: ReminderFrequency }>) => void;
 }) {
   const [showHistory, setShowHistory] = useState(false);
+  const [showHealth, setShowHealth] = useState(false);
   const staleEntries = report.entries.filter((e) => e.status !== "healthy");
   const movedEntries = report.entries.filter((e) => e.status === "moved");
   const missingEntries = report.entries.filter((e) => e.status === "missing");
   const allHealthy = staleEntries.length === 0;
   const trend = computeTrend(history);
+  const coverage = computeScanCoverage(history);
+  const healthTier = computeHealthTier(coverage);
 
   const handleExport = async (format: "json" | "md") => {
     const { save } = await import("@tauri-apps/plugin-dialog");
@@ -803,6 +808,20 @@ function IntegritySection({
             </span>
           </div>
           <div className="flex items-center gap-0.5">
+            {history.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowHealth(!showHealth)}
+                className={cn(
+                  "p-0.5 rounded text-[10px] px-1 flex items-center gap-0.5",
+                  showHealth ? "bg-accent/20 text-accent" : "hover:bg-surface-3 text-text-tertiary",
+                )}
+                title="Toggle scan health"
+              >
+                <Activity size={10} />
+                <span className={TIER_COLORS[healthTier]}>{TIER_LABELS[healthTier]}</span>
+              </button>
+            )}
             {history.length > 1 && (
               <button
                 type="button"
@@ -869,6 +888,34 @@ function IntegritySection({
             </span>
           )}
         </div>
+
+        {/* Scan health panel */}
+        {showHealth && history.length > 0 && (
+          <div className={cn("rounded px-2 py-1.5 space-y-1", TIER_BG_COLORS[healthTier])}>
+            <div className="flex items-center gap-1.5">
+              <Activity size={11} className={TIER_COLORS[healthTier]} />
+              <span className={cn("text-[11px] font-medium", TIER_COLORS[healthTier])}>
+                Scan Health: {TIER_LABELS[healthTier]}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
+              <span className="text-text-tertiary">Last scan</span>
+              <span className="text-text-secondary tabular-nums">
+                {coverage.latestScanAgeMs !== null ? formatAge(coverage.latestScanAgeMs) : "never"}
+              </span>
+              <span className="text-text-tertiary">7-day scans</span>
+              <span className="text-text-secondary tabular-nums">{coverage.scansLast7d}</span>
+              <span className="text-text-tertiary">30-day scans</span>
+              <span className="text-text-secondary tabular-nums">{coverage.scansLast30d}</span>
+              {coverage.streak > 0 && (
+                <>
+                  <span className="text-text-tertiary">Streak</span>
+                  <span className="text-text-secondary tabular-nums">{coverage.streak}d</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {allHealthy && (
           <div className="flex items-center gap-1.5 text-xs text-emerald-400">
