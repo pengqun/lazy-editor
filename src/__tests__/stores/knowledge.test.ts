@@ -635,4 +635,83 @@ describe("useKnowledgeStore", () => {
       expect(useKnowledgeStore.getState().activePreset).toBe("research");
     });
   });
+
+  describe("KB integrity", () => {
+    beforeEach(() => {
+      useKnowledgeStore.setState({ integrityReport: null, integrityLoading: false });
+    });
+
+    it("checkIntegrity calls invoke and stores report", async () => {
+      const report = {
+        entries: [
+          { id: 1, title: "Doc A", sourcePath: "/a.md", status: "healthy", movedCandidate: null },
+          { id: 2, title: "Doc B", sourcePath: "/old/b.md", status: "moved", movedCandidate: "/new/b.md" },
+          { id: 3, title: "Doc C", sourcePath: "/gone.md", status: "missing", movedCandidate: null },
+        ],
+        healthy: 1,
+        missing: 1,
+        moved: 1,
+      };
+      mockedInvoke.mockResolvedValueOnce(report);
+
+      await useKnowledgeStore.getState().checkIntegrity();
+
+      expect(mockedInvoke).toHaveBeenCalledWith("check_kb_integrity");
+      const state = useKnowledgeStore.getState();
+      expect(state.integrityReport).toEqual(report);
+      expect(state.integrityLoading).toBe(false);
+    });
+
+    it("checkIntegrity sets loading state", async () => {
+      mockedInvoke.mockResolvedValueOnce({ entries: [], healthy: 0, missing: 0, moved: 0 });
+
+      const promise = useKnowledgeStore.getState().checkIntegrity();
+      expect(useKnowledgeStore.getState().integrityLoading).toBe(true);
+
+      await promise;
+      expect(useKnowledgeStore.getState().integrityLoading).toBe(false);
+    });
+
+    it("checkIntegrity handles errors gracefully", async () => {
+      mockedInvoke.mockRejectedValueOnce(new Error("DB error"));
+
+      await useKnowledgeStore.getState().checkIntegrity();
+
+      expect(useKnowledgeStore.getState().integrityLoading).toBe(false);
+      expect(useKnowledgeStore.getState().integrityReport).toBeNull();
+    });
+
+    it("relinkDocument calls invoke and re-checks integrity", async () => {
+      mockedInvoke
+        .mockResolvedValueOnce(undefined) // relink_kb_document
+        .mockResolvedValueOnce({ entries: [], healthy: 1, missing: 0, moved: 0 }) // check_kb_integrity
+        .mockResolvedValueOnce([]); // list_kb_documents
+
+      await useKnowledgeStore.getState().relinkDocument(2, "/new/path.md");
+
+      expect(mockedInvoke).toHaveBeenCalledWith("relink_kb_document", { id: 2, newPath: "/new/path.md" });
+    });
+
+    it("removeStaleDocuments removes multiple docs and refreshes", async () => {
+      mockedInvoke
+        .mockResolvedValueOnce(undefined) // remove_kb_document (id 3)
+        .mockResolvedValueOnce(undefined) // remove_kb_document (id 4)
+        .mockResolvedValueOnce([]) // list_kb_documents
+        .mockResolvedValueOnce({ entries: [], healthy: 0, missing: 0, moved: 0 }); // check_kb_integrity
+
+      await useKnowledgeStore.getState().removeStaleDocuments([3, 4]);
+
+      expect(mockedInvoke).toHaveBeenCalledWith("remove_kb_document", { id: 3 });
+      expect(mockedInvoke).toHaveBeenCalledWith("remove_kb_document", { id: 4 });
+    });
+
+    it("clearIntegrity clears the report", () => {
+      useKnowledgeStore.setState({
+        integrityReport: { entries: [], healthy: 0, missing: 0, moved: 0 },
+      });
+
+      useKnowledgeStore.getState().clearIntegrity();
+      expect(useKnowledgeStore.getState().integrityReport).toBeNull();
+    });
+  });
 });

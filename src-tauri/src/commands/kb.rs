@@ -2,7 +2,10 @@ use crate::knowledge::chunker;
 use crate::knowledge::db::{ChunkContext, KBDocument, SearchResult};
 use crate::knowledge::search;
 use crate::AppState;
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::fs;
+use std::path::Path;
 use tauri::{AppHandle, Emitter, State};
 
 /// Maximum file size for KB ingestion: 10 MB.
@@ -211,4 +214,184 @@ pub async fn get_kb_chunk(
     let db = state.db.lock().await;
     db.get_chunk_with_context(chunkId)
         .map_err(|e| format!("Failed to get chunk: {}", e))
+}
+
+// ── KB Integrity ──
+
+#[derive(Debug, Serialize, Clone)]
+pub struct IntegrityEntry {
+    pub id: i64,
+    pub title: String,
+    #[serde(rename = "sourcePath")]
+    pub source_path: String,
+    pub status: String, // "healthy" | "missing" | "moved"
+    /// Suggested new path if status is "moved"
+    #[serde(rename = "movedCandidate")]
+    pub moved_candidate: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct IntegrityReport {
+    pub entries: Vec<IntegrityEntry>,
+    pub healthy: usize,
+    pub missing: usize,
+    pub moved: usize,
+}
+
+fn file_content_hash(path: &Path) -> Option<String> {
+    let content = fs::read(path).ok()?;
+    let mut hasher = Sha256::new();
+    hasher.update(&content);
+    Some(format!("{:x}", hasher.finalize()))
+}
+
+/// Walk `dir` recursively and collect file paths (up to `limit`).
+fn walk_files(dir: &Path, limit: usize) -> Vec<std::path::PathBuf> {
+    let mut result = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let entries = match fs::read_dir(&d) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                // Skip hidden directories
+                if p.file_name().map_or(false, |n| n.to_string_lossy().starts_with('.')) {
+                    continue;
+                }
+                stack.push(p);
+            } else {
+                result.push(p);
+                if result.len() >= limit {
+                    return result;
+                }
+            }
+        }
+    }
+    result
+}
+
+/// Scan all file-sourced KB documents and classify their source health.
+/// Uses workspace path (if set) to search for moved-candidates by filename match or content hash.
+#[tauri::command]
+pub async fn check_kb_integrity(
+    state: State<'_, AppState>,
+) -> Result<IntegrityReport, String> {
+    let db = state.db.lock().await;
+    let file_docs = db
+        .get_file_documents()
+        .map_err(|e| format!("Failed to read documents: {}", e))?;
+
+    let workspace = state.workspace_path.lock().await.clone();
+
+    // Pre-scan workspace files for move detection (only when there are stale docs)
+    let workspace_files: Vec<std::path::PathBuf> = if let Some(ref ws) = workspace {
+        walk_files(Path::new(ws), 10_000)
+    } else {
+        Vec::new()
+    };
+
+    let mut entries = Vec::new();
+    let mut healthy = 0usize;
+    let mut missing = 0usize;
+    let mut moved = 0usize;
+
+    for (id, title, source_path, content_hash) in &file_docs {
+        let p = Path::new(source_path);
+        if p.exists() {
+            entries.push(IntegrityEntry {
+                id: *id,
+                title: title.clone(),
+                source_path: source_path.clone(),
+                status: "healthy".to_string(),
+                moved_candidate: None,
+            });
+            healthy += 1;
+            continue;
+        }
+
+        // File is missing — try to find a moved candidate
+        let original_name = p.file_name().map(|n| n.to_string_lossy().to_string());
+        let mut candidate: Option<String> = None;
+
+        // Strategy 1: filename match in workspace
+        if let Some(ref name) = original_name {
+            for wf in &workspace_files {
+                if wf.file_name().map(|n| n.to_string_lossy().to_string()).as_deref() == Some(name)
+                    && wf.as_path() != p
+                {
+                    // If we have a content hash, verify it matches
+                    if !content_hash.is_empty() {
+                        if let Some(wf_hash) = file_content_hash(wf) {
+                            if wf_hash == *content_hash {
+                                candidate = Some(wf.to_string_lossy().to_string());
+                                break;
+                            }
+                        }
+                    } else {
+                        // No hash to verify — accept filename match
+                        candidate = Some(wf.to_string_lossy().to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Strategy 2: content hash match across workspace (if no filename match found)
+        if candidate.is_none() && !content_hash.is_empty() {
+            for wf in &workspace_files {
+                if let Some(wf_hash) = file_content_hash(wf) {
+                    if wf_hash == *content_hash {
+                        candidate = Some(wf.to_string_lossy().to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        if candidate.is_some() {
+            entries.push(IntegrityEntry {
+                id: *id,
+                title: title.clone(),
+                source_path: source_path.clone(),
+                status: "moved".to_string(),
+                moved_candidate: candidate,
+            });
+            moved += 1;
+        } else {
+            entries.push(IntegrityEntry {
+                id: *id,
+                title: title.clone(),
+                source_path: source_path.clone(),
+                status: "missing".to_string(),
+                moved_candidate: None,
+            });
+            missing += 1;
+        }
+    }
+
+    Ok(IntegrityReport {
+        entries,
+        healthy,
+        missing,
+        moved,
+    })
+}
+
+/// Update the source_path for a KB document (relink after file move/rename).
+#[tauri::command]
+pub async fn relink_kb_document(
+    id: i64,
+    #[allow(non_snake_case)] newPath: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // Verify the new path actually exists
+    if !Path::new(&newPath).exists() {
+        return Err(format!("Target path does not exist: {}", newPath));
+    }
+    let db = state.db.lock().await;
+    db.update_document_source_path(id, &newPath)
+        .map_err(|e| format!("Failed to relink document: {}", e))
 }

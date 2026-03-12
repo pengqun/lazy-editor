@@ -273,6 +273,36 @@ impl Database {
         Ok(())
     }
 
+    /// Return all file-sourced documents with their source_path and content_hash.
+    pub fn get_file_documents(&self) -> Result<Vec<(i64, String, String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, source_path, COALESCE(content_hash, '') FROM documents WHERE source_type = 'file' AND source_path IS NOT NULL",
+        )?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Update the source_path of a document (for relinking after move/rename).
+    pub fn update_document_source_path(&self, id: i64, new_path: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE documents SET source_path = ?1, updated_at = datetime('now') WHERE id = ?2",
+            params![new_path, id],
+        )?;
+        if changed == 0 {
+            bail!("No document with id {}", id);
+        }
+        Ok(())
+    }
+
     pub fn get_all_embeddings(&self) -> Result<Vec<(i64, Vec<f32>)>> {
         let mut stmt = self
             .conn
@@ -856,5 +886,67 @@ mod tests {
             msg.contains("no rows") || msg.contains("Query returned no rows"),
             "unexpected error message: {msg}"
         );
+    }
+
+    // ── Integrity tests ──
+
+    #[test]
+    fn get_file_documents_returns_only_file_sourced() {
+        let db = test_db();
+        db.insert_document("File Doc", "file", Some("/path/to/doc.md"), "file content")
+            .unwrap();
+        db.insert_document("Paste Doc", "paste", None, "paste content")
+            .unwrap();
+
+        let file_docs = db.get_file_documents().unwrap();
+        assert_eq!(file_docs.len(), 1);
+        assert_eq!(file_docs[0].1, "File Doc");
+        assert_eq!(file_docs[0].2, "/path/to/doc.md");
+        // content_hash should be non-empty
+        assert!(!file_docs[0].3.is_empty());
+    }
+
+    #[test]
+    fn get_file_documents_empty_when_no_files() {
+        let db = test_db();
+        db.insert_document("Paste", "paste", None, "content").unwrap();
+        assert!(db.get_file_documents().unwrap().is_empty());
+    }
+
+    #[test]
+    fn update_document_source_path_changes_path() {
+        let db = test_db();
+        let id = db
+            .insert_document("Doc", "file", Some("/old/path.md"), "content")
+            .unwrap();
+
+        db.update_document_source_path(id, "/new/path.md").unwrap();
+
+        let file_docs = db.get_file_documents().unwrap();
+        assert_eq!(file_docs[0].2, "/new/path.md");
+    }
+
+    #[test]
+    fn update_document_source_path_errors_on_missing_id() {
+        let db = test_db();
+        let result = db.update_document_source_path(9999, "/any/path.md");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No document"));
+    }
+
+    #[test]
+    fn update_document_source_path_preserves_other_fields() {
+        let db = test_db();
+        let id = db
+            .insert_document("My Title", "file", Some("/old.md"), "my content")
+            .unwrap();
+        db.insert_chunk(id, "chunk", 0, Some(5)).unwrap();
+
+        db.update_document_source_path(id, "/new.md").unwrap();
+
+        let docs = db.list_documents().unwrap();
+        assert_eq!(docs[0].title, "My Title");
+        assert_eq!(docs[0].source_path.as_deref(), Some("/new.md"));
+        assert_eq!(docs[0].chunk_count, 1);
     }
 }

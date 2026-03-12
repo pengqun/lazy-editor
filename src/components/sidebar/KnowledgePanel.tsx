@@ -1,15 +1,18 @@
 import {
   AlertCircle,
   BookOpen,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
   FilePlus2,
+  Link2,
   Loader2,
   Pin,
   PinOff,
   Search,
   Settings2,
+  ShieldCheck,
   Trash2,
   Upload,
   X,
@@ -20,7 +23,7 @@ import { type HighlightSegment, findMatchedTerms, highlightText } from "../../li
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
 import { useFilesStore } from "../../stores/files";
-import { type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
+import { type IntegrityEntry, type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
 
 export function KnowledgePanel() {
   const {
@@ -49,6 +52,12 @@ export function KnowledgePanel() {
     viewChunkLoading,
     viewChunkError,
     viewChunk,
+    integrityReport,
+    integrityLoading,
+    checkIntegrity,
+    relinkDocument,
+    removeStaleDocuments,
+    clearIntegrity,
   } = useKnowledgeStore();
 
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
@@ -127,6 +136,24 @@ export function KnowledgePanel() {
             title="Retrieval settings"
           >
             <Settings2 size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={checkIntegrity}
+            disabled={integrityLoading}
+            className={cn(
+              "p-1 rounded transition-colors",
+              integrityReport
+                ? "bg-accent/20 text-accent"
+                : "hover:bg-surface-3 text-text-tertiary",
+            )}
+            title="Check KB source integrity"
+          >
+            {integrityLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <ShieldCheck size={14} />
+            )}
           </button>
           <button
             type="button"
@@ -297,6 +324,16 @@ export function KnowledgePanel() {
             Add to Knowledge Base
           </button>
         </div>
+      )}
+
+      {/* Integrity Report */}
+      {integrityReport && (
+        <IntegritySection
+          report={integrityReport}
+          onRelink={relinkDocument}
+          onRemove={removeStaleDocuments}
+          onClose={clearIntegrity}
+        />
       )}
 
       {/* Search */}
@@ -663,6 +700,148 @@ function SettingsSourceBadge({ source }: { source: RetrievalSettingsSource }) {
     >
       {SOURCE_BADGE_LABELS[source]}
     </span>
+  );
+}
+
+function IntegritySection({
+  report,
+  onRelink,
+  onRemove,
+  onClose,
+}: {
+  report: { entries: IntegrityEntry[]; healthy: number; missing: number; moved: number };
+  onRelink: (id: number, newPath: string) => Promise<void>;
+  onRemove: (ids: number[]) => Promise<void>;
+  onClose: () => void;
+}) {
+  const staleEntries = report.entries.filter((e) => e.status !== "healthy");
+  const movedEntries = report.entries.filter((e) => e.status === "moved");
+  const missingEntries = report.entries.filter((e) => e.status === "missing");
+  const allHealthy = staleEntries.length === 0;
+
+  return (
+    <div className="border-b border-border">
+      <div className="p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <ShieldCheck size={12} className={allHealthy ? "text-emerald-400" : "text-amber-400"} />
+            <span className="text-xs text-text-tertiary uppercase tracking-wider">
+              KB Integrity
+            </span>
+          </div>
+          <button type="button" onClick={onClose} className="p-0.5 hover:bg-surface-3 rounded">
+            <X size={12} className="text-text-tertiary" />
+          </button>
+        </div>
+
+        {/* Summary */}
+        <div className="flex gap-2 text-[11px]">
+          <span className="text-emerald-400">{report.healthy} healthy</span>
+          {report.moved > 0 && <span className="text-amber-400">{report.moved} moved</span>}
+          {report.missing > 0 && <span className="text-red-400">{report.missing} missing</span>}
+        </div>
+
+        {allHealthy && (
+          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+            <CheckCircle2 size={12} />
+            All source references are valid.
+          </div>
+        )}
+
+        {/* Moved candidates — batch relink */}
+        {movedEntries.length > 0 && (
+          <div className="space-y-1">
+            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
+              Moved ({movedEntries.length})
+            </span>
+            {movedEntries.map((entry) => (
+              <IntegrityEntryRow key={entry.id} entry={entry} onRelink={onRelink} onRemove={onRemove} />
+            ))}
+            {movedEntries.length > 1 && (
+              <button
+                type="button"
+                onClick={() => {
+                  for (const e of movedEntries) {
+                    if (e.movedCandidate) onRelink(e.id, e.movedCandidate);
+                  }
+                }}
+                className="w-full text-[11px] px-2 py-1 rounded border border-accent/30 text-accent hover:bg-accent/10 transition-colors"
+              >
+                Relink all {movedEntries.length} moved documents
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Missing — remove */}
+        {missingEntries.length > 0 && (
+          <div className="space-y-1">
+            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
+              Missing ({missingEntries.length})
+            </span>
+            {missingEntries.map((entry) => (
+              <IntegrityEntryRow key={entry.id} entry={entry} onRelink={onRelink} onRemove={onRemove} />
+            ))}
+            {missingEntries.length > 1 && (
+              <button
+                type="button"
+                onClick={() => onRemove(missingEntries.map((e) => e.id))}
+                className="w-full text-[11px] px-2 py-1 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                Remove all {missingEntries.length} missing entries
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IntegrityEntryRow({
+  entry,
+  onRelink,
+  onRemove,
+}: {
+  entry: IntegrityEntry;
+  onRelink: (id: number, newPath: string) => Promise<void>;
+  onRemove: (ids: number[]) => Promise<void>;
+}) {
+  const filename = entry.sourcePath.split("/").pop() || entry.title;
+
+  return (
+    <div className="flex items-center gap-1.5 py-1 px-1.5 rounded bg-surface-2 group">
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-text-primary truncate" title={entry.sourcePath}>
+          {filename}
+        </p>
+        {entry.movedCandidate && (
+          <p className="text-[10px] text-text-tertiary truncate" title={entry.movedCandidate}>
+            &rarr; {entry.movedCandidate.split("/").pop()}
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-0.5 shrink-0">
+        {entry.movedCandidate && (
+          <button
+            type="button"
+            onClick={() => onRelink(entry.id, entry.movedCandidate!)}
+            className="p-0.5 hover:bg-surface-3 rounded text-accent"
+            title={`Relink to ${entry.movedCandidate}`}
+          >
+            <Link2 size={12} />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => onRemove([entry.id])}
+          className="p-0.5 hover:bg-surface-3 rounded text-text-tertiary hover:text-red-400"
+          title="Remove from KB"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+    </div>
   );
 }
 

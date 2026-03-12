@@ -44,6 +44,23 @@ export interface ChunkContext {
 
 export type RetrievalScope = "all" | "pinned";
 
+export type IntegrityStatus = "healthy" | "missing" | "moved";
+
+export interface IntegrityEntry {
+  id: number;
+  title: string;
+  sourcePath: string;
+  status: IntegrityStatus;
+  movedCandidate: string | null;
+}
+
+export interface IntegrityReport {
+  entries: IntegrityEntry[];
+  healthy: number;
+  missing: number;
+  moved: number;
+}
+
 interface KnowledgeState {
   documents: KBDocument[];
   isIngesting: boolean;
@@ -102,6 +119,18 @@ interface KnowledgeState {
   viewChunk: (chunkId: number, query?: string, score?: number) => Promise<void>;
   closeChunkViewer: () => void;
   dismissChunkError: () => void;
+
+  /** KB integrity scan results. */
+  integrityReport: IntegrityReport | null;
+  integrityLoading: boolean;
+  /** Run an integrity scan on all file-sourced documents. */
+  checkIntegrity: () => Promise<void>;
+  /** Relink a stale document to a new path. */
+  relinkDocument: (id: number, newPath: string) => Promise<void>;
+  /** Remove stale entries and refresh. */
+  removeStaleDocuments: (ids: number[]) => Promise<void>;
+  /** Clear the integrity report. */
+  clearIntegrity: () => void;
 }
 
 // Initialise from persisted preset (if any), falling back to defaults
@@ -314,4 +343,51 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     }),
 
   dismissChunkError: () => set({ viewChunkError: null }),
+
+  integrityReport: null,
+  integrityLoading: false,
+
+  checkIntegrity: async () => {
+    set({ integrityLoading: true });
+    try {
+      const report = await invoke<IntegrityReport>("check_kb_integrity");
+      set({ integrityReport: report, integrityLoading: false });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Failed to check KB integrity:", message);
+      toast.error(`Integrity check failed: ${message}`);
+      set({ integrityLoading: false });
+    }
+  },
+
+  relinkDocument: async (id, newPath) => {
+    try {
+      await invoke("relink_kb_document", { id, newPath });
+      toast.success("Document relinked successfully");
+      // Re-run integrity check and refresh document list
+      await get().checkIntegrity();
+      await get().loadDocuments();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Failed to relink document:", message);
+      toast.error(`Relink failed: ${message}`);
+    }
+  },
+
+  removeStaleDocuments: async (ids) => {
+    try {
+      for (const id of ids) {
+        await invoke("remove_kb_document", { id });
+      }
+      toast.success(`Removed ${ids.length} stale document${ids.length > 1 ? "s" : ""}`);
+      await get().loadDocuments();
+      await get().checkIntegrity();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Failed to remove stale documents:", message);
+      toast.error(`Remove failed: ${message}`);
+    }
+  },
+
+  clearIntegrity: () => set({ integrityReport: null }),
 }));
