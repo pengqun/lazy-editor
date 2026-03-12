@@ -260,3 +260,75 @@ describe("buildExportPayload with history", () => {
     expect(payload.history).toBeUndefined();
   });
 });
+
+// --- Export with priority/confidence/rationale ---
+
+describe("export includes priority/confidence/rationale", () => {
+  const healthCheck = {
+    timestamp: "2026-03-12T12:00:00.000Z",
+    tier: "warning" as const,
+    metrics: { scansLast7d: 1, scansLast30d: 3, latestScanAgeMs: 86400000, streak: 1 },
+    counts: { total: 5, healthy: 3, missing: 1, moved: 1 },
+    recommendations: [
+      {
+        id: "relink-moved",
+        priority: "high" as const,
+        confidence: "high" as const,
+        rationale: "1 document has move candidate; file-hash match confirms relocation.",
+        title: "Relink 1 moved document",
+        description: "Source files were found at new locations.",
+        action: { type: "relink-all" as const },
+      },
+      {
+        id: "remove-missing",
+        priority: "medium" as const,
+        confidence: "medium" as const,
+        rationale: "1/5 entries missing (20%); no move candidates found.",
+        title: "Remove 1 stale entry",
+        description: "These source files are no longer found.",
+      },
+    ],
+  };
+
+  it("JSON export preserves confidence and rationale fields", () => {
+    const payload = makePayload({ healthCheck });
+    const parsed = JSON.parse(formatJSON(payload));
+    const recs = parsed.healthCheck.recommendations;
+    expect(recs[0].confidence).toBe("high");
+    expect(recs[0].rationale).toContain("file-hash match");
+    expect(recs[1].confidence).toBe("medium");
+    expect(recs[1].rationale).toContain("20%");
+  });
+
+  it("markdown export includes confidence labels", () => {
+    const payload = makePayload({ healthCheck });
+    const md = formatMarkdown(payload);
+    expect(md).toContain("(confidence: high)");
+    expect(md).toContain("(confidence: med)");
+  });
+
+  it("markdown export includes rationale lines", () => {
+    const payload = makePayload({ healthCheck });
+    const md = formatMarkdown(payload);
+    expect(md).toContain("_Rationale:_ 1 document has move candidate");
+    expect(md).toContain("_Rationale:_ 1/5 entries missing");
+  });
+
+  it("markdown export shows CRITICAL label", () => {
+    const criticalHealthCheck = {
+      ...healthCheck,
+      recommendations: [
+        {
+          id: "never-scanned",
+          priority: "critical" as const,
+          confidence: "high" as const,
+          rationale: "No scan history exists.",
+          title: "Set up scanning",
+          description: "No scans recorded.",
+        },
+      ],
+    };
+    const md = formatMarkdown(makePayload({ healthCheck: criticalHealthCheck }));
+    expect(md).toContain("[CRITICAL]");
+  });
+});

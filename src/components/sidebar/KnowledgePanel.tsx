@@ -805,10 +805,23 @@ function SettingsSourceBadge({ source }: { source: RetrievalSettingsSource }) {
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
+  critical: "text-red-500",
   high: "text-red-400",
   medium: "text-amber-400",
   low: "text-blue-400",
   info: "text-emerald-400",
+};
+
+const CONFIDENCE_LABELS: Record<string, string> = {
+  high: "H",
+  medium: "M",
+  low: "L",
+};
+
+const CONFIDENCE_COLORS: Record<string, string> = {
+  high: "text-emerald-400 border-emerald-400/30",
+  medium: "text-amber-400 border-amber-400/30",
+  low: "text-text-tertiary border-border",
 };
 
 function HealthCheckCard({
@@ -941,7 +954,17 @@ function HealthCheckCard({
                 {rec.priority === "info" ? <CheckCircle2 size={10} className="inline" /> : <Zap size={10} className="inline" />}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] text-text-primary">{rec.title}</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-[11px] text-text-primary">{rec.title}</p>
+                  <span className={cn("text-[8px] font-medium uppercase leading-none px-1 py-px border rounded", PRIORITY_COLORS[rec.priority])}>
+                    {rec.priority}
+                  </span>
+                  {rec.confidence && rec.priority !== "info" && (
+                    <span className={cn("text-[8px] leading-none px-1 py-px border rounded", CONFIDENCE_COLORS[rec.confidence])} title={`Confidence: ${rec.confidence}`}>
+                      {CONFIDENCE_LABELS[rec.confidence]}
+                    </span>
+                  )}
+                </div>
                 <p className="text-[10px] text-text-tertiary leading-snug">{rec.description}</p>
                 {rec.action && (
                   <button

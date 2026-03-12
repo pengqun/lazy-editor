@@ -65,10 +65,17 @@ const TIER_LABEL_MAP: Record<string, string> = {
 };
 
 const PRIORITY_LABEL_MAP: Record<string, string> = {
+  critical: "CRITICAL",
   high: "HIGH",
   medium: "MEDIUM",
   low: "LOW",
   info: "INFO",
+};
+
+const CONFIDENCE_LABEL_MAP: Record<string, string> = {
+  high: "high",
+  medium: "med",
+  low: "low",
 };
 
 export function formatMarkdown(payload: IntegrityExportPayload): string {
@@ -134,7 +141,11 @@ export function formatMarkdown(payload: IntegrityExportPayload): string {
     lines.push("");
     for (const rec of healthCheck.recommendations) {
       const pLabel = PRIORITY_LABEL_MAP[rec.priority] ?? rec.priority;
-      lines.push(`- **[${pLabel}]** ${rec.title} — ${rec.description}`);
+      const cLabel = rec.confidence ? ` (confidence: ${CONFIDENCE_LABEL_MAP[rec.confidence] ?? rec.confidence})` : "";
+      lines.push(`- **[${pLabel}]**${cLabel} ${rec.title} — ${rec.description}`);
+      if (rec.rationale) {
+        lines.push(`  - _Rationale:_ ${rec.rationale}`);
+      }
     }
   }
 
