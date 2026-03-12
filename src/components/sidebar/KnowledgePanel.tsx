@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
+  Download,
   FilePlus2,
   Link2,
   Loader2,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
+import { buildExportPayload, formatJSON, formatMarkdown } from "../../lib/integrity-export";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
@@ -719,6 +721,22 @@ function IntegritySection({
   const missingEntries = report.entries.filter((e) => e.status === "missing");
   const allHealthy = staleEntries.length === 0;
 
+  const handleExport = async (format: "json" | "md") => {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+
+    const payload = buildExportPayload(report);
+    const content = format === "json" ? formatJSON(payload) : formatMarkdown(payload);
+    const ext = format === "json" ? "json" : "md";
+
+    const filePath = await save({
+      defaultPath: `kb-integrity-report.${ext}`,
+      filters: [{ name: format === "json" ? "JSON" : "Markdown", extensions: [ext] }],
+    });
+    if (!filePath) return;
+    await writeTextFile(filePath, content);
+  };
+
   return (
     <div className="border-b border-border">
       <div className="p-3 space-y-2">
@@ -729,9 +747,27 @@ function IntegritySection({
               KB Integrity
             </span>
           </div>
-          <button type="button" onClick={onClose} className="p-0.5 hover:bg-surface-3 rounded">
-            <X size={12} className="text-text-tertiary" />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => handleExport("json")}
+              className="p-0.5 hover:bg-surface-3 rounded"
+              title="Export as JSON"
+            >
+              <Download size={12} className="text-text-tertiary" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExport("md")}
+              className="p-0.5 hover:bg-surface-3 rounded"
+              title="Export as Markdown"
+            >
+              <BookOpen size={12} className="text-text-tertiary" />
+            </button>
+            <button type="button" onClick={onClose} className="p-0.5 hover:bg-surface-3 rounded">
+              <X size={12} className="text-text-tertiary" />
+            </button>
+          </div>
         </div>
 
         {/* Summary */}
