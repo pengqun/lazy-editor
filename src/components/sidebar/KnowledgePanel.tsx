@@ -1,10 +1,13 @@
 import {
   AlertCircle,
+  Bell,
+  BellOff,
   BookOpen,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
+  Clock,
   Download,
   FilePlus2,
   Link2,
@@ -21,6 +24,7 @@ import {
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdown } from "../../lib/integrity-export";
+import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
@@ -62,6 +66,11 @@ export function KnowledgePanel() {
     removeStaleDocuments,
     clearIntegrity,
     loadIntegrityHistory,
+    reminderSettings,
+    reminderDue,
+    setReminderSettings,
+    snoozeReminder,
+    refreshReminderDue,
   } = useKnowledgeStore();
 
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
@@ -74,8 +83,8 @@ export function KnowledgePanel() {
 
   useEffect(() => {
     loadDocuments();
-    loadIntegrityHistory();
-  }, [loadDocuments, loadIntegrityHistory]);
+    loadIntegrityHistory().then(() => refreshReminderDue());
+  }, [loadDocuments, loadIntegrityHistory, refreshReminderDue]);
 
   useEffect(() => {
     const unlisten = listenToIngestProgress((msg) => {
@@ -147,7 +156,7 @@ export function KnowledgePanel() {
             onClick={checkIntegrity}
             disabled={integrityLoading}
             className={cn(
-              "p-1 rounded transition-colors",
+              "p-1 rounded transition-colors relative",
               integrityReport
                 ? "bg-accent/20 text-accent"
                 : "hover:bg-surface-3 text-text-tertiary",
@@ -158,6 +167,9 @@ export function KnowledgePanel() {
               <Loader2 size={14} className="animate-spin" />
             ) : (
               <ShieldCheck size={14} />
+            )}
+            {reminderDue && !integrityReport && (
+              <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400" />
             )}
           </button>
           <button
@@ -331,6 +343,35 @@ export function KnowledgePanel() {
         </div>
       )}
 
+      {/* Integrity Reminder Banner */}
+      {reminderDue && !integrityReport && (
+        <div className="px-3 py-2 border-b border-border bg-amber-500/5">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Bell size={12} className="text-amber-400" />
+            <span className="text-xs text-amber-400 font-medium">Integrity scan due</span>
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={checkIntegrity}
+              disabled={integrityLoading}
+              className="flex-1 text-[11px] px-2 py-1 rounded bg-accent text-white hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            >
+              Scan now
+            </button>
+            <button
+              type="button"
+              onClick={snoozeReminder}
+              className="text-[11px] px-2 py-1 rounded border border-border text-text-tertiary hover:bg-surface-3 transition-colors"
+              title="Snooze for 24 hours"
+            >
+              <Clock size={11} className="inline mr-0.5 -mt-px" />
+              Snooze
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Integrity Report */}
       {integrityReport && (
         <IntegritySection
@@ -339,6 +380,8 @@ export function KnowledgePanel() {
           onRelink={relinkDocument}
           onRemove={removeStaleDocuments}
           onClose={clearIntegrity}
+          reminderSettings={reminderSettings}
+          onReminderChange={setReminderSettings}
         />
       )}
 
@@ -715,12 +758,16 @@ function IntegritySection({
   onRelink,
   onRemove,
   onClose,
+  reminderSettings,
+  onReminderChange,
 }: {
   report: { entries: IntegrityEntry[]; healthy: number; missing: number; moved: number };
   history: IntegrityScanSnapshot[];
   onRelink: (id: number, newPath: string) => Promise<void>;
   onRemove: (ids: number[]) => Promise<void>;
   onClose: () => void;
+  reminderSettings: { enabled: boolean; frequency: ReminderFrequency };
+  onReminderChange: (patch: Partial<{ enabled: boolean; frequency: ReminderFrequency }>) => void;
 }) {
   const [showHistory, setShowHistory] = useState(false);
   const staleEntries = report.entries.filter((e) => e.status !== "healthy");
@@ -912,6 +959,35 @@ function IntegritySection({
             )}
           </div>
         )}
+
+        {/* Reminder settings */}
+        <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+          <button
+            type="button"
+            onClick={() => onReminderChange({ enabled: !reminderSettings.enabled })}
+            className={cn(
+              "flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded transition-colors",
+              reminderSettings.enabled
+                ? "bg-accent/15 text-accent"
+                : "bg-surface-2 text-text-tertiary hover:bg-surface-3",
+            )}
+            title={reminderSettings.enabled ? "Disable scan reminders" : "Enable scan reminders"}
+          >
+            {reminderSettings.enabled ? <Bell size={11} /> : <BellOff size={11} />}
+            Reminders
+          </button>
+          {reminderSettings.enabled && (
+            <select
+              value={reminderSettings.frequency}
+              onChange={(e) => onReminderChange({ frequency: e.target.value as ReminderFrequency })}
+              className="text-[11px] bg-surface-2 border border-border rounded px-1 py-0.5 text-text-secondary focus:outline-none focus:border-accent"
+            >
+              {FREQUENCY_IDS.map((id) => (
+                <option key={id} value={id}>{FREQUENCY_LABELS[id]}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
     </div>
   );

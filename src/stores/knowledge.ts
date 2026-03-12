@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import {
+  type IntegrityReminderSettings,
+  computeSnoozeUntil,
+  isReminderDue,
+  loadReminderSettings,
+  saveReminderSettings,
+} from "../lib/integrity-reminder";
+import {
   type RetrievalPresetId,
   type RetrievalSettingsSource,
   RETRIEVAL_PRESETS,
@@ -145,6 +152,17 @@ interface KnowledgeState {
   clearIntegrity: () => void;
   /** Load integrity scan history from backend. */
   loadIntegrityHistory: () => Promise<void>;
+
+  /** Integrity scan reminder settings. */
+  reminderSettings: IntegrityReminderSettings;
+  /** Whether a scan reminder is currently due (derived). */
+  reminderDue: boolean;
+  /** Update reminder enabled/frequency and persist. */
+  setReminderSettings: (patch: Partial<Pick<IntegrityReminderSettings, "enabled" | "frequency">>) => void;
+  /** Snooze the current reminder for 24 hours. */
+  snoozeReminder: () => void;
+  /** Re-evaluate whether the reminder is due (call after scan or on mount). */
+  refreshReminderDue: () => void;
 }
 
 // Initialise from persisted preset (if any), falling back to defaults
@@ -411,9 +429,49 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   loadIntegrityHistory: async () => {
     try {
       const history = await invoke<IntegrityScanSnapshot[]>("get_integrity_history");
-      set({ integrityHistory: history });
+      const safeHistory = Array.isArray(history) ? history : [];
+      set({ integrityHistory: safeHistory });
+      // Re-evaluate reminder whenever history changes
+      const state = get();
+      const lastScanAt = safeHistory.length > 0 ? safeHistory[0].scannedAt : null;
+      set({ reminderDue: isReminderDue(state.reminderSettings, lastScanAt) });
     } catch (err) {
       console.error("Failed to load integrity history:", err);
     }
+  },
+
+  reminderSettings: loadReminderSettings(),
+  reminderDue: false, // evaluated on mount via refreshReminderDue
+
+  setReminderSettings: (patch) => {
+    const current = get().reminderSettings;
+    const updated: IntegrityReminderSettings = {
+      ...current,
+      ...patch,
+      // Clear snooze when toggling enabled or changing frequency
+      snoozedUntil: null,
+    };
+    saveReminderSettings(updated);
+    const lastScanAt = get().integrityHistory[0]?.scannedAt ?? null;
+    set({
+      reminderSettings: updated,
+      reminderDue: isReminderDue(updated, lastScanAt),
+    });
+  },
+
+  snoozeReminder: () => {
+    const current = get().reminderSettings;
+    const updated: IntegrityReminderSettings = {
+      ...current,
+      snoozedUntil: computeSnoozeUntil(),
+    };
+    saveReminderSettings(updated);
+    set({ reminderSettings: updated, reminderDue: false });
+  },
+
+  refreshReminderDue: () => {
+    const { reminderSettings, integrityHistory } = get();
+    const lastScanAt = integrityHistory[0]?.scannedAt ?? null;
+    set({ reminderDue: isReminderDue(reminderSettings, lastScanAt) });
   },
 }));
