@@ -1,11 +1,26 @@
 import {
   type IntegrityExportPayload,
   buildExportPayload,
+  computeTrend,
+  formatDelta,
   formatJSON,
   formatMarkdown,
 } from "@/lib/integrity-export";
-import type { IntegrityReport } from "@/stores/knowledge";
+import type { IntegrityReport, IntegrityScanSnapshot } from "@/stores/knowledge";
 import { describe, expect, it } from "vitest";
+
+function makeSnapshot(overrides?: Partial<IntegrityScanSnapshot>): IntegrityScanSnapshot {
+  return {
+    id: 1,
+    scannedAt: "2026-03-12T10:00:00",
+    total: 10,
+    healthy: 8,
+    missing: 1,
+    moved: 1,
+    notes: null,
+    ...overrides,
+  };
+}
 
 function makeReport(overrides?: Partial<IntegrityReport>): IntegrityReport {
   return {
@@ -149,5 +164,99 @@ describe("formatMarkdown", () => {
     );
     expect(md).toContain("A\\|B");
     expect(md).toContain("/a\\|b.md");
+  });
+
+  it("includes scan history section when provided", () => {
+    const history: IntegrityScanSnapshot[] = [
+      makeSnapshot({ id: 2, scannedAt: "2026-03-12T11:00:00", total: 12, healthy: 10, missing: 1, moved: 1 }),
+      makeSnapshot({ id: 1, scannedAt: "2026-03-12T10:00:00", total: 10, healthy: 8, missing: 1, moved: 1, notes: "initial" }),
+    ];
+    const md = formatMarkdown(makePayload({ history }));
+    expect(md).toContain("## Scan History");
+    expect(md).toContain("| 1 | 2026-03-12T11:00:00 | 12 | 10 | 1 | 1 |  |");
+    expect(md).toContain("| 2 | 2026-03-12T10:00:00 | 10 | 8 | 1 | 1 | initial |");
+  });
+
+  it("omits scan history section when history is empty", () => {
+    const md = formatMarkdown(makePayload({ history: [] }));
+    expect(md).not.toContain("## Scan History");
+  });
+});
+
+describe("computeTrend", () => {
+  it("returns null for empty history", () => {
+    expect(computeTrend([])).toBeNull();
+  });
+
+  it("returns null for single-entry history", () => {
+    expect(computeTrend([makeSnapshot()])).toBeNull();
+  });
+
+  it("computes deltas between latest and previous", () => {
+    const history = [
+      makeSnapshot({ healthy: 10, missing: 2, moved: 1, total: 13 }),
+      makeSnapshot({ healthy: 8, missing: 3, moved: 2, total: 13 }),
+    ];
+    const trend = computeTrend(history);
+    expect(trend).toEqual({
+      healthyDelta: 2,
+      missingDelta: -1,
+      movedDelta: -1,
+      totalDelta: 0,
+    });
+  });
+
+  it("handles all-zero deltas", () => {
+    const snap = makeSnapshot();
+    const trend = computeTrend([snap, snap]);
+    expect(trend).toEqual({
+      healthyDelta: 0,
+      missingDelta: 0,
+      movedDelta: 0,
+      totalDelta: 0,
+    });
+  });
+
+  it("only uses first two entries regardless of history length", () => {
+    const history = [
+      makeSnapshot({ healthy: 10, missing: 0, moved: 0, total: 10 }),
+      makeSnapshot({ healthy: 5, missing: 3, moved: 2, total: 10 }),
+      makeSnapshot({ healthy: 1, missing: 9, moved: 0, total: 10 }),
+    ];
+    const trend = computeTrend(history);
+    expect(trend!.healthyDelta).toBe(5);
+    expect(trend!.missingDelta).toBe(-3);
+  });
+});
+
+describe("formatDelta", () => {
+  it("formats positive deltas with +", () => {
+    expect(formatDelta(3)).toBe("+3");
+  });
+
+  it("formats negative deltas with -", () => {
+    expect(formatDelta(-2)).toBe("-2");
+  });
+
+  it("formats zero as 0", () => {
+    expect(formatDelta(0)).toBe("0");
+  });
+});
+
+describe("buildExportPayload with history", () => {
+  it("includes history when provided", () => {
+    const history = [makeSnapshot()];
+    const payload = buildExportPayload(makeReport(), history);
+    expect(payload.history).toEqual(history);
+  });
+
+  it("omits history key when empty", () => {
+    const payload = buildExportPayload(makeReport(), []);
+    expect(payload.history).toBeUndefined();
+  });
+
+  it("omits history key when undefined", () => {
+    const payload = buildExportPayload(makeReport());
+    expect(payload.history).toBeUndefined();
   });
 });

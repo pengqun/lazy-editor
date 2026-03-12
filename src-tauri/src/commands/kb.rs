@@ -1,5 +1,5 @@
 use crate::knowledge::chunker;
-use crate::knowledge::db::{ChunkContext, KBDocument, SearchResult};
+use crate::knowledge::db::{ChunkContext, IntegrityScanSnapshot, KBDocument, SearchResult};
 use crate::knowledge::search;
 use crate::AppState;
 use serde::Serialize;
@@ -10,6 +10,9 @@ use tauri::{AppHandle, Emitter, State};
 
 /// Maximum file size for KB ingestion: 10 MB.
 const MAX_INGEST_BYTES: u64 = 10 * 1024 * 1024;
+
+/// Maximum number of integrity scan snapshots to keep in history.
+const MAX_SCAN_HISTORY: i64 = 20;
 
 #[tauri::command]
 pub async fn ingest_file(
@@ -372,6 +375,16 @@ pub async fn check_kb_integrity(
         }
     }
 
+    // Persist scan snapshot for history tracking (best-effort, don't fail the scan)
+    let _ = db.save_integrity_scan(
+        (healthy + missing + moved) as i64,
+        healthy as i64,
+        missing as i64,
+        moved as i64,
+        None,
+        MAX_SCAN_HISTORY,
+    );
+
     Ok(IntegrityReport {
         entries,
         healthy,
@@ -394,4 +407,14 @@ pub async fn relink_kb_document(
     let db = state.db.lock().await;
     db.update_document_source_path(id, &newPath)
         .map_err(|e| format!("Failed to relink document: {}", e))
+}
+
+/// Retrieve recent integrity scan history snapshots.
+#[tauri::command]
+pub async fn get_integrity_history(
+    state: State<'_, AppState>,
+) -> Result<Vec<IntegrityScanSnapshot>, String> {
+    let db = state.db.lock().await;
+    db.get_integrity_history(MAX_SCAN_HISTORY)
+        .map_err(|e| format!("Failed to load integrity history: {}", e))
 }

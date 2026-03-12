@@ -61,6 +61,16 @@ export interface IntegrityReport {
   moved: number;
 }
 
+export interface IntegrityScanSnapshot {
+  id: number;
+  scannedAt: string;
+  total: number;
+  healthy: number;
+  missing: number;
+  moved: number;
+  notes: string | null;
+}
+
 interface KnowledgeState {
   documents: KBDocument[];
   isIngesting: boolean;
@@ -123,6 +133,8 @@ interface KnowledgeState {
   /** KB integrity scan results. */
   integrityReport: IntegrityReport | null;
   integrityLoading: boolean;
+  /** Recent integrity scan history snapshots. */
+  integrityHistory: IntegrityScanSnapshot[];
   /** Run an integrity scan on all file-sourced documents. */
   checkIntegrity: () => Promise<void>;
   /** Relink a stale document to a new path. */
@@ -131,6 +143,8 @@ interface KnowledgeState {
   removeStaleDocuments: (ids: number[]) => Promise<void>;
   /** Clear the integrity report. */
   clearIntegrity: () => void;
+  /** Load integrity scan history from backend. */
+  loadIntegrityHistory: () => Promise<void>;
 }
 
 // Initialise from persisted preset (if any), falling back to defaults
@@ -346,12 +360,15 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
 
   integrityReport: null,
   integrityLoading: false,
+  integrityHistory: [],
 
   checkIntegrity: async () => {
     set({ integrityLoading: true });
     try {
       const report = await invoke<IntegrityReport>("check_kb_integrity");
       set({ integrityReport: report, integrityLoading: false });
+      // Refresh history after scan (auto-saved by backend)
+      await get().loadIntegrityHistory();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("Failed to check KB integrity:", message);
@@ -390,4 +407,13 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   },
 
   clearIntegrity: () => set({ integrityReport: null }),
+
+  loadIntegrityHistory: async () => {
+    try {
+      const history = await invoke<IntegrityScanSnapshot[]>("get_integrity_history");
+      set({ integrityHistory: history });
+    } catch (err) {
+      console.error("Failed to load integrity history:", err);
+    }
+  },
 }));

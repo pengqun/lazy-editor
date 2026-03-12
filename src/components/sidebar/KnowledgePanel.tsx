@@ -20,12 +20,12 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
-import { buildExportPayload, formatJSON, formatMarkdown } from "../../lib/integrity-export";
+import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdown } from "../../lib/integrity-export";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
 import { useFilesStore } from "../../stores/files";
-import { type IntegrityEntry, type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
+import { type IntegrityEntry, type IntegrityScanSnapshot, type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
 
 export function KnowledgePanel() {
   const {
@@ -56,10 +56,12 @@ export function KnowledgePanel() {
     viewChunk,
     integrityReport,
     integrityLoading,
+    integrityHistory,
     checkIntegrity,
     relinkDocument,
     removeStaleDocuments,
     clearIntegrity,
+    loadIntegrityHistory,
   } = useKnowledgeStore();
 
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
@@ -72,7 +74,8 @@ export function KnowledgePanel() {
 
   useEffect(() => {
     loadDocuments();
-  }, [loadDocuments]);
+    loadIntegrityHistory();
+  }, [loadDocuments, loadIntegrityHistory]);
 
   useEffect(() => {
     const unlisten = listenToIngestProgress((msg) => {
@@ -332,6 +335,7 @@ export function KnowledgePanel() {
       {integrityReport && (
         <IntegritySection
           report={integrityReport}
+          history={integrityHistory}
           onRelink={relinkDocument}
           onRemove={removeStaleDocuments}
           onClose={clearIntegrity}
@@ -707,25 +711,29 @@ function SettingsSourceBadge({ source }: { source: RetrievalSettingsSource }) {
 
 function IntegritySection({
   report,
+  history,
   onRelink,
   onRemove,
   onClose,
 }: {
   report: { entries: IntegrityEntry[]; healthy: number; missing: number; moved: number };
+  history: IntegrityScanSnapshot[];
   onRelink: (id: number, newPath: string) => Promise<void>;
   onRemove: (ids: number[]) => Promise<void>;
   onClose: () => void;
 }) {
+  const [showHistory, setShowHistory] = useState(false);
   const staleEntries = report.entries.filter((e) => e.status !== "healthy");
   const movedEntries = report.entries.filter((e) => e.status === "moved");
   const missingEntries = report.entries.filter((e) => e.status === "missing");
   const allHealthy = staleEntries.length === 0;
+  const trend = computeTrend(history);
 
   const handleExport = async (format: "json" | "md") => {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
 
-    const payload = buildExportPayload(report);
+    const payload = buildExportPayload(report, history);
     const content = format === "json" ? formatJSON(payload) : formatMarkdown(payload);
     const ext = format === "json" ? "json" : "md";
 
@@ -748,11 +756,24 @@ function IntegritySection({
             </span>
           </div>
           <div className="flex items-center gap-0.5">
+            {history.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setShowHistory(!showHistory)}
+                className={cn(
+                  "p-0.5 rounded text-[10px] px-1",
+                  showHistory ? "bg-accent/20 text-accent" : "hover:bg-surface-3 text-text-tertiary",
+                )}
+                title="Toggle scan history"
+              >
+                {history.length} scans
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleExport("json")}
               className="p-0.5 hover:bg-surface-3 rounded"
-              title="Export as JSON"
+              title="Export as JSON (includes history)"
             >
               <Download size={12} className="text-text-tertiary" />
             </button>
@@ -760,7 +781,7 @@ function IntegritySection({
               type="button"
               onClick={() => handleExport("md")}
               className="p-0.5 hover:bg-surface-3 rounded"
-              title="Export as Markdown"
+              title="Export as Markdown (includes history)"
             >
               <BookOpen size={12} className="text-text-tertiary" />
             </button>
@@ -770,17 +791,79 @@ function IntegritySection({
           </div>
         </div>
 
-        {/* Summary */}
+        {/* Summary with trend indicators */}
         <div className="flex gap-2 text-[11px]">
-          <span className="text-emerald-400">{report.healthy} healthy</span>
-          {report.moved > 0 && <span className="text-amber-400">{report.moved} moved</span>}
-          {report.missing > 0 && <span className="text-red-400">{report.missing} missing</span>}
+          <span className="text-emerald-400">
+            {report.healthy} healthy
+            {trend && trend.healthyDelta !== 0 && (
+              <span className={trend.healthyDelta > 0 ? "text-emerald-500" : "text-red-400"}>
+                {" "}{formatDelta(trend.healthyDelta)}
+              </span>
+            )}
+          </span>
+          {report.moved > 0 && (
+            <span className="text-amber-400">
+              {report.moved} moved
+              {trend && trend.movedDelta !== 0 && (
+                <span className={trend.movedDelta < 0 ? "text-emerald-500" : "text-red-400"}>
+                  {" "}{formatDelta(trend.movedDelta)}
+                </span>
+              )}
+            </span>
+          )}
+          {report.missing > 0 && (
+            <span className="text-red-400">
+              {report.missing} missing
+              {trend && trend.missingDelta !== 0 && (
+                <span className={trend.missingDelta < 0 ? "text-emerald-500" : "text-red-400"}>
+                  {" "}{formatDelta(trend.missingDelta)}
+                </span>
+              )}
+            </span>
+          )}
         </div>
 
         {allHealthy && (
           <div className="flex items-center gap-1.5 text-xs text-emerald-400">
             <CheckCircle2 size={12} />
             All source references are valid.
+          </div>
+        )}
+
+        {/* Scan history list */}
+        {showHistory && history.length > 0 && (
+          <div className="space-y-1">
+            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
+              Recent Scans
+            </span>
+            <div className="max-h-32 overflow-y-auto space-y-0.5">
+              {history.map((snap, i) => (
+                <div
+                  key={snap.id}
+                  className={cn(
+                    "flex items-center gap-2 py-0.5 px-1.5 rounded text-[10px]",
+                    i === 0 ? "bg-accent/10" : "bg-surface-2",
+                  )}
+                >
+                  <span className="text-text-tertiary shrink-0 tabular-nums">
+                    {new Date(snap.scannedAt + "Z").toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  <span className="text-emerald-400 tabular-nums">{snap.healthy}h</span>
+                  {snap.missing > 0 && <span className="text-red-400 tabular-nums">{snap.missing}m</span>}
+                  {snap.moved > 0 && <span className="text-amber-400 tabular-nums">{snap.moved}mv</span>}
+                  {snap.notes && (
+                    <span className="text-text-tertiary truncate" title={snap.notes}>
+                      {snap.notes}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

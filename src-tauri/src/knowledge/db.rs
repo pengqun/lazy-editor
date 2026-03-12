@@ -81,6 +81,18 @@ pub struct Snapshot {
     pub created_at: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct IntegrityScanSnapshot {
+    pub id: i64,
+    #[serde(rename = "scannedAt")]
+    pub scanned_at: String,
+    pub total: i64,
+    pub healthy: i64,
+    pub missing: i64,
+    pub moved: i64,
+    pub notes: Option<String>,
+}
+
 impl Database {
     pub fn new(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
@@ -128,6 +140,16 @@ impl Database {
 
             CREATE INDEX IF NOT EXISTS idx_snapshots_file_path ON snapshots(file_path);
             CREATE INDEX IF NOT EXISTS idx_snapshots_file_path_created ON snapshots(file_path, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS integrity_scan_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scanned_at TEXT NOT NULL DEFAULT (datetime('now')),
+                total INTEGER NOT NULL,
+                healthy INTEGER NOT NULL,
+                missing INTEGER NOT NULL,
+                moved INTEGER NOT NULL,
+                notes TEXT
+            );
             ",
         )?;
 
@@ -507,6 +529,61 @@ impl Database {
         self.conn
             .execute("DELETE FROM snapshots WHERE id = ?1", params![id])?;
         Ok(())
+    }
+
+    // ── Integrity scan history ──
+
+    /// Save an integrity scan snapshot and prune history beyond `max_keep`.
+    pub fn save_integrity_scan(
+        &self,
+        total: i64,
+        healthy: i64,
+        missing: i64,
+        moved: i64,
+        notes: Option<&str>,
+        max_keep: i64,
+    ) -> Result<i64> {
+        self.conn.execute(
+            "INSERT INTO integrity_scan_history (total, healthy, missing, moved, notes) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![total, healthy, missing, moved, notes],
+        )?;
+        let id = self.conn.last_insert_rowid();
+
+        // Prune oldest beyond cap
+        self.conn.execute(
+            "DELETE FROM integrity_scan_history WHERE id NOT IN (
+                SELECT id FROM integrity_scan_history ORDER BY id DESC LIMIT ?1
+            )",
+            params![max_keep],
+        )?;
+
+        Ok(id)
+    }
+
+    /// Retrieve the most recent integrity scan snapshots.
+    pub fn get_integrity_history(&self, limit: i64) -> Result<Vec<IntegrityScanSnapshot>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, scanned_at, total, healthy, missing, moved, notes
+             FROM integrity_scan_history
+             ORDER BY id DESC
+             LIMIT ?1",
+        )?;
+
+        let rows = stmt
+            .query_map(params![limit], |row| {
+                Ok(IntegrityScanSnapshot {
+                    id: row.get(0)?,
+                    scanned_at: row.get(1)?,
+                    total: row.get(2)?,
+                    healthy: row.get(3)?,
+                    missing: row.get(4)?,
+                    moved: row.get(5)?,
+                    notes: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(rows)
     }
 }
 
@@ -932,6 +1009,59 @@ mod tests {
         let result = db.update_document_source_path(9999, "/any/path.md");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("No document"));
+    }
+
+    // ── Integrity scan history tests ──
+
+    #[test]
+    fn save_integrity_scan_returns_id() {
+        let db = test_db();
+        let id = db.save_integrity_scan(10, 8, 1, 1, None, 20).unwrap();
+        assert!(id > 0);
+    }
+
+    #[test]
+    fn get_integrity_history_returns_saved_scans() {
+        let db = test_db();
+        db.save_integrity_scan(10, 8, 1, 1, None, 20).unwrap();
+        db.save_integrity_scan(12, 10, 2, 0, Some("after cleanup"), 20).unwrap();
+
+        let history = db.get_integrity_history(20).unwrap();
+        assert_eq!(history.len(), 2);
+        // Most recent first
+        assert_eq!(history[0].total, 12);
+        assert_eq!(history[0].notes.as_deref(), Some("after cleanup"));
+        assert_eq!(history[1].total, 10);
+        assert!(history[1].notes.is_none());
+    }
+
+    #[test]
+    fn save_integrity_scan_prunes_oldest_beyond_cap() {
+        let db = test_db();
+        for i in 0..10 {
+            db.save_integrity_scan(i, i, 0, 0, None, 5).unwrap();
+        }
+        let history = db.get_integrity_history(20).unwrap();
+        assert_eq!(history.len(), 5);
+        // The most recent scan should have total = 9
+        assert_eq!(history[0].total, 9);
+    }
+
+    #[test]
+    fn get_integrity_history_empty_when_no_scans() {
+        let db = test_db();
+        let history = db.get_integrity_history(20).unwrap();
+        assert!(history.is_empty());
+    }
+
+    #[test]
+    fn get_integrity_history_respects_limit() {
+        let db = test_db();
+        for i in 0..10 {
+            db.save_integrity_scan(i, i, 0, 0, None, 20).unwrap();
+        }
+        let history = db.get_integrity_history(3).unwrap();
+        assert_eq!(history.len(), 3);
     }
 
     #[test]

@@ -1,12 +1,42 @@
-import type { IntegrityEntry, IntegrityReport } from "@/stores/knowledge";
+import type { IntegrityEntry, IntegrityReport, IntegrityScanSnapshot } from "@/stores/knowledge";
 
 export interface IntegrityExportPayload {
   scanTimestamp: string;
   summary: { total: number; healthy: number; missing: number; moved: number };
   entries: IntegrityEntry[];
+  history?: IntegrityScanSnapshot[];
 }
 
-export function buildExportPayload(report: IntegrityReport): IntegrityExportPayload {
+export interface IntegrityTrend {
+  healthyDelta: number;
+  missingDelta: number;
+  movedDelta: number;
+  totalDelta: number;
+}
+
+/** Compute trend deltas between latest and previous scan snapshot. Returns null if fewer than 2 snapshots. */
+export function computeTrend(history: IntegrityScanSnapshot[]): IntegrityTrend | null {
+  if (history.length < 2) return null;
+  const latest = history[0];
+  const previous = history[1];
+  return {
+    healthyDelta: latest.healthy - previous.healthy,
+    missingDelta: latest.missing - previous.missing,
+    movedDelta: latest.moved - previous.moved,
+    totalDelta: latest.total - previous.total,
+  };
+}
+
+/** Format a delta number as a signed string (e.g., "+2", "-1", "0"). */
+export function formatDelta(delta: number): string {
+  if (delta > 0) return `+${delta}`;
+  return String(delta);
+}
+
+export function buildExportPayload(
+  report: IntegrityReport,
+  history?: IntegrityScanSnapshot[],
+): IntegrityExportPayload {
   return {
     scanTimestamp: new Date().toISOString(),
     summary: {
@@ -16,6 +46,7 @@ export function buildExportPayload(report: IntegrityReport): IntegrityExportPayl
       moved: report.moved,
     },
     entries: report.entries,
+    ...(history && history.length > 0 ? { history } : {}),
   };
 }
 
@@ -24,7 +55,7 @@ export function formatJSON(payload: IntegrityExportPayload): string {
 }
 
 export function formatMarkdown(payload: IntegrityExportPayload): string {
-  const { scanTimestamp, summary, entries } = payload;
+  const { scanTimestamp, summary, entries, history } = payload;
   const lines: string[] = [];
 
   lines.push("# KB Integrity Report");
@@ -44,21 +75,33 @@ export function formatMarkdown(payload: IntegrityExportPayload): string {
 
   if (entries.length === 0) {
     lines.push("_No documents scanned._");
+  } else {
+    lines.push("## Documents");
     lines.push("");
-    return lines.join("\n");
+    lines.push("| ID | Title | Source Path | Status | Notes |");
+    lines.push("|----|-------|-------------|--------|-------|");
+
+    for (const e of entries) {
+      const notes = e.movedCandidate ? `Candidate: ${e.movedCandidate}` : "";
+      const escapedTitle = e.title.replace(/\|/g, "\\|");
+      const escapedPath = e.sourcePath.replace(/\|/g, "\\|");
+      const escapedNotes = notes.replace(/\|/g, "\\|");
+      lines.push(`| ${e.id} | ${escapedTitle} | ${escapedPath} | ${e.status} | ${escapedNotes} |`);
+    }
   }
 
-  lines.push("## Documents");
-  lines.push("");
-  lines.push("| ID | Title | Source Path | Status | Notes |");
-  lines.push("|----|-------|-------------|--------|-------|");
-
-  for (const e of entries) {
-    const notes = e.movedCandidate ? `Candidate: ${e.movedCandidate}` : "";
-    const escapedTitle = e.title.replace(/\|/g, "\\|");
-    const escapedPath = e.sourcePath.replace(/\|/g, "\\|");
-    const escapedNotes = notes.replace(/\|/g, "\\|");
-    lines.push(`| ${e.id} | ${escapedTitle} | ${escapedPath} | ${e.status} | ${escapedNotes} |`);
+  // History section (if available)
+  if (history && history.length > 0) {
+    lines.push("");
+    lines.push("## Scan History");
+    lines.push("");
+    lines.push("| # | Scanned At | Total | Healthy | Missing | Moved | Notes |");
+    lines.push("|---|------------|-------|---------|---------|-------|-------|");
+    for (let i = 0; i < history.length; i++) {
+      const h = history[i];
+      const notes = h.notes ? h.notes.replace(/\|/g, "\\|") : "";
+      lines.push(`| ${i + 1} | ${h.scannedAt} | ${h.total} | ${h.healthy} | ${h.missing} | ${h.moved} | ${notes} |`);
+    }
   }
 
   lines.push("");
