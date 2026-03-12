@@ -156,6 +156,77 @@ export function formatAge(ms: number): string {
   return `${days}d ago`;
 }
 
+// --- User-facing threshold settings ---
+
+/**
+ * User-configurable health threshold settings (days-based for UI).
+ * Converted to internal HealthThresholds for tier computation.
+ */
+export interface HealthThresholdSettings {
+  /** Min scans in 7 days for "good" tier (default: 2, range: 1–10). */
+  goodMinScans7d: number;
+  /** Max latest scan age in days for "good" tier (default: 7, range: 1–30). */
+  goodMaxAgeDays: number;
+  /** Max latest scan age in days before "poor" tier (default: 14, range: 2–60). */
+  poorMaxAgeDays: number;
+}
+
+export const DEFAULT_THRESHOLD_SETTINGS: HealthThresholdSettings = {
+  goodMinScans7d: 2,
+  goodMaxAgeDays: 7,
+  poorMaxAgeDays: 14,
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Clamp and validate user threshold settings to safe bounds. */
+export function clampThresholdSettings(raw: HealthThresholdSettings): HealthThresholdSettings {
+  const goodMinScans7d = Math.max(1, Math.min(10, Math.round(raw.goodMinScans7d) || 1));
+  const goodMaxAgeDays = Math.max(1, Math.min(30, Math.round(raw.goodMaxAgeDays) || 1));
+  // poorMaxAgeDays must be > goodMaxAgeDays
+  const poorMin = goodMaxAgeDays + 1;
+  const poorMaxAgeDays = Math.max(poorMin, Math.min(60, Math.round(raw.poorMaxAgeDays) || poorMin));
+  return { goodMinScans7d, goodMaxAgeDays, poorMaxAgeDays };
+}
+
+/** Convert user-facing settings to internal HealthThresholds. */
+export function toHealthThresholds(settings: HealthThresholdSettings): HealthThresholds {
+  return {
+    good7d: settings.goodMinScans7d,
+    warning7d: 1, // fixed internal value
+    goodMaxAgeMs: settings.goodMaxAgeDays * DAY_MS,
+    warningMaxAgeMs: settings.poorMaxAgeDays * DAY_MS,
+  };
+}
+
+// --- Threshold persistence ---
+
+const THRESHOLD_STORAGE_KEY = "lazy-editor:integrity-health-thresholds";
+
+export function loadThresholdSettings(): HealthThresholdSettings {
+  try {
+    const raw = localStorage.getItem(THRESHOLD_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_THRESHOLD_SETTINGS };
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return { ...DEFAULT_THRESHOLD_SETTINGS };
+    return clampThresholdSettings({
+      goodMinScans7d: typeof parsed.goodMinScans7d === "number" ? parsed.goodMinScans7d : DEFAULT_THRESHOLD_SETTINGS.goodMinScans7d,
+      goodMaxAgeDays: typeof parsed.goodMaxAgeDays === "number" ? parsed.goodMaxAgeDays : DEFAULT_THRESHOLD_SETTINGS.goodMaxAgeDays,
+      poorMaxAgeDays: typeof parsed.poorMaxAgeDays === "number" ? parsed.poorMaxAgeDays : DEFAULT_THRESHOLD_SETTINGS.poorMaxAgeDays,
+    });
+  } catch {
+    return { ...DEFAULT_THRESHOLD_SETTINGS };
+  }
+}
+
+export function saveThresholdSettings(settings: HealthThresholdSettings): void {
+  try {
+    localStorage.setItem(THRESHOLD_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // localStorage full or disabled — silently skip
+  }
+}
+
 // --- Tier display helpers ---
 
 export const TIER_LABELS: Record<HealthTier, string> = {

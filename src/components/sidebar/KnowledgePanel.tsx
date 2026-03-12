@@ -15,6 +15,7 @@ import {
   Loader2,
   Pin,
   PinOff,
+  RotateCcw,
   Search,
   Settings2,
   ShieldCheck,
@@ -25,7 +26,7 @@ import {
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdown } from "../../lib/integrity-export";
-import { TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge } from "../../lib/integrity-health";
+import { type HealthThresholdSettings, DEFAULT_THRESHOLD_SETTINGS, TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge, toHealthThresholds } from "../../lib/integrity-health";
 import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
@@ -384,6 +385,9 @@ export function KnowledgePanel() {
           onClose={clearIntegrity}
           reminderSettings={reminderSettings}
           onReminderChange={setReminderSettings}
+          healthThresholds={useKnowledgeStore.getState().healthThresholds}
+          onThresholdsChange={useKnowledgeStore.getState().setHealthThresholds}
+          onThresholdsReset={useKnowledgeStore.getState().resetHealthThresholds}
         />
       )}
 
@@ -762,6 +766,9 @@ function IntegritySection({
   onClose,
   reminderSettings,
   onReminderChange,
+  healthThresholds,
+  onThresholdsChange,
+  onThresholdsReset,
 }: {
   report: { entries: IntegrityEntry[]; healthy: number; missing: number; moved: number };
   history: IntegrityScanSnapshot[];
@@ -770,16 +777,25 @@ function IntegritySection({
   onClose: () => void;
   reminderSettings: { enabled: boolean; frequency: ReminderFrequency };
   onReminderChange: (patch: Partial<{ enabled: boolean; frequency: ReminderFrequency }>) => void;
+  healthThresholds: HealthThresholdSettings;
+  onThresholdsChange: (patch: Partial<HealthThresholdSettings>) => void;
+  onThresholdsReset: () => void;
 }) {
   const [showHistory, setShowHistory] = useState(false);
   const [showHealth, setShowHealth] = useState(false);
+  const [showThresholds, setShowThresholds] = useState(false);
   const staleEntries = report.entries.filter((e) => e.status !== "healthy");
   const movedEntries = report.entries.filter((e) => e.status === "moved");
   const missingEntries = report.entries.filter((e) => e.status === "missing");
   const allHealthy = staleEntries.length === 0;
   const trend = computeTrend(history);
   const coverage = computeScanCoverage(history);
-  const healthTier = computeHealthTier(coverage);
+  const internalThresholds = toHealthThresholds(healthThresholds);
+  const healthTier = computeHealthTier(coverage, internalThresholds);
+  const isDefaultThresholds =
+    healthThresholds.goodMinScans7d === DEFAULT_THRESHOLD_SETTINGS.goodMinScans7d &&
+    healthThresholds.goodMaxAgeDays === DEFAULT_THRESHOLD_SETTINGS.goodMaxAgeDays &&
+    healthThresholds.poorMaxAgeDays === DEFAULT_THRESHOLD_SETTINGS.poorMaxAgeDays;
 
   const handleExport = async (format: "json" | "md") => {
     const { save } = await import("@tauri-apps/plugin-dialog");
@@ -914,6 +930,67 @@ function IntegritySection({
                 </>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowThresholds(!showThresholds)}
+              className={cn(
+                "text-[10px] px-1 py-0.5 rounded transition-colors",
+                showThresholds ? "text-accent" : "text-text-tertiary hover:text-text-secondary",
+              )}
+            >
+              <Settings2 size={10} className="inline mr-0.5" />
+              Thresholds
+            </button>
+            {showThresholds && (
+              <div className="space-y-1 pt-0.5">
+                <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1 text-[10px] items-center">
+                  <label className="text-text-tertiary" title="Minimum scans in the last 7 days for 'Good' tier">
+                    Good: min scans/7d
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={healthThresholds.goodMinScans7d}
+                    onChange={(e) => onThresholdsChange({ goodMinScans7d: Number(e.target.value) })}
+                    className="w-12 text-[10px] bg-surface-2 border border-border rounded px-1 py-0.5 text-text-secondary text-right tabular-nums focus:outline-none focus:border-accent"
+                  />
+                  <label className="text-text-tertiary" title="Maximum scan age in days for 'Good' tier">
+                    Good: max age (days)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={healthThresholds.goodMaxAgeDays}
+                    onChange={(e) => onThresholdsChange({ goodMaxAgeDays: Number(e.target.value) })}
+                    className="w-12 text-[10px] bg-surface-2 border border-border rounded px-1 py-0.5 text-text-secondary text-right tabular-nums focus:outline-none focus:border-accent"
+                  />
+                  <label className="text-text-tertiary" title="Maximum scan age in days before 'Poor' tier">
+                    Poor: max age (days)
+                  </label>
+                  <input
+                    type="number"
+                    min={2}
+                    max={60}
+                    value={healthThresholds.poorMaxAgeDays}
+                    onChange={(e) => onThresholdsChange({ poorMaxAgeDays: Number(e.target.value) })}
+                    className="w-12 text-[10px] bg-surface-2 border border-border rounded px-1 py-0.5 text-text-secondary text-right tabular-nums focus:outline-none focus:border-accent"
+                  />
+                </div>
+                {!isDefaultThresholds && (
+                  <button
+                    type="button"
+                    onClick={onThresholdsReset}
+                    className="flex items-center gap-0.5 text-[10px] text-text-tertiary hover:text-accent transition-colors"
+                    title="Reset thresholds to defaults"
+                  >
+                    <RotateCcw size={9} />
+                    Reset to defaults
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 

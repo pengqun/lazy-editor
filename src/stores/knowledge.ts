@@ -1,6 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import {
+  type HealthThresholdSettings,
+  DEFAULT_THRESHOLD_SETTINGS,
+  clampThresholdSettings,
+  loadThresholdSettings,
+  saveThresholdSettings,
+  toHealthThresholds,
+} from "../lib/integrity-health";
+import {
   type IntegrityReminderSettings,
   computeSnoozeUntil,
   isReminderDue,
@@ -163,6 +171,15 @@ interface KnowledgeState {
   snoozeReminder: () => void;
   /** Re-evaluate whether the reminder is due (call after scan or on mount). */
   refreshReminderDue: () => void;
+
+  /** Health threshold settings (user-configurable). */
+  healthThresholds: HealthThresholdSettings;
+  /** Update health thresholds (clamped + persisted). */
+  setHealthThresholds: (patch: Partial<HealthThresholdSettings>) => void;
+  /** Reset health thresholds to defaults. */
+  resetHealthThresholds: () => void;
+  /** Get internal HealthThresholds derived from current settings. */
+  getHealthThresholds: () => ReturnType<typeof toHealthThresholds>;
 }
 
 // Initialise from persisted preset (if any), falling back to defaults
@@ -474,4 +491,21 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     const lastScanAt = integrityHistory[0]?.scannedAt ?? null;
     set({ reminderDue: isReminderDue(reminderSettings, lastScanAt) });
   },
+
+  healthThresholds: loadThresholdSettings(),
+
+  setHealthThresholds: (patch) => {
+    const current = get().healthThresholds;
+    const updated = clampThresholdSettings({ ...current, ...patch });
+    saveThresholdSettings(updated);
+    set({ healthThresholds: updated });
+  },
+
+  resetHealthThresholds: () => {
+    const defaults = { ...DEFAULT_THRESHOLD_SETTINGS };
+    saveThresholdSettings(defaults);
+    set({ healthThresholds: defaults });
+  },
+
+  getHealthThresholds: () => toHealthThresholds(get().healthThresholds),
 }));
