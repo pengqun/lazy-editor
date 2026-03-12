@@ -13,6 +13,12 @@ import {
   toHealthThresholds,
 } from "../lib/integrity-health";
 import {
+  applyThresholdConfig,
+  buildThresholdExportPayload,
+  parseThresholdConfig,
+  serializeThresholdConfig,
+} from "../lib/integrity-threshold-io";
+import {
   type IntegrityReminderSettings,
   computeSnoozeUntil,
   isReminderDue,
@@ -190,6 +196,11 @@ interface KnowledgeState {
   saveThresholdsForWorkspace: () => void;
   /** Remove workspace threshold override (fall back to global). */
   resetWorkspaceThresholds: () => void;
+
+  /** Export threshold config to JSON string (for save-to-file). */
+  exportThresholdConfig: () => string;
+  /** Import threshold config from JSON string. Returns null on success, error string on failure. */
+  importThresholdConfig: (jsonString: string) => string | null;
 }
 
 // Initialise from persisted preset (if any), falling back to defaults
@@ -548,5 +559,21 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     // Fall back to global
     const globalSettings = loadThresholdSettings();
     set({ healthThresholds: globalSettings, healthThresholdSource: "global" });
+  },
+
+  exportThresholdConfig: () => {
+    const payload = buildThresholdExportPayload();
+    return serializeThresholdConfig(payload);
+  },
+
+  importThresholdConfig: (jsonString) => {
+    const result = parseThresholdConfig(jsonString);
+    if (!result.ok) return result.error;
+    applyThresholdConfig(result.payload);
+    // Re-resolve for current workspace
+    const { _workspacePath } = get();
+    const { settings, source } = resolveThresholdSettings(_workspacePath);
+    set({ healthThresholds: settings, healthThresholdSource: source });
+    return null;
   },
 }));

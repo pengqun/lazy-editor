@@ -393,6 +393,8 @@ export function KnowledgePanel() {
           onThresholdsReset={useKnowledgeStore.getState().resetHealthThresholds}
           onSaveForWorkspace={useKnowledgeStore.getState().saveThresholdsForWorkspace}
           onResetWorkspace={useKnowledgeStore.getState().resetWorkspaceThresholds}
+          onExportThresholds={useKnowledgeStore.getState().exportThresholdConfig}
+          onImportThresholds={useKnowledgeStore.getState().importThresholdConfig}
         />
       )}
 
@@ -778,6 +780,8 @@ function IntegritySection({
   onThresholdsReset,
   onSaveForWorkspace,
   onResetWorkspace,
+  onExportThresholds,
+  onImportThresholds,
 }: {
   report: { entries: IntegrityEntry[]; healthy: number; missing: number; moved: number };
   history: IntegrityScanSnapshot[];
@@ -793,6 +797,8 @@ function IntegritySection({
   onThresholdsReset: () => void;
   onSaveForWorkspace: () => void;
   onResetWorkspace: () => void;
+  onExportThresholds: () => string;
+  onImportThresholds: (jsonString: string) => string | null;
 }) {
   const [showHistory, setShowHistory] = useState(false);
   const [showHealth, setShowHealth] = useState(false);
@@ -1030,6 +1036,57 @@ function IntegritySection({
                       Use global defaults
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const { save } = await import("@tauri-apps/plugin-dialog");
+                      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+                      const content = onExportThresholds();
+                      const filePath = await save({
+                        defaultPath: "integrity-thresholds.json",
+                        filters: [{ name: "JSON", extensions: ["json"] }],
+                      });
+                      if (!filePath) return;
+                      await writeTextFile(filePath, content);
+                    }}
+                    className="flex items-center gap-0.5 text-[10px] text-text-tertiary hover:text-accent transition-colors"
+                    title="Export threshold config to JSON file"
+                  >
+                    <Download size={9} />
+                    Export
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const { open } = await import("@tauri-apps/plugin-dialog");
+                      const { readTextFile } = await import("@tauri-apps/plugin-fs");
+                      const filePath = await open({
+                        filters: [{ name: "JSON", extensions: ["json"] }],
+                        multiple: false,
+                        directory: false,
+                      });
+                      if (!filePath) return;
+                      try {
+                        const content = await readTextFile(filePath as string);
+                        const error = onImportThresholds(content);
+                        if (error) {
+                          const { toast } = await import("../../stores/toast");
+                          toast.error(`Import failed: ${error}`);
+                        } else {
+                          const { toast } = await import("../../stores/toast");
+                          toast.success("Threshold config imported successfully");
+                        }
+                      } catch (err) {
+                        const { toast } = await import("../../stores/toast");
+                        toast.error(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    }}
+                    className="flex items-center gap-0.5 text-[10px] text-text-tertiary hover:text-accent transition-colors"
+                    title="Import threshold config from JSON file"
+                  >
+                    <Upload size={9} />
+                    Import
+                  </button>
                 </div>
               </div>
             )}
