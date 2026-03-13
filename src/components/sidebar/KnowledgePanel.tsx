@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
+  Copy,
   Clock,
   Download,
   FilePlus2,
@@ -32,7 +33,7 @@ import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdo
 import { type HealthThresholdSettings, type ThresholdSource, DEFAULT_THRESHOLD_SETTINGS, TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge, toHealthThresholds } from "../../lib/integrity-health";
 import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
 import type { HealthCheckReport, RecommendationAction } from "../../lib/integrity-healthcheck";
-import { formatEstimatedImpact, type BatchExecutionLog, type BatchFixPlan, summarizeEstimatedImpact } from "../../lib/integrity-batch-plan";
+import { buildBatchExecutionSummaryText, computeBatchExecutionMetrics, formatEstimatedImpact, formatRate, type BatchExecutionLog, type BatchFixPlan, summarizeEstimatedImpact } from "../../lib/integrity-batch-plan";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { toSparkline } from "../../lib/integrity-trend-history";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
@@ -941,6 +942,19 @@ function HealthCheckCard({
   const estimatedImpact = batchFixPlan
     ? formatEstimatedImpact(summarizeEstimatedImpact(batchFixPlan, integrityReport?.moved ?? 0))
     : "none";
+  const executionMetrics = batchExecutionLog ? computeBatchExecutionMetrics(batchExecutionLog) : null;
+
+  const handleCopyExecutionSummary = async () => {
+    if (!batchExecutionLog) return;
+    try {
+      await navigator.clipboard.writeText(buildBatchExecutionSummaryText(batchExecutionLog));
+      const { toast } = await import("../../stores/toast");
+      toast.success("执行摘要已复制");
+    } catch (err) {
+      const { toast } = await import("../../stores/toast");
+      toast.error(`复制失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   return (
     <div className="border-b border-border">
@@ -1141,24 +1155,43 @@ function HealthCheckCard({
               <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
                 Execution Results
               </span>
-              <button
-                type="button"
-                onClick={onClearBatchLog}
-                className="p-0.5 hover:bg-surface-3 rounded"
-                title="Dismiss log"
-              >
-                <X size={10} className="text-text-tertiary" />
-              </button>
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={handleCopyExecutionSummary}
+                  className="p-0.5 hover:bg-surface-3 rounded"
+                  title="复制执行摘要"
+                >
+                  <Copy size={10} className="text-text-tertiary" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onClearBatchLog}
+                  className="p-0.5 hover:bg-surface-3 rounded"
+                  title="Dismiss log"
+                >
+                  <X size={10} className="text-text-tertiary" />
+                </button>
+              </div>
             </div>
-            <div className="text-[10px] text-text-tertiary">
-              <span className="text-emerald-400">{batchExecutionLog.summary.success} ok</span>
-              {batchExecutionLog.summary.failed > 0 && (
-                <span className="text-red-400"> · {batchExecutionLog.summary.failed} failed</span>
+            <div className="text-[10px] text-text-tertiary space-y-0.5">
+              <div>
+                <span className="text-emerald-400">{batchExecutionLog.summary.success} ok</span>
+                {batchExecutionLog.summary.failed > 0 && (
+                  <span className="text-red-400"> · {batchExecutionLog.summary.failed} failed</span>
+                )}
+                {batchExecutionLog.summary.skipped > 0 && (
+                  <span> · {batchExecutionLog.summary.skipped} skipped</span>
+                )}
+                <span> · items {batchExecutionLog.summary.itemChanges.success}/{batchExecutionLog.summary.itemChanges.total}</span>
+              </div>
+              {executionMetrics && (
+                <div>
+                  <span>修复率 {formatRate(executionMetrics.repairRate)}</span>
+                  <span> · 命中率 {formatRate(executionMetrics.hitRate)}</span>
+                  <span> · 跳过率 {formatRate(executionMetrics.skipRate)}</span>
+                </div>
               )}
-              {batchExecutionLog.summary.skipped > 0 && (
-                <span> · {batchExecutionLog.summary.skipped} skipped</span>
-              )}
-              <span> · items {batchExecutionLog.summary.itemChanges.success}/{batchExecutionLog.summary.itemChanges.total}</span>
             </div>
             <div className="space-y-0.5 max-h-32 overflow-y-auto">
               {batchExecutionLog.results.map((result) => (

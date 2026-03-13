@@ -2,12 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import {
   type BatchExecutionCallbacks,
   type BatchFixPlan,
+  buildBatchExecutionSummaryText,
   buildBatchFixPlan,
   classifyStep,
+  computeBatchExecutionMetrics,
   executeBatchFixPlan,
   executeBatchStep,
   executionOrder,
   formatEstimatedImpact,
+  formatRate,
   mergeRetriedResult,
   summarizeEstimatedImpact,
 } from "../../lib/integrity-batch-plan";
@@ -441,5 +444,53 @@ describe("result aggregation", () => {
     expect(merged.results[0].attempts).toBe(2);
     expect(merged.summary.failed).toBe(0);
     expect(merged.summary.success).toBe(1);
+  });
+});
+
+describe("execution metrics and summary text", () => {
+  it("computes repair/hit/skip rates from execution log", async () => {
+    const recs = [
+      makeRec({ id: "relink-moved", action: { type: "relink-all" } }),
+      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [1] }, confidence: "high" }),
+      makeRec({ id: "low-health-ratio" }),
+      makeRec({ id: "enable-reminders", action: { type: "enable-reminders" } }),
+    ];
+    const plan = buildBatchFixPlan(makeReport(recs));
+    const log = await executeBatchFixPlan(plan, makeCallbacks({
+      removeStaleDocuments: vi.fn().mockRejectedValue(new Error("remove failed")),
+    }));
+
+    const metrics = computeBatchExecutionMetrics(log);
+
+    expect(metrics.successImpactItems).toBe(3);
+    expect(metrics.estimatedImpactItems).toBe(4);
+    expect(metrics.successSteps).toBe(2);
+    expect(metrics.executableSteps).toBe(3);
+    expect(metrics.skippedSteps).toBe(1);
+    expect(metrics.totalSteps).toBe(4);
+    expect(formatRate(metrics.repairRate)).toBe("75.0%");
+    expect(formatRate(metrics.hitRate)).toBe("66.7%");
+    expect(formatRate(metrics.skipRate)).toBe("25.0%");
+  });
+
+  it("builds copyable execution summary text with failed steps", async () => {
+    const recs = [
+      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [3, 4] }, confidence: "high" }),
+      makeRec({ id: "enable-reminders", action: { type: "enable-reminders" } }),
+    ];
+    const plan = buildBatchFixPlan(makeReport(recs));
+    const log = await executeBatchFixPlan(plan, makeCallbacks({
+      removeStaleDocuments: vi.fn().mockRejectedValue(new Error("permission denied")),
+    }));
+
+    const summary = buildBatchExecutionSummaryText(log);
+
+    expect(summary).toContain("批处理执行摘要");
+    expect(summary).toContain("时间:");
+    expect(summary).toContain("修复率:");
+    expect(summary).toContain("命中率:");
+    expect(summary).toContain("跳过率:");
+    expect(summary).toContain("结果: 成功 1 · 失败 1 · 跳过 0");
+    expect(summary).toContain("remove-missing: permission denied");
   });
 });

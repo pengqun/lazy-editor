@@ -73,6 +73,18 @@ export interface BatchExecutionLog {
   };
 }
 
+export interface BatchExecutionMetrics {
+  repairRate: number;
+  hitRate: number;
+  skipRate: number;
+  successSteps: number;
+  executableSteps: number;
+  skippedSteps: number;
+  totalSteps: number;
+  successImpactItems: number;
+  estimatedImpactItems: number;
+}
+
 // --- Action classification ---
 
 /** Actions that are safe for auto-execution (non-destructive / repair-safe). */
@@ -171,6 +183,58 @@ export function formatEstimatedImpact(summary: BatchImpactSummary): string {
   if (summary.reminders > 0) parts.push(`reminders ${summary.reminders}`);
   if (summary.frequency > 0) parts.push(`frequency ${summary.frequency}`);
   return parts.length > 0 ? parts.join(" · ") : "none";
+}
+
+function ratio(numerator: number, denominator: number): number {
+  if (denominator <= 0) return 0;
+  return numerator / denominator;
+}
+
+export function computeBatchExecutionMetrics(log: BatchExecutionLog): BatchExecutionMetrics {
+  const totalSteps = log.results.length;
+  const skippedSteps = log.summary.skipped;
+  const executableSteps = totalSteps - skippedSteps;
+  const successSteps = log.summary.success;
+  const successImpactItems = log.summary.itemChanges.success;
+  const estimatedImpactItems = log.summary.itemChanges.total;
+
+  return {
+    repairRate: ratio(successImpactItems, estimatedImpactItems),
+    hitRate: ratio(successSteps, executableSteps),
+    skipRate: ratio(skippedSteps, totalSteps),
+    successSteps,
+    executableSteps,
+    skippedSteps,
+    totalSteps,
+    successImpactItems,
+    estimatedImpactItems,
+  };
+}
+
+export function formatRate(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+export function buildBatchExecutionSummaryText(log: BatchExecutionLog): string {
+  const metrics = computeBatchExecutionMetrics(log);
+  const failedSteps = log.results.filter((r) => r.outcome === "failed");
+  const failureSection = failedSteps.length
+    ? failedSteps
+        .slice(0, 5)
+        .map((r) => `- ${r.stepId.replace("step-", "")}: ${r.message}`)
+        .join("\n")
+    : "- 无";
+
+  return [
+    "批处理执行摘要",
+    `时间: ${log.completedAt}`,
+    `修复率: ${formatRate(metrics.repairRate)} (${metrics.successImpactItems}/${metrics.estimatedImpactItems})`,
+    `命中率: ${formatRate(metrics.hitRate)} (${metrics.successSteps}/${metrics.executableSteps})`,
+    `跳过率: ${formatRate(metrics.skipRate)} (${metrics.skippedSteps}/${metrics.totalSteps})`,
+    `结果: 成功 ${log.summary.success} · 失败 ${log.summary.failed} · 跳过 ${log.summary.skipped}`,
+    "主要失败步骤:",
+    failureSection,
+  ].join("\n");
 }
 
 // --- Ordering ---
