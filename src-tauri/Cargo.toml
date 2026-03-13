@@ -1,6 +1,6 @@
 [package]
 name = "lazy-editor"
-version = "0.1.0"
+version = "0.1.6"
 description = "AI-native writing workspace"
 authors = ["Lazy Editor Team"]
 edition = "2021"
