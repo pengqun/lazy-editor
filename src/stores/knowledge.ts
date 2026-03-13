@@ -355,10 +355,12 @@ function _buildBatchCallbacks(
   };
 }
 
-// ===== Slice boundaries (for upcoming file split) =====
+// ===== Slice boundaries =====
 // viewer/*   -> createViewerStateSlice
 // integrity/*-> createIntegrityStateSlice
-// batch/*    -> createBatchStateSlice (+ root action wiring for now)
+// batch/*    -> createBatchStateSlice + createBatchActionSlice
+// 说明：batch action 需要同时协调 integrity/viewer 相关状态（如 refresh 与提醒设置），
+// 通过 get() 访问跨 slice action，保持职责边界清晰且对外 API 不变。
 type ViewerStateSlice = Pick<KnowledgeState,
   "viewedChunk"
   | "lastRequestedChunkId"
@@ -408,6 +410,15 @@ type BatchStateSlice = Pick<KnowledgeState,
   | "batchStepStatuses"
   | "batchExecutionLog"
   | "lastBatchImpact"
+>;
+
+type BatchActionSlice = Pick<KnowledgeState,
+  "clearHealthCheck"
+  | "buildBatchPlan"
+  | "clearBatchPlan"
+  | "confirmBatchPlan"
+  | "retryBatchStep"
+  | "clearBatchLog"
 >;
 
 export function createViewerStateSlice(
@@ -678,6 +689,104 @@ export function createBatchStateSlice(): BatchStateSlice {
   };
 }
 
+export function createBatchActionSlice(
+  set: (partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>)) => void,
+  get: () => KnowledgeState,
+): BatchActionSlice {
+  return {
+    clearHealthCheck: () =>
+      set({ healthCheckReport: null, batchFixPlan: null, batchLastPlan: null, batchExecutionLog: null, batchStepStatuses: {} }),
+
+    buildBatchPlan: () => {
+      const { healthCheckReport } = get();
+      if (!healthCheckReport) return;
+      const plan = buildBatchFixPlan(healthCheckReport);
+      set({ batchFixPlan: plan, batchExecutionLog: null, batchStepStatuses: {} });
+    },
+
+    clearBatchPlan: () => set({ batchFixPlan: null }),
+
+    confirmBatchPlan: async () => {
+      const { batchFixPlan, integrityReport, setReminderSettings } = get();
+      if (!batchFixPlan) return;
+
+      const statuses: Record<string, StepStatus> = {};
+      for (const step of batchFixPlan.steps) statuses[step.stepId] = "pending";
+
+      set({ batchExecuting: true, batchStepStatuses: statuses });
+      try {
+        const callbacks = _buildBatchCallbacks(integrityReport, setReminderSettings);
+        const log = await executeBatchFixPlan(batchFixPlan, callbacks, {
+          onStepStatusChange: (stepId, status) => {
+            set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [stepId]: status } }));
+          },
+        });
+
+        const summary = buildBatchImpactSummary(log);
+        saveBatchImpactSummary(get()._workspacePath, summary);
+        set({
+          batchExecutionLog: log,
+          batchLastPlan: batchFixPlan,
+          batchFixPlan: null,
+          batchExecuting: false,
+          lastBatchImpact: summary,
+        });
+
+        const { success, failed, skipped, itemChanges } = log.summary;
+        if (failed > 0) {
+          toast.error(`Batch: ${success} ok, ${failed} failed, ${skipped} skipped · ${itemChanges.success} items changed`);
+        } else {
+          toast.success(`Batch complete: ${success} applied, ${skipped} skipped · ${itemChanges.success} items changed`);
+        }
+
+        // 执行完成后通过 integrity slice action 统一刷新，避免在 batch slice 内重复实现。
+        await get().loadDocuments();
+        await get().checkIntegrity();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error(`Batch execution failed: ${message}`);
+        set({ batchExecuting: false });
+      }
+    },
+
+    retryBatchStep: async (stepId: string) => {
+      const { batchExecutionLog, batchLastPlan, integrityReport, setReminderSettings } = get();
+      if (!batchExecutionLog || !batchLastPlan || inFlightBatchStepRetries.has(stepId)) return;
+
+      const previous = batchExecutionLog.results.find((r) => r.stepId === stepId);
+      const step = batchLastPlan.steps.find((s) => s.stepId === stepId);
+      if (!previous || !step || previous.outcome !== "failed") return;
+
+      inFlightBatchStepRetries.add(stepId);
+      try {
+        const callbacks = _buildBatchCallbacks(integrityReport, setReminderSettings);
+        const retried = await executeBatchStep(step, callbacks, {
+          onStepStatusChange: (id, status) => {
+            set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [id]: status } }));
+          },
+        }, previous.attempts + 1);
+
+        const merged = mergeRetriedResult(batchExecutionLog, retried);
+        const summary = buildBatchImpactSummary(merged);
+        saveBatchImpactSummary(get()._workspacePath, summary);
+        set({ batchExecutionLog: merged, lastBatchImpact: summary });
+
+        if (retried.outcome === "success") {
+          toast.success(`Retried ${stepId.replace("step-", "")}: success`);
+          await get().loadDocuments();
+          await get().checkIntegrity();
+        } else {
+          toast.error(`Retried ${stepId.replace("step-", "")}: ${retried.message}`);
+        }
+      } finally {
+        inFlightBatchStepRetries.delete(stepId);
+      }
+    },
+
+    clearBatchLog: () => set({ batchExecutionLog: null, batchStepStatuses: {} }),
+  };
+}
+
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   documents: [],
   isIngesting: false,
@@ -693,6 +802,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   ...createViewerStateSlice(set),
   ...createIntegrityStateSlice(set, get),
   ...createBatchStateSlice(),
+  ...createBatchActionSlice(set, get),
 
   setRetrievalTopK: (topK) => {
     const clamped = Math.max(1, Math.min(10, topK));
@@ -828,98 +938,4 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     });
   },
 
-  // ===== Compatibility boundary (next split targets) =====
-  // viewer/* actions live in createViewerStateSlice
-  // integrity/* actions live in createIntegrityStateSlice
-  // batch/* actions remain in root store for now (next extraction: createBatchActionSlice)
-
-  clearHealthCheck: () =>
-    set({ healthCheckReport: null, batchFixPlan: null, batchLastPlan: null, batchExecutionLog: null, batchStepStatuses: {} }),
-
-  buildBatchPlan: () => {
-    const { healthCheckReport } = get();
-    if (!healthCheckReport) return;
-    const plan = buildBatchFixPlan(healthCheckReport);
-    set({ batchFixPlan: plan, batchExecutionLog: null, batchStepStatuses: {} });
-  },
-
-  clearBatchPlan: () => set({ batchFixPlan: null }),
-
-  confirmBatchPlan: async () => {
-    const { batchFixPlan, integrityReport, setReminderSettings } = get();
-    if (!batchFixPlan) return;
-
-    const statuses: Record<string, StepStatus> = {};
-    for (const step of batchFixPlan.steps) statuses[step.stepId] = "pending";
-
-    set({ batchExecuting: true, batchStepStatuses: statuses });
-    try {
-      const callbacks = _buildBatchCallbacks(integrityReport, setReminderSettings);
-      const log = await executeBatchFixPlan(batchFixPlan, callbacks, {
-        onStepStatusChange: (stepId, status) => {
-          set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [stepId]: status } }));
-        },
-      });
-
-      const summary = buildBatchImpactSummary(log);
-      saveBatchImpactSummary(get()._workspacePath, summary);
-      set({
-        batchExecutionLog: log,
-        batchLastPlan: batchFixPlan,
-        batchFixPlan: null,
-        batchExecuting: false,
-        lastBatchImpact: summary,
-      });
-
-      const { success, failed, skipped, itemChanges } = log.summary;
-      if (failed > 0) {
-        toast.error(`Batch: ${success} ok, ${failed} failed, ${skipped} skipped · ${itemChanges.success} items changed`);
-      } else {
-        toast.success(`Batch complete: ${success} applied, ${skipped} skipped · ${itemChanges.success} items changed`);
-      }
-
-      await get().loadDocuments();
-      await get().checkIntegrity();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`Batch execution failed: ${message}`);
-      set({ batchExecuting: false });
-    }
-  },
-
-  retryBatchStep: async (stepId: string) => {
-    const { batchExecutionLog, batchLastPlan, integrityReport, setReminderSettings } = get();
-    if (!batchExecutionLog || !batchLastPlan || inFlightBatchStepRetries.has(stepId)) return;
-
-    const previous = batchExecutionLog.results.find((r) => r.stepId === stepId);
-    const step = batchLastPlan.steps.find((s) => s.stepId === stepId);
-    if (!previous || !step || previous.outcome !== "failed") return;
-
-    inFlightBatchStepRetries.add(stepId);
-    try {
-      const callbacks = _buildBatchCallbacks(integrityReport, setReminderSettings);
-      const retried = await executeBatchStep(step, callbacks, {
-        onStepStatusChange: (id, status) => {
-          set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [id]: status } }));
-        },
-      }, previous.attempts + 1);
-
-      const merged = mergeRetriedResult(batchExecutionLog, retried);
-      const summary = buildBatchImpactSummary(merged);
-      saveBatchImpactSummary(get()._workspacePath, summary);
-      set({ batchExecutionLog: merged, lastBatchImpact: summary });
-
-      if (retried.outcome === "success") {
-        toast.success(`Retried ${stepId.replace("step-", "")}: success`);
-        await get().loadDocuments();
-        await get().checkIntegrity();
-      } else {
-        toast.error(`Retried ${stepId.replace("step-", "")}: ${retried.message}`);
-      }
-    } finally {
-      inFlightBatchStepRetries.delete(stepId);
-    }
-  },
-
-  clearBatchLog: () => set({ batchExecutionLog: null, batchStepStatuses: {} }),
 }));

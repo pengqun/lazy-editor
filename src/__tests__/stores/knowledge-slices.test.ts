@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createIntegrityStateSlice, createViewerStateSlice, useKnowledgeStore } from "@/stores/knowledge";
+import { createBatchActionSlice, createIntegrityStateSlice, createViewerStateSlice, useKnowledgeStore } from "@/stores/knowledge";
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -175,7 +175,67 @@ describe("knowledge store slices", () => {
     expect(state.integrityReport).toBeNull();
   });
 
-  it("兼容层：store 仍暴露原有 viewer/integrity action 名称", () => {
+  it("batchAction slice: build/clear plan 基本行为", () => {
+    const state: Record<string, any> = {
+      healthCheckReport: {
+        generatedAt: "2026-03-13T10:00:00.000Z",
+        metrics: { total: 3, healthy: 2, missing: 1, moved: 0, invalid: 0 },
+        trend: { scans7d: 1, latestStatus: "warning" },
+        recommendations: [{
+          id: "enable-reminders",
+          priority: "medium",
+          confidence: "high",
+          title: "Enable reminders",
+          description: "enable",
+          rationale: "keep scanning",
+          action: { type: "enable-reminders" },
+        }],
+      },
+    };
+    const set = vi.fn((partial: any) => {
+      const patch = typeof partial === "function" ? partial(state) : partial;
+      Object.assign(state, patch);
+    });
+    const get = () => state as any;
+    const slice = createBatchActionSlice(set as any, get as any);
+    Object.assign(state, slice);
+
+    slice.buildBatchPlan();
+    expect(state.batchFixPlan).toBeTruthy();
+
+    slice.clearBatchPlan();
+    expect(state.batchFixPlan).toBeNull();
+  });
+
+  it("batchAction slice: clearHealthCheck 与 clearBatchLog 基本行为", () => {
+    const state: Record<string, any> = {
+      healthCheckReport: { foo: 1 },
+      batchFixPlan: { foo: 1 },
+      batchLastPlan: { foo: 1 },
+      batchExecutionLog: { foo: 1 },
+      batchStepStatuses: { "step-a": "failed" },
+    };
+    const set = vi.fn((partial: any) => {
+      const patch = typeof partial === "function" ? partial(state) : partial;
+      Object.assign(state, patch);
+    });
+    const get = () => state as any;
+    const slice = createBatchActionSlice(set as any, get as any);
+
+    slice.clearBatchLog();
+    expect(state.batchExecutionLog).toBeNull();
+    expect(state.batchStepStatuses).toEqual({});
+
+    Object.assign(state, { healthCheckReport: { foo: 1 }, batchFixPlan: { foo: 1 }, batchLastPlan: { foo: 1 }, batchExecutionLog: { foo: 1 }, batchStepStatuses: { x: "pending" } });
+    slice.clearHealthCheck();
+    expect(state.healthCheckReport).toBeNull();
+    expect(state.batchFixPlan).toBeNull();
+    expect(state.batchLastPlan).toBeNull();
+    expect(state.batchExecutionLog).toBeNull();
+    expect(state.batchStepStatuses).toEqual({});
+  });
+
+  it("兼容层：store 仍暴露原有 viewer/integrity/batch action 名称", () => {
     const state = useKnowledgeStore.getState();
     expect(typeof state.viewChunk).toBe("function");
     expect(typeof state.setViewChunkError).toBe("function");
@@ -188,5 +248,10 @@ describe("knowledge store slices", () => {
     expect(typeof state.removeStaleDocuments).toBe("function");
     expect(typeof state.clearIntegrity).toBe("function");
     expect(typeof state.runHealthCheck).toBe("function");
+    expect(typeof state.buildBatchPlan).toBe("function");
+    expect(typeof state.clearBatchPlan).toBe("function");
+    expect(typeof state.confirmBatchPlan).toBe("function");
+    expect(typeof state.retryBatchStep).toBe("function");
+    expect(typeof state.clearBatchLog).toBe("function");
   });
 });
