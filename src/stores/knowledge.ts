@@ -58,6 +58,37 @@ import { toast } from "./toast";
 
 const inFlightBatchStepRetries = new Set<string>();
 
+function buildViewChunkError(kind: ViewChunkErrorKind): ViewChunkErrorState {
+  switch (kind) {
+    case "source-missing":
+      return {
+        kind,
+        message: "Source missing — this document is no longer in the knowledge base.",
+      };
+    case "malformed-link":
+      return {
+        kind,
+        message: "Malformed citation link — this reference is invalid.",
+      };
+    case "chunk-missing":
+    default:
+      return {
+        kind: "chunk-missing",
+        message: "Chunk missing — this citation points to content that no longer exists.",
+      };
+  }
+}
+
+function classifyViewChunkError(err: unknown): ViewChunkErrorKind {
+  const message = String(err instanceof Error ? err.message : err).toLowerCase();
+  if (message.includes("malformed")) return "malformed-link";
+  if (message.includes("source") && message.includes("missing")) return "source-missing";
+  if (message.includes("query returned no rows") || message.includes("no rows")) {
+    return "chunk-missing";
+  }
+  return "chunk-missing";
+}
+
 export interface KBDocument {
   id: number;
   title: string;
@@ -85,6 +116,13 @@ export interface ChunkContext {
   totalChunks: number;
   prevChunk: string | null;
   nextChunk: string | null;
+}
+
+export type ViewChunkErrorKind = "source-missing" | "chunk-missing" | "malformed-link";
+
+export interface ViewChunkErrorState {
+  kind: ViewChunkErrorKind;
+  message: string;
 }
 
 export type RetrievalScope = "all" | "pinned";
@@ -155,8 +193,9 @@ interface KnowledgeState {
 
   /** Currently viewed source chunk (for source recall from citations). */
   viewedChunk: ChunkContext | null;
+  lastRequestedChunkId: number | null;
   viewChunkLoading: boolean;
-  viewChunkError: string | null;
+  viewChunkError: ViewChunkErrorState | null;
 
   /** Query text that led to this chunk being cited (for matched-term highlighting). */
   viewedChunkQuery: string | null;
@@ -173,6 +212,7 @@ interface KnowledgeState {
 
   /** Fetch and display a specific chunk for source recall. Optional query/score for highlighting. */
   viewChunk: (chunkId: number, query?: string, score?: number) => Promise<void>;
+  setViewChunkError: (kind: ViewChunkErrorKind) => void;
   closeChunkViewer: () => void;
   dismissChunkError: () => void;
 
@@ -328,6 +368,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   _workspacePath: null,
   settingsSource: "global" as RetrievalSettingsSource,
   viewedChunk: null,
+  lastRequestedChunkId: null,
   viewChunkLoading: false,
   viewChunkError: null,
   viewedChunkQuery: null,
@@ -468,7 +509,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   },
 
   viewChunk: async (chunkId, query, score) => {
-    set({ viewChunkLoading: true, viewChunkError: null });
+    set({ viewChunkLoading: true, viewChunkError: null, lastRequestedChunkId: chunkId });
     try {
       const chunk = await invoke<ChunkContext>("get_kb_chunk", { chunkId });
       set({
@@ -481,17 +522,26 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       });
     } catch (err) {
       console.error("Failed to load chunk:", err);
+      const kind = classifyViewChunkError(err);
       set({
         viewedChunk: null,
         viewChunkLoading: false,
-        viewChunkError: "Source not found — the document may have been removed from the knowledge base.",
+        viewChunkError: buildViewChunkError(kind),
       });
     }
   },
 
+  setViewChunkError: (kind) =>
+    set({
+      viewedChunk: null,
+      viewChunkLoading: false,
+      viewChunkError: buildViewChunkError(kind),
+    }),
+
   closeChunkViewer: () =>
     set({
       viewedChunk: null,
+      lastRequestedChunkId: null,
       viewChunkError: null,
       viewedChunkQuery: null,
       viewedChunkScore: null,

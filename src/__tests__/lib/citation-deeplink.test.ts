@@ -48,6 +48,7 @@ function resetStores() {
     activePreset: null,
     _activeDocPath: null,
     viewedChunk: null,
+    lastRequestedChunkId: null,
     viewedChunkQuery: null,
     viewedChunkScore: null,
     viewChunkLoading: false,
@@ -298,6 +299,29 @@ describe("navigateToCitationSource", () => {
     });
   });
 
+  it("classifies source-missing when document id is absent locally", () => {
+    useKnowledgeStore.setState({
+      documents: [
+        {
+          id: 7,
+          title: "Existing Doc",
+          sourceType: "paste",
+          sourcePath: null,
+          createdAt: "2024-01-01",
+          chunkCount: 1,
+        },
+      ],
+    });
+
+    navigateToCitationSource(88, "query", 0.5, 12345);
+
+    expect(mockedInvoke).not.toHaveBeenCalled();
+    expect(useKnowledgeStore.getState().viewChunkError).toEqual({
+      kind: "source-missing",
+      message: "Source missing — this document is no longer in the knowledge base.",
+    });
+  });
+
   it("sets viewChunkError when the source chunk no longer exists", async () => {
     mockedInvoke.mockRejectedValueOnce(new Error("Failed to get chunk: Query returned no rows"));
 
@@ -309,9 +333,10 @@ describe("navigateToCitationSource", () => {
 
     const state = useKnowledgeStore.getState();
     expect(state.viewedChunk).toBeNull();
-    expect(state.viewChunkError).toBe(
-      "Source not found — the document may have been removed from the knowledge base.",
-    );
+    expect(state.viewChunkError).toEqual({
+      kind: "chunk-missing",
+      message: "Chunk missing — this citation points to content that no longer exists.",
+    });
     expect(useEditorStore.getState().rightPanel).toBe("knowledge");
   });
 
@@ -331,9 +356,10 @@ describe("navigateToCitationSource", () => {
     });
 
     expect(mockedInvoke).toHaveBeenCalledWith("get_kb_chunk", { chunkId: 321 });
-    expect(useKnowledgeStore.getState().viewChunkError).toBe(
-      "Source not found — the document may have been removed from the knowledge base.",
-    );
+    expect(useKnowledgeStore.getState().viewChunkError).toEqual({
+      kind: "chunk-missing",
+      message: "Chunk missing — this citation points to content that no longer exists.",
+    });
   });
 });
 
@@ -346,20 +372,26 @@ describe("ChunkViewer error UI", () => {
 
   it("shows friendly missing-source message in ChunkViewer area", async () => {
     useKnowledgeStore.setState({
-      viewChunkError: "Source not found — the document may have been removed from the knowledge base.",
+      viewChunkError: {
+        kind: "chunk-missing",
+        message: "Chunk missing — this citation points to content that no longer exists.",
+      },
     });
 
     render(createElement(KnowledgePanel));
 
     expect(
-      await screen.findByText("Source not found — the document may have been removed from the knowledge base."),
+      await screen.findByText("Chunk missing — this citation points to content that no longer exists."),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Dismiss" })).toBeTruthy();
   });
 
   it("dismiss clears error and returns to normal knowledge panel view", async () => {
     useKnowledgeStore.setState({
-      viewChunkError: "Source not found — the document may have been removed from the knowledge base.",
+      viewChunkError: {
+        kind: "chunk-missing",
+        message: "Chunk missing — this citation points to content that no longer exists.",
+      },
       documents: [
         {
           id: 1,

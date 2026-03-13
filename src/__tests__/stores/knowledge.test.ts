@@ -25,6 +25,7 @@ function resetStore() {
     _workspacePath: null,
     settingsSource: "global",
     viewedChunk: null,
+    lastRequestedChunkId: null,
     viewedChunkQuery: null,
     viewedChunkScore: null,
     viewChunkLoading: false,
@@ -209,7 +210,10 @@ describe("useKnowledgeStore", () => {
           prevChunk: null,
           nextChunk: null,
         },
-        viewChunkError: "Source not found — the document may have been removed from the knowledge base.",
+        viewChunkError: {
+          kind: "chunk-missing",
+          message: "Chunk missing — this citation points to content that no longer exists.",
+        },
         viewedChunkQuery: "some query",
         viewedChunkScore: 0.75,
       });
@@ -231,9 +235,10 @@ describe("useKnowledgeStore", () => {
       const state = useKnowledgeStore.getState();
       expect(state.viewChunkLoading).toBe(false);
       expect(state.viewedChunk).toBeNull();
-      expect(state.viewChunkError).toBe(
-        "Source not found — the document may have been removed from the knowledge base.",
-      );
+      expect(state.viewChunkError).toEqual({
+        kind: "chunk-missing",
+        message: "Chunk missing — this citation points to content that no longer exists.",
+      });
     });
 
     it("dismissChunkError clears only the chunk error state", () => {
@@ -248,7 +253,10 @@ describe("useKnowledgeStore", () => {
           prevChunk: null,
           nextChunk: null,
         },
-        viewChunkError: "Source not found — the document may have been removed from the knowledge base.",
+        viewChunkError: {
+          kind: "chunk-missing",
+          message: "Chunk missing — this citation points to content that no longer exists.",
+        },
       });
 
       useKnowledgeStore.getState().dismissChunkError();
@@ -256,6 +264,14 @@ describe("useKnowledgeStore", () => {
 
       expect(state.viewChunkError).toBeNull();
       expect(state.viewedChunk).not.toBeNull();
+    });
+
+    it("setViewChunkError sets malformed-link state for bad deep-link payload", () => {
+      useKnowledgeStore.getState().setViewChunkError("malformed-link");
+      expect(useKnowledgeStore.getState().viewChunkError).toEqual({
+        kind: "malformed-link",
+        message: "Malformed citation link — this reference is invalid.",
+      });
     });
   });
 

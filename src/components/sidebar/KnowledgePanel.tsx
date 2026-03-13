@@ -635,6 +635,8 @@ function ChunkViewer() {
     viewChunk,
     closeChunkViewer,
     dismissChunkError,
+    loadDocuments,
+    lastRequestedChunkId,
     viewedChunkQuery,
     viewedChunkScore,
   } = useKnowledgeStore();
@@ -661,14 +663,32 @@ function ChunkViewer() {
             <div className="mx-auto mb-2 w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center">
               <AlertCircle size={16} className="text-amber-400" />
             </div>
-            <p className="text-xs text-text-secondary leading-relaxed">{viewChunkError}</p>
-            <button
-              type="button"
-              onClick={dismissChunkError}
-              className="mt-3 text-xs px-2.5 py-1 rounded border border-border text-text-secondary hover:bg-surface-2 transition-colors"
-            >
-              Dismiss
-            </button>
+            <p className="text-xs text-text-secondary leading-relaxed">{viewChunkError.message}</p>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              {lastRequestedChunkId != null && viewChunkError.kind !== "malformed-link" && (
+                <button
+                  type="button"
+                  onClick={() => viewChunk(lastRequestedChunkId)}
+                  className="text-xs px-2.5 py-1 rounded border border-border text-text-secondary hover:bg-surface-2 transition-colors"
+                >
+                  Retry
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void loadDocuments()}
+                className="text-xs px-2.5 py-1 rounded border border-border text-text-secondary hover:bg-surface-2 transition-colors"
+              >
+                Re-scan sources
+              </button>
+              <button
+                type="button"
+                onClick={dismissChunkError}
+                className="text-xs px-2.5 py-1 rounded border border-border text-text-secondary hover:bg-surface-2 transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         </div>
       </div>

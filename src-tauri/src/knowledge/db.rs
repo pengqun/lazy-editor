@@ -965,6 +965,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn get_chunk_with_context_returns_error_after_source_document_removed() {
+        let db = test_db();
+        let doc_id = db
+            .insert_document("Temp Doc", "paste", None, "temp content")
+            .unwrap();
+        let chunk_id = db.insert_chunk(doc_id, "temp chunk", 0, None).unwrap();
+
+        db.remove_document(doc_id).unwrap();
+
+        let err = db.get_chunk_with_context(chunk_id).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("no rows") || msg.contains("Query returned no rows"),
+            "unexpected error message: {msg}"
+        );
+    }
+
     // ── Integrity tests ──
 
     #[test]

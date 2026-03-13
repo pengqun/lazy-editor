@@ -41,7 +41,7 @@ export function buildCitationHtml(citations: CitationSource[]): string {
       const pct = Math.round(c.score * 100);
       const title = escapeAttr(`${c.documentTitle} — chunk ${c.chunkIndex + 1}, ${pct}% relevance`);
       const docTitle = escapeAttr(c.documentTitle);
-      return `<a href="#" class="kb-source-link" data-chunk-id="${c.chunkId}" data-doc-title="${docTitle}" data-score="${c.score}" data-chunk-index="${c.chunkIndex}" title="${title}">[${i + 1}] ${escapeAttr(c.documentTitle)}</a>`;
+      return `<a href="#" class="kb-source-link" data-chunk-id="${c.chunkId}" data-document-id="${c.documentId}" data-doc-title="${docTitle}" data-score="${c.score}" data-chunk-index="${c.chunkIndex}" title="${title}">[${i + 1}] ${escapeAttr(c.documentTitle)}</a>`;
     })
     .join("&nbsp;&nbsp;");
 
@@ -56,8 +56,17 @@ export function navigateToCitationSource(
   chunkId: number,
   query?: string,
   score?: number,
+  documentId?: number,
 ): void {
   const kbStore = useKnowledgeStore.getState();
+  if (documentId != null && kbStore.documents.length > 0) {
+    const exists = kbStore.documents.some((doc) => doc.id === documentId);
+    if (!exists) {
+      kbStore.setViewChunkError("source-missing");
+      useEditorStore.getState().setRightPanel("knowledge");
+      return;
+    }
+  }
   kbStore.viewChunk(chunkId, query, score);
   // Ensure the knowledge panel is visible
   useEditorStore.getState().setRightPanel("knowledge");
@@ -89,7 +98,11 @@ export function useAIStream() {
         if (chunkId) {
           const score = kbLink.dataset.score ? Number(kbLink.dataset.score) : undefined;
           const query = useAiStore.getState().lastKbQuery || undefined;
-          navigateToCitationSource(chunkId, query, score);
+          const documentId = kbLink.dataset.documentId ? Number(kbLink.dataset.documentId) : undefined;
+          navigateToCitationSource(chunkId, query, score, documentId);
+        } else {
+          useKnowledgeStore.getState().setViewChunkError("malformed-link");
+          useEditorStore.getState().setRightPanel("knowledge");
         }
         return;
       }
@@ -106,7 +119,10 @@ export function useAIStream() {
           // and document switches); fall back to the current lastKbQuery.
           const refList = citationLink.closest<HTMLOListElement>("ol.citation-references");
           const query = refList?.dataset.query || useAiStore.getState().lastKbQuery || undefined;
-          navigateToCitationSource(parsed.chunkId, query, parsed.score);
+          navigateToCitationSource(parsed.chunkId, query, parsed.score, parsed.documentId);
+        } else {
+          useKnowledgeStore.getState().setViewChunkError("malformed-link");
+          useEditorStore.getState().setRightPanel("knowledge");
         }
         return;
       }
