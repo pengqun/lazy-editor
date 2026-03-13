@@ -190,10 +190,10 @@ describe("generateRecommendations", () => {
       id: i,
       title: `doc-${i}`,
       sourcePath: `/doc-${i}`,
-      status: i < 3 ? ("healthy" as const) : ("missing" as const),
-      movedCandidate: null,
+      status: i < 3 ? ("healthy" as const) : ("moved" as const),
+      movedCandidate: i < 3 ? null : `/new-${i}`,
     }));
-    const report = makeReport({ healthy: 3, missing: 7, entries });
+    const report = makeReport({ healthy: 3, moved: 7, missing: 0, entries });
     const recs = generateRecommendations(report, makeMetrics(), "good", DEFAULT_REMINDER);
     const rec = findRec(recs, "low-health-ratio");
     expect(rec).toBeDefined();
@@ -206,10 +206,10 @@ describe("generateRecommendations", () => {
       id: i,
       title: `doc-${i}`,
       sourcePath: `/doc-${i}`,
-      status: i < 6 ? ("healthy" as const) : ("missing" as const),
-      movedCandidate: null,
+      status: i < 6 ? ("healthy" as const) : ("moved" as const),
+      movedCandidate: i < 6 ? null : `/new-${i}`,
     }));
-    const report = makeReport({ healthy: 6, missing: 4, entries });
+    const report = makeReport({ healthy: 6, moved: 4, missing: 0, entries });
     const recs = generateRecommendations(report, makeMetrics(), "good", DEFAULT_REMINDER);
     expect(findRec(recs, "moderate-health-ratio")).toBeDefined();
   });
@@ -269,6 +269,46 @@ describe("generateRecommendations", () => {
     const rec = findRec(recs, "adjust-frequency");
     expect(rec).toBeDefined();
     expect(rec!.confidence).toBe("low");
+  });
+
+  it("downgrades tiny missing set to low priority/low confidence", () => {
+    const entries = [
+      { id: 1, title: "missing", sourcePath: "/missing", status: "missing" as const, movedCandidate: null },
+      ...Array.from({ length: 9 }, (_, i) => ({
+        id: i + 2,
+        title: `ok-${i}`,
+        sourcePath: `/ok-${i}`,
+        status: "healthy" as const,
+        movedCandidate: null,
+      })),
+    ];
+    const report = makeReport({ healthy: 9, missing: 1, entries });
+    const rec = findRec(generateRecommendations(report, makeMetrics(), "good", DEFAULT_REMINDER), "remove-missing");
+    expect(rec).toBeDefined();
+    expect(rec!.priority).toBe("low");
+    expect(rec!.confidence).toBe("low");
+  });
+
+  it("suppresses ratio warning when missing recommendation already explains root cause", () => {
+    const entries = Array.from({ length: 10 }, (_, i) => ({
+      id: i,
+      title: `doc-${i}`,
+      sourcePath: `/doc-${i}`,
+      status: i < 5 ? ("healthy" as const) : ("missing" as const),
+      movedCandidate: null,
+    }));
+    const report = makeReport({ healthy: 5, missing: 5, entries });
+    const recs = generateRecommendations(report, makeMetrics(), "good", DEFAULT_REMINDER);
+    expect(findRec(recs, "remove-missing")).toBeDefined();
+    expect(findRec(recs, "moderate-health-ratio")).toBeUndefined();
+    expect(findRec(recs, "low-health-ratio")).toBeUndefined();
+  });
+
+  it("drops adjust-frequency when reminders are disabled", () => {
+    const reminder: IntegrityReminderSettings = { enabled: false, frequency: "weekly", snoozedUntil: null };
+    const recs = generateRecommendations(makeReport(), makeMetrics(), "poor", reminder);
+    expect(findRec(recs, "enable-reminders")).toBeDefined();
+    expect(findRec(recs, "adjust-frequency")).toBeUndefined();
   });
 
   // --- Sorting ---
@@ -336,6 +376,15 @@ describe("sortRecommendations", () => {
     const sorted = sortRecommendations(recs);
     expect(sorted).not.toBe(recs);
     expect(recs[0].id).toBe("a"); // original unchanged
+  });
+
+  it("uses id as deterministic tie-breaker", () => {
+    const recs: HealthCheckRecommendation[] = [
+      { id: "zeta", priority: "medium", confidence: "medium", rationale: "", title: "", description: "" },
+      { id: "alpha", priority: "medium", confidence: "medium", rationale: "", title: "", description: "" },
+    ];
+    const sorted = sortRecommendations(recs);
+    expect(sorted.map((r) => r.id)).toEqual(["alpha", "zeta"]);
   });
 });
 

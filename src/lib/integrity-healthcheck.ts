@@ -46,9 +46,13 @@ export function sortRecommendations(recs: HealthCheckRecommendation[]): HealthCh
     const pa = PRIORITY_ORDER.indexOf(a.priority);
     const pb = PRIORITY_ORDER.indexOf(b.priority);
     if (pa !== pb) return pa - pb;
+
     const ca = CONFIDENCE_ORDER.indexOf(a.confidence);
     const cb = CONFIDENCE_ORDER.indexOf(b.confidence);
-    return ca - cb;
+    if (ca !== cb) return ca - cb;
+
+    // Deterministic tie-breaker for stable ordering in tests/UI snapshots.
+    return a.id.localeCompare(b.id);
   });
 }
 
@@ -75,6 +79,11 @@ function suggestFrequency(
   return null; // already daily
 }
 
+function addSignalsRationale(summary: string, signals: string[]): string {
+  if (signals.length === 0) return summary;
+  return `${summary} Signals: ${signals.join("; ")}.`;
+}
+
 /**
  * Generate actionable recommendations based on scan report, health metrics, and settings.
  * Each recommendation carries a deterministic priority, confidence, and rationale
@@ -93,12 +102,19 @@ export function generateRecommendations(
 
   // 1. Moved documents — suggest relink
   if (report.moved > 0) {
-    // Confidence: high when candidates were found (moved always has candidates)
+    // Single moved doc is often low-risk and can self-resolve later; avoid over-alerting.
+    const movedPriority: RecommendationPriority = report.moved > 5 ? "critical" : report.moved > 1 ? "high" : "medium";
     recs.push({
       id: "relink-moved",
-      priority: report.moved > 5 ? "critical" : "high",
+      priority: movedPriority,
       confidence: "high",
-      rationale: `${report.moved} document(s) have move candidates; file-hash match confirms relocation.`,
+      rationale: addSignalsRationale(
+        `${report.moved} document(s) have move candidates and file-hash matches.`,
+        [
+          `moved=${report.moved}`,
+          `priority-threshold: >5 => critical, >1 => high, otherwise medium`,
+        ],
+      ),
       title: `Relink ${report.moved} moved document${report.moved > 1 ? "s" : ""}`,
       description:
         "Source files were found at new locations. Relinking restores the connection without re-ingesting.",
@@ -111,16 +127,30 @@ export function generateRecommendations(
     const missingIds = report.entries
       .filter((e) => e.status === "missing")
       .map((e) => e.id);
-    // Priority: critical when >50% missing, high when >3, medium otherwise
-    // Confidence: high when ratio is extreme, medium otherwise (files could reappear)
-    const priority: RecommendationPriority =
-      missingRatio > 0.5 ? "critical" : report.missing > 3 ? "high" : "medium";
-    const confidence: RecommendationConfidence = missingRatio > 0.5 ? "high" : "medium";
+
+    const tinyMissing = report.missing === 1 && missingRatio <= 0.1;
+
+    // Lower sensitivity on tiny missing set to reduce false positives from temporary path changes.
+    const priority: RecommendationPriority = tinyMissing
+      ? "low"
+      : missingRatio > 0.5
+        ? "critical"
+        : report.missing > 3
+          ? "high"
+          : "medium";
+    const confidence: RecommendationConfidence = tinyMissing ? "low" : missingRatio > 0.5 ? "high" : "medium";
+
     recs.push({
       id: "remove-missing",
       priority,
       confidence,
-      rationale: `${report.missing}/${total} entries missing (${Math.round(missingRatio * 100)}%); no move candidates found.`,
+      rationale: addSignalsRationale(
+        `${report.missing}/${total} entries are missing and have no move candidates.`,
+        [
+          `missing-ratio=${Math.round(missingRatio * 100)}%`,
+          tinyMissing ? "tiny-missing pattern detected (1 item, <=10%)" : "multi-item missing pattern",
+        ],
+      ),
       title: `Remove ${report.missing} stale entr${report.missing > 1 ? "ies" : "y"}`,
       description:
         "These source files are no longer found in the workspace. Removing cleans up the knowledge base.",
@@ -134,7 +164,7 @@ export function generateRecommendations(
       id: "never-scanned",
       priority: "critical",
       confidence: "high",
-      rationale: "No scan history exists; KB health is completely unknown.",
+      rationale: addSignalsRationale("No scan history exists; KB health is unknown.", ["latest-scan-age=null", "tier=poor"]),
       title: "Set up regular integrity scanning",
       description:
         "No scans have been recorded. Enable reminders to stay on top of KB health.",
@@ -146,7 +176,10 @@ export function generateRecommendations(
       id: "scan-stale",
       priority: "medium",
       confidence: "high",
-      rationale: `Last scan was ${ageDays}d ago with only ${metrics.scansLast7d} scan(s) in the past 7 days.`,
+      rationale: addSignalsRationale(`Last scan is stale and cadence is low.`, [
+        `last-scan-age=${ageDays}d`,
+        `scans-last-7d=${metrics.scansLast7d}`,
+      ]),
       title: "Increase scan frequency",
       description:
         "Your last scan is old and recent scan count is low. More frequent scans catch issues earlier.",
@@ -159,7 +192,10 @@ export function generateRecommendations(
       id: "enable-reminders",
       priority: "medium",
       confidence: "medium",
-      rationale: `Reminders are disabled while health tier is "${tier}"; enabling would improve scan cadence.`,
+      rationale: addSignalsRationale(`Reminders are disabled while tier is degraded.`, [
+        `tier=${tier}`,
+        "reminders=disabled",
+      ]),
       title: "Enable scan reminders",
       description:
         "Reminders are currently off. Turning them on helps you maintain regular scanning habits.",
@@ -172,7 +208,11 @@ export function generateRecommendations(
         id: "adjust-frequency",
         priority: "low",
         confidence: "low",
-        rationale: `Current frequency "${reminderSettings.frequency}" may be insufficient for "${tier}" tier; suggesting "${suggested}".`,
+        rationale: addSignalsRationale("Current reminder cadence may be insufficient.", [
+          `current-frequency=${reminderSettings.frequency}`,
+          `suggested-frequency=${suggested}`,
+          `tier=${tier}`,
+        ]),
         title: "Scan more often",
         description: `Consider switching reminders to "${suggested === "every3days" ? "every 3 days" : suggested}" for better coverage.`,
         action: { type: "adjust-frequency", suggested },
@@ -180,14 +220,18 @@ export function generateRecommendations(
     }
   }
 
-  // 5. Health ratio warning
-  if (total > 0) {
+  // 5. Health ratio warning (dedupe with missing-removal signals)
+  const hasStrongMissingSignal = report.missing > 0 && missingRatio >= 0.3;
+  if (total > 0 && !hasStrongMissingSignal) {
     if (healthyRatio < 0.5) {
       recs.push({
         id: "low-health-ratio",
         priority: "critical",
         confidence: "high",
-        rationale: `Healthy ratio is ${Math.round(healthyRatio * 100)}% (below 50% threshold); immediate attention required.`,
+        rationale: addSignalsRationale("Healthy ratio is below critical threshold.", [
+          `healthy-ratio=${Math.round(healthyRatio * 100)}%`,
+          "threshold=<50%",
+        ]),
         title: "Majority of KB entries are broken",
         description: `Only ${Math.round(healthyRatio * 100)}% of documents have valid source references. Review and clean up your knowledge base.`,
       });
@@ -196,27 +240,40 @@ export function generateRecommendations(
         id: "moderate-health-ratio",
         priority: "medium",
         confidence: "high",
-        rationale: `Healthy ratio is ${Math.round(healthyRatio * 100)}% (below 80% threshold); some entries need attention.`,
+        rationale: addSignalsRationale("Healthy ratio is below warning threshold.", [
+          `healthy-ratio=${Math.round(healthyRatio * 100)}%`,
+          "threshold=<80%",
+        ]),
         title: "Several KB entries need attention",
         description: `${Math.round(healthyRatio * 100)}% of documents are healthy. Address the stale entries above to improve coverage.`,
       });
     }
   }
 
-  // 6. All clear
-  if (recs.length === 0) {
-    recs.push({
+  // 6. De-duplication / conflict handling
+  const ids = new Set(recs.map((r) => r.id));
+  const deduped = recs.filter((rec) => {
+    // never-scanned is root cause: drop stale/frequency tuning noise.
+    if (ids.has("never-scanned") && (rec.id === "scan-stale" || rec.id === "adjust-frequency")) return false;
+    // if reminders disabled, frequency tuning is not actionable yet.
+    if (ids.has("enable-reminders") && rec.id === "adjust-frequency") return false;
+    return true;
+  });
+
+  // 7. All clear
+  if (deduped.length === 0) {
+    deduped.push({
       id: "all-clear",
       priority: "info",
       confidence: "high",
-      rationale: "All source references valid, scan coverage adequate, no action needed.",
+      rationale: "All source references valid, scan coverage adequate, and no conflicting signals detected.",
       title: "KB is in great shape",
       description:
         "All source references are valid and scan coverage is good. No action needed.",
     });
   }
 
-  return sortRecommendations(recs);
+  return sortRecommendations(deduped);
 }
 
 // --- Orchestration ---
