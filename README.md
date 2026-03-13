@@ -167,7 +167,15 @@ npm run test:diagnose
 
 - `.artifacts/test-diagnose/<timestamp>/meta.log`
 - `.artifacts/test-diagnose/<timestamp>/summary.log`
+- `.artifacts/test-diagnose/<timestamp>/index.md`（人类可读索引）
+- `.artifacts/test-diagnose/<timestamp>/summary.json`（结构化索引）
 - `.artifacts/test-diagnose/<timestamp>/*.log`
+
+#### 如何阅读诊断产物索引
+
+1. 先打开 `index.md`：快速查看本次执行参数、环境版本、每条测试命令状态。
+2. 如果有失败，直接看 `index.md` 的“失败日志清单”，按路径打开对应 `*.log`。
+3. 需要自动化分析或二次处理时，读取 `summary.json`：其中包含同样信息的结构化字段（`parameters` / `versions` / `commands` / `failedLogs`）。
 
 若有失败，请打包对应时间戳目录并附在 issue / PR 中，便于稳定复现与定位。
 
