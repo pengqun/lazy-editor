@@ -120,7 +120,7 @@ cd src-tauri && cargo test         # Rust unit tests
 
 ### 偶发测试失败：一键采集诊断信息
 
-当 CI 或本地出现“偶发失败 / 难以复现”时，优先运行：
+当 CI 或本地出现“偶发失败 / 难以复现”时，优先运行（CI 可在 GitHub Actions 手动触发 `CI Diagnose` workflow 并保持 `run_diagnose=true`）：
 
 ```bash
 npm run test:diagnose
