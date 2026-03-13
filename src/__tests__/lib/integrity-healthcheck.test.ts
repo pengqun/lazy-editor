@@ -8,6 +8,7 @@ import {
 } from "../../lib/integrity-healthcheck";
 import type { HealthThresholdSettings, ScanCoverageMetrics } from "../../lib/integrity-health";
 import type { IntegrityReminderSettings } from "../../lib/integrity-reminder";
+import { DEFAULT_RECOMMENDATION_THRESHOLDS } from "../../lib/integrity-recommendation-thresholds";
 
 // --- Helpers ---
 
@@ -309,6 +310,78 @@ describe("generateRecommendations", () => {
     const recs = generateRecommendations(makeReport(), makeMetrics(), "poor", reminder);
     expect(findRec(recs, "enable-reminders")).toBeDefined();
     expect(findRec(recs, "adjust-frequency")).toBeUndefined();
+  });
+
+  it("keeps default recommendation thresholds behavior unchanged", () => {
+    expect(DEFAULT_RECOMMENDATION_THRESHOLDS).toEqual({
+      missingStrongSignalRatio: 0.3,
+      tinyMissingMaxCount: 1,
+      tinyMissingMaxRatio: 0.1,
+      missingHighCount: 3,
+      missingCriticalRatio: 0.5,
+      movedHighCount: 1,
+      movedCriticalCount: 5,
+    });
+  });
+
+  it("allows lowering moved critical threshold via local overrides", () => {
+    const entries = Array.from({ length: 3 }, (_, i) => ({
+      id: i,
+      title: `doc-${i}`,
+      sourcePath: `/doc-${i}`,
+      status: "moved" as const,
+      movedCandidate: `/new-${i}`,
+    }));
+    const report = makeReport({ moved: 3, healthy: 7, entries });
+
+    const rec = findRec(
+      generateRecommendations(report, makeMetrics(), "good", DEFAULT_REMINDER, { movedCriticalCount: 2 }),
+      "relink-moved",
+    );
+
+    expect(rec).toBeDefined();
+    expect(rec!.priority).toBe("critical");
+  });
+
+  it("allows tightening tiny-missing downgrade threshold via local overrides", () => {
+    const entries = [
+      { id: 1, title: "missing", sourcePath: "/missing", status: "missing" as const, movedCandidate: null },
+      ...Array.from({ length: 9 }, (_, i) => ({
+        id: i + 2,
+        title: `ok-${i}`,
+        sourcePath: `/ok-${i}`,
+        status: "healthy" as const,
+        movedCandidate: null,
+      })),
+    ];
+    const report = makeReport({ healthy: 9, missing: 1, entries });
+
+    const rec = findRec(
+      generateRecommendations(report, makeMetrics(), "good", DEFAULT_REMINDER, { tinyMissingMaxRatio: 0.05 }),
+      "remove-missing",
+    );
+
+    expect(rec).toBeDefined();
+    expect(rec!.priority).toBe("medium");
+    expect(rec!.confidence).toBe("medium");
+  });
+
+  it("allows tuning strong missing signal threshold for ratio-warning dedupe", () => {
+    const entries = Array.from({ length: 10 }, (_, i) => ({
+      id: i,
+      title: `doc-${i}`,
+      sourcePath: `/doc-${i}`,
+      status: i < 5 ? ("healthy" as const) : ("missing" as const),
+      movedCandidate: null,
+    }));
+    const report = makeReport({ healthy: 5, missing: 5, entries });
+
+    const recs = generateRecommendations(report, makeMetrics(), "good", DEFAULT_REMINDER, {
+      missingStrongSignalRatio: 0.7,
+    });
+
+    expect(findRec(recs, "remove-missing")).toBeDefined();
+    expect(findRec(recs, "moderate-health-ratio")).toBeDefined();
   });
 
   // --- Sorting ---

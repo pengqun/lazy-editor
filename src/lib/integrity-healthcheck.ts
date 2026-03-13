@@ -13,6 +13,10 @@ import {
   computeScanCoverage,
   toHealthThresholds,
 } from "./integrity-health";
+import {
+  DEFAULT_RECOMMENDATION_THRESHOLDS,
+  type RecommendationThresholdSettings,
+} from "./integrity-recommendation-thresholds";
 
 // --- Types ---
 
@@ -94,16 +98,25 @@ export function generateRecommendations(
   metrics: ScanCoverageMetrics,
   tier: HealthTier,
   reminderSettings: IntegrityReminderSettings,
+  thresholdOverrides?: Partial<RecommendationThresholdSettings>,
 ): HealthCheckRecommendation[] {
   const recs: HealthCheckRecommendation[] = [];
   const total = report.entries.length;
   const healthyRatio = total > 0 ? report.healthy / total : 1;
   const missingRatio = total > 0 ? report.missing / total : 0;
+  const thresholds: RecommendationThresholdSettings = {
+    ...DEFAULT_RECOMMENDATION_THRESHOLDS,
+    ...thresholdOverrides,
+  };
 
   // 1. Moved documents — suggest relink
   if (report.moved > 0) {
     // Single moved doc is often low-risk and can self-resolve later; avoid over-alerting.
-    const movedPriority: RecommendationPriority = report.moved > 5 ? "critical" : report.moved > 1 ? "high" : "medium";
+    const movedPriority: RecommendationPriority = report.moved > thresholds.movedCriticalCount
+      ? "critical"
+      : report.moved > thresholds.movedHighCount
+        ? "high"
+        : "medium";
     recs.push({
       id: "relink-moved",
       priority: movedPriority,
@@ -112,7 +125,7 @@ export function generateRecommendations(
         `${report.moved} document(s) have move candidates and file-hash matches.`,
         [
           `moved=${report.moved}`,
-          `priority-threshold: >5 => critical, >1 => high, otherwise medium`,
+          `priority-threshold: >${thresholds.movedCriticalCount} => critical, >${thresholds.movedHighCount} => high, otherwise medium`,
         ],
       ),
       title: `Relink ${report.moved} moved document${report.moved > 1 ? "s" : ""}`,
@@ -128,17 +141,22 @@ export function generateRecommendations(
       .filter((e) => e.status === "missing")
       .map((e) => e.id);
 
-    const tinyMissing = report.missing === 1 && missingRatio <= 0.1;
+    const tinyMissing =
+      report.missing <= thresholds.tinyMissingMaxCount && missingRatio <= thresholds.tinyMissingMaxRatio;
 
     // Lower sensitivity on tiny missing set to reduce false positives from temporary path changes.
     const priority: RecommendationPriority = tinyMissing
       ? "low"
-      : missingRatio > 0.5
+      : missingRatio > thresholds.missingCriticalRatio
         ? "critical"
-        : report.missing > 3
+        : report.missing > thresholds.missingHighCount
           ? "high"
           : "medium";
-    const confidence: RecommendationConfidence = tinyMissing ? "low" : missingRatio > 0.5 ? "high" : "medium";
+    const confidence: RecommendationConfidence = tinyMissing
+      ? "low"
+      : missingRatio > thresholds.missingCriticalRatio
+        ? "high"
+        : "medium";
 
     recs.push({
       id: "remove-missing",
@@ -148,7 +166,9 @@ export function generateRecommendations(
         `${report.missing}/${total} entries are missing and have no move candidates.`,
         [
           `missing-ratio=${Math.round(missingRatio * 100)}%`,
-          tinyMissing ? "tiny-missing pattern detected (1 item, <=10%)" : "multi-item missing pattern",
+          tinyMissing
+            ? `tiny-missing pattern detected (<=${thresholds.tinyMissingMaxCount} item, <=${Math.round(thresholds.tinyMissingMaxRatio * 100)}%)`
+            : "multi-item missing pattern",
         ],
       ),
       title: `Remove ${report.missing} stale entr${report.missing > 1 ? "ies" : "y"}`,
@@ -221,7 +241,7 @@ export function generateRecommendations(
   }
 
   // 5. Health ratio warning (dedupe with missing-removal signals)
-  const hasStrongMissingSignal = report.missing > 0 && missingRatio >= 0.3;
+  const hasStrongMissingSignal = report.missing > 0 && missingRatio >= thresholds.missingStrongSignalRatio;
   if (total > 0 && !hasStrongMissingSignal) {
     if (healthyRatio < 0.5) {
       recs.push({
