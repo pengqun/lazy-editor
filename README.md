@@ -118,6 +118,33 @@ npm test                           # Frontend unit tests (Vitest)
 cd src-tauri && cargo test         # Rust unit tests
 ```
 
+### 偶发测试失败：一键采集诊断信息
+
+当 CI 或本地出现“偶发失败 / 难以复现”时，优先运行：
+
+```bash
+npm run test:diagnose
+```
+
+该命令会一次性执行并记录：
+
+- Node / npm / Vitest / Rust(cargo, rustc) 版本
+- 当前 git 分支与提交哈希
+- 复现矩阵：
+  - `npm test`
+  - `npm test -- --runInBand`
+  - `npx vitest run --reporter=verbose`
+  - `cd src-tauri && cargo test -q`
+- 每个命令的独立日志与退出码
+
+输出会落盘到：
+
+- `.artifacts/test-diagnose/<timestamp>/meta.log`
+- `.artifacts/test-diagnose/<timestamp>/summary.log`
+- `.artifacts/test-diagnose/<timestamp>/*.log`
+
+若有失败，请打包对应时间戳目录并附在 issue / PR 中，便于稳定复现与定位。
+
 ## Development Notes
 
 Useful commands:

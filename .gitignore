@@ -32,3 +32,4 @@ tools/
 
 # Self-test artifacts
 __smoke__/
+.artifacts/

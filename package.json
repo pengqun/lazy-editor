@@ -13,6 +13,7 @@
     "tauri:self-test:editor": "tauri dev -- -- --workspace",
     "build:selftest": "tsc -b && vite build --mode selftest",
     "test": "vitest run",
+    "test:diagnose": "bash scripts/test-diagnose.sh",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "format": "biome format src/",
