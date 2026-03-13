@@ -290,7 +290,8 @@ for i in $(seq 1 "$REPEAT_COUNT"); do
 
   if [ "$RUN_FRONTEND_TESTS" = "true" ]; then
     run_cmd "npm-test${suffix}" npm --prefix "$ROOT_DIR" test
-    run_cmd "npm-test-runInBand${suffix}" npm --prefix "$ROOT_DIR" test -- --runInBand
+    # Vitest 不支持 Jest 的 --runInBand，这里用 Vitest 原生串行选项保留“单线程/单文件并行度”诊断维度。
+    run_cmd "npm-test-serial${suffix}" npm --prefix "$ROOT_DIR" test -- --no-file-parallelism --maxWorkers=1
 
     if [ "$VITEST_VERBOSE" = "true" ]; then
       run_cmd "vitest-verbose${suffix}" npx --prefix "$ROOT_DIR" vitest run --reporter=verbose

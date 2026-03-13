@@ -7,6 +7,7 @@ import {
   buildCurrentRunRecord,
   buildStabilityBaseline,
   detectFailureType,
+  normalizeCommand,
   parseCommandsTsv,
   renderStabilityBaselineMarkdown,
 } from "../../../scripts/test-diagnose-baseline.mjs";
@@ -17,16 +18,16 @@ describe("test-diagnose baseline helpers", () => {
     const historyFile = path.join(tempDir, "history.json");
     const npmLog = path.join(tempDir, "npm.log");
     const cargoLog = path.join(tempDir, "cargo.log");
-    const runInBandLog = path.join(tempDir, "runInBand.log");
+    const serialLog = path.join(tempDir, "serial.log");
 
     fs.writeFileSync(npmLog, "all tests passed\n");
     fs.writeFileSync(cargoLog, "test result: ok. 79 passed; 0 failed\n");
-    fs.writeFileSync(runInBandLog, "CACError: Unknown option `--runInBand`\n");
+    fs.writeFileSync(serialLog, "all tests passed in serial mode\n");
 
     const commands = parseCommandsTsv(
       [
         `npm-test\t0\tpassed\t${npmLog}`,
-        `npm-test-runInBand\t1\tfailed\t${runInBandLog}`,
+        `npm-test-serial\t0\tpassed\t${serialLog}`,
         `cargo-test-q\t0\tpassed\t${cargoLog}`,
       ].join("\n"),
     );
@@ -41,7 +42,7 @@ describe("test-diagnose baseline helpers", () => {
     const baseline = buildStabilityBaseline(history, 20);
 
     expect(baseline.runsIncluded).toBe(1);
-    expect(baseline.overall.passRate).toBe(66.7);
+    expect(baseline.overall.passRate).toBe(100);
     expect(baseline.commands).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -59,25 +60,21 @@ describe("test-diagnose baseline helpers", () => {
           totalRuns: 1,
         }),
         expect.objectContaining({
-          key: "npm-test-runInBand",
-          label: "npm test -- --runInBand",
-          passRate: 0,
-          passedRuns: 0,
+          key: "npm-test-serial",
+          label: "npm test -- --no-file-parallelism --maxWorkers=1",
+          passRate: 100,
+          passedRuns: 1,
           totalRuns: 1,
         }),
       ]),
     );
-    expect(baseline.failureTypes).toContainEqual(
-      expect.objectContaining({
-        key: "unknown_option",
-        count: 1,
-      }),
-    );
+    expect(baseline.failureTypes).toEqual([]);
 
     const markdown = renderStabilityBaselineMarkdown(baseline);
     expect(markdown).toContain("最近 1/20 次已执行诊断");
     expect(markdown).toContain("| npm test | 100.0% | 1/1 |");
-    expect(markdown).toContain("- unknown option: 1");
+    expect(markdown).toContain("| npm test -- --no-file-parallelism --maxWorkers=1 | 100.0% | 1/1 |");
+    expect(markdown).toContain("- 无失败记录");
   });
 
   it("keeps only the most recent history window", () => {
@@ -110,6 +107,14 @@ describe("test-diagnose baseline helpers", () => {
     expect(history.runs).toHaveLength(20);
     expect(history.runs[0].runDir).toContain("run-3");
     expect(history.runs.at(-1).runDir).toContain("run-22");
+  });
+
+  it("normalizes legacy runInBand command name to serial bucket", () => {
+    expect(normalizeCommand("npm-test-runInBand")).toEqual({
+      key: "npm-test-serial",
+      label: "npm test -- --no-file-parallelism --maxWorkers=1",
+      pattern: /^npm-test-(?:serial|runInBand)(?:-r\d+)?$/,
+    });
   });
 
   it("classifies known failure types", () => {

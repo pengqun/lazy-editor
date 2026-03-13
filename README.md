@@ -158,10 +158,12 @@ npm run test:diagnose
 - 当前 git 分支与提交哈希
 - 复现矩阵：
   - `npm test`
-  - `npm test -- --runInBand`
+  - `npm test -- --no-file-parallelism --maxWorkers=1`（Vitest 串行模式；用于替代不兼容的 Jest `--runInBand`）
   - `npx vitest run --reporter=verbose`
   - `cd src-tauri && cargo test -q`
 - 每个命令的独立日志与退出码
+
+> 说明：本项目测试框架是 Vitest，`--runInBand` 为 Jest 参数，在 Vitest 下会报 `Unknown option`。`test:diagnose` 已改为使用 Vitest 支持的串行参数，默认不再产生该固定噪音失败。
 
 输出会落盘到：
 

@@ -10,9 +10,9 @@ const COMMAND_METADATA = [
     pattern: /^npm-test(?:-r\d+)?$/,
   },
   {
-    key: "npm-test-runInBand",
-    label: "npm test -- --runInBand",
-    pattern: /^npm-test-runInBand(?:-r\d+)?$/,
+    key: "npm-test-serial",
+    label: "npm test -- --no-file-parallelism --maxWorkers=1",
+    pattern: /^npm-test-(?:serial|runInBand)(?:-r\d+)?$/,
   },
   {
     key: "vitest-verbose",
