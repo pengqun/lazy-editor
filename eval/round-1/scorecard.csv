@@ -1,17 +1,17 @@
 round,task_id,difficulty,agent_combo,baseline_commit,branch,start_time,end_time,duration_min,time_to_first_pass_min,acceptance_passed,tests_passed,defect_count,rework_loops,quality_acceptance_20,quality_tests_15,quality_defects_15,quality_maintainability_10,eff_first_pass_8,eff_total_time_10,eff_rework_7,hygiene_commit_5,hygiene_docs_5,hygiene_constraints_5,total_score_100,reviewer_notes
-1,T1,small,,,,,,,,,,,,,,,,,,,,,,,,
-1,T1,small,,,,,,,,,,,,,,,,,,,,,,,,
-1,T2,small,,,,,,,,,,,,,,,,,,,,,,,,
-1,T2,small,,,,,,,,,,,,,,,,,,,,,,,,
-1,T3,small,,,,,,,,,,,,,,,,,,,,,,,,
-1,T3,small,,,,,,,,,,,,,,,,,,,,,,,,
-1,T4,medium,,,,,,,,,,,,,,,,,,,,,,,,
-1,T4,medium,,,,,,,,,,,,,,,,,,,,,,,,
-1,T5,medium,,,,,,,,,,,,,,,,,,,,,,,,
-1,T5,medium,,,,,,,,,,,,,,,,,,,,,,,,
-1,T6,medium,,,,,,,,,,,,,,,,,,,,,,,,
-1,T6,medium,,,,,,,,,,,,,,,,,,,,,,,,
-1,T7,hard,,,,,,,,,,,,,,,,,,,,,,,,
-1,T7,hard,,,,,,,,,,,,,,,,,,,,,,,,
-1,T8,hard,,,,,,,,,,,,,,,,,,,,,,,,
-1,T8,hard,,,,,,,,,,,,,,,,,,,,,,,,
+1,T1,small,A,e0dcf7e,eval/t1/claude,,,~5,~5,yes,299/52,0,0,17,14,15,8,7,9,7,5,4,5,91,Good labels/tooltips but tests added in wrong file
+1,T1,small,B,e0dcf7e,eval/t1/codex,,,~5,~5,yes,296/52,0,0,19,13,15,9,7,9,7,5,4,5,93,Better component-level UX validation; selected winner
+1,T2,small,A,e0dcf7e,eval/T2/A,,,~5,~5,yes,305/52,0,0,18,15,15,9,7,9,7,5,4,5,94,Date-first sortable format; 9 new tests
+1,T2,small,B,e0dcf7e,eval/T2/B,,,~8,~8,yes,298/52,0,0,17,12,15,8,5,6,5,3,3,5,79,2 new tests; sandbox EPERM required manual commit/test
+1,T3,small,A,e0dcf7e,eval/T3/A,,,~5,~5,yes,307/52,0,0,19,15,15,10,7,9,7,5,4,5,96,Reusable useDebouncedValue hook; 3 memo components; 11 tests
+1,T3,small,B,e0dcf7e,eval/T3/B,,,~8,~8,yes,297/52,0,0,16,10,15,7,5,6,5,3,3,5,75,1 memo component; 1 test; sandbox issues
+1,T4,medium,A,e0dcf7e,eval/T4/A,,,~8,~8,yes,321/52,0,0,20,15,15,10,7,9,7,5,4,5,97,resolveRetrievalSettings(); SettingsSourceBadge; 25 tests
+1,T4,medium,B,e0dcf7e,eval/T4/B,,,~12,~12,yes,302/52,0,0,18,13,14,8,5,6,5,3,3,5,80,Workspace storage + badge; 6 tests; sandbox issues
+1,T5,medium,A,e0dcf7e,eval/T5/A,,,~10,~10,yes,319/52,0,0,20,15,15,9,6,8,7,5,4,5,94,Unified deep-link handler; dedicated test file; 23 tests
+1,T5,medium,B,e0dcf7e,eval/T5/B,,,~12,~12,yes,300/52,0,0,18,12,14,8,5,6,5,3,3,5,79,Deep-link attrs + doc switch; 4 tests; sandbox issues
+1,T6,medium,A,e0dcf7e,eval/T6/A,,,~8,~8,yes,296/68,0,0,20,15,15,10,6,8,7,5,4,5,95,16 Rust tests; tempfile isolation; all providers validated
+1,T6,medium,B,e0dcf7e,eval/T6/B,,,~12,~12,yes,297/55,0,0,19,13,14,9,5,6,5,3,3,5,82,SettingsValidation enum; 3+1 tests; sandbox issues
+1,T7,hard,A,e0dcf7e,eval/T7/A,,,~12,~12,yes,321/52,0,0,20,15,15,10,6,8,7,5,4,5,95,Virtual scroll; structured result types; outline limits; 25 tests
+1,T7,hard,B,e0dcf7e,eval/T7/B,,,~15,~15,yes,301/52,0,0,17,12,14,8,5,6,5,3,3,5,78,Lazy render; adaptive debounce; 5 tests; sandbox issues
+1,T8,hard,A,e0dcf7e,eval/T8/A,,,~15,~15,yes,335/52,0,0,20,15,15,10,5,7,7,5,4,5,93,Full CRUD; dedicated test file; 39 tests; clean scope
+1,T8,hard,B,e0dcf7e,eval/T8/B,,,~18,~18,yes,307/52,0,1,19,14,13,8,5,6,5,3,4,4,81,Full CRUD; 11 tests; modified README+vitest.config (scope creep)

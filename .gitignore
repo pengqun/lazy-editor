@@ -33,3 +33,6 @@ tools/
 # Self-test artifacts
 __smoke__/
 .artifacts/
+
+# Local Claude workspace
+.claude/
