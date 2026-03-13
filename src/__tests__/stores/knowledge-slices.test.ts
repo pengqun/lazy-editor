@@ -384,4 +384,50 @@ describe("knowledge store slices", () => {
     expect(typeof state.retryBatchStep).toBe("function");
     expect(typeof state.clearBatchLog).toBe("function");
   });
+
+  it("public API: all documented type re-exports resolve from @/stores/knowledge", async () => {
+    // Verify type re-exports are importable (runtime check for non-type exports)
+    const mod = await import("@/stores/knowledge");
+    // Slice factories
+    expect(typeof mod.createViewerStateSlice).toBe("function");
+    expect(typeof mod.createIntegrityStateSlice).toBe("function");
+    expect(typeof mod.createBatchStateSlice).toBe("function");
+    expect(typeof mod.createBatchActionSlice).toBe("function");
+    // Store hook
+    expect(typeof mod.useKnowledgeStore).toBe("function");
+  });
+
+  it("public API: store exposes complete state shape with all expected keys", () => {
+    const state = useKnowledgeStore.getState();
+    const expectedKeys = [
+      // core
+      "documents", "isIngesting", "ingestProgress", "searchResults", "pinnedDocIds",
+      "retrievalTopK", "setRetrievalTopK", "retrievalScope", "setRetrievalScope",
+      "activePreset", "setPreset", "_activeDocPath", "_workspacePath", "settingsSource",
+      "setWorkspacePath", "restoreForDocument", "saveAsWorkspaceDefault", "getScopeDocIds",
+      "setIngestProgress", "loadDocuments", "ingestFile", "ingestText", "searchKB",
+      "removeDocument", "togglePinDocument",
+      // viewer
+      "viewedChunk", "lastRequestedChunkId", "viewChunkLoading", "viewChunkError",
+      "viewedChunkQuery", "viewedChunkScore", "viewChunk", "setViewChunkError",
+      "closeChunkViewer", "dismissChunkError",
+      // integrity
+      "integrityReport", "integrityLoading", "integrityHistory", "integrityTrendHistory",
+      "checkIntegrity", "relinkDocument", "removeStaleDocuments", "clearIntegrity",
+      "loadIntegrityHistory", "reminderSettings", "reminderDue", "setReminderSettings",
+      "snoozeReminder", "refreshReminderDue", "healthThresholds", "healthThresholdSource",
+      "setHealthThresholds", "resetHealthThresholds", "getHealthThresholds",
+      "saveThresholdsForWorkspace", "resetWorkspaceThresholds",
+      "exportThresholdConfig", "importThresholdConfig",
+      "healthCheckReport", "healthCheckLoading", "runHealthCheck",
+      // batch
+      "batchFixPlan", "batchLastPlan", "batchExecuting", "batchStepStatuses",
+      "batchExecutionLog", "lastBatchImpact", "clearHealthCheck",
+      "buildBatchPlan", "clearBatchPlan", "confirmBatchPlan", "retryBatchStep", "clearBatchLog",
+    ];
+    const stateKeys = Object.keys(state);
+    for (const key of expectedKeys) {
+      expect(stateKeys).toContain(key);
+    }
+  });
 });
