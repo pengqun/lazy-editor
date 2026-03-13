@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBatchActionSlice, createIntegrityStateSlice, createViewerStateSlice, useKnowledgeStore } from "@/stores/knowledge";
+import {
+  buildViewChunkError,
+  classifyViewChunkError,
+  createViewerStateSlice as createViewerStateSliceDirect,
+} from "@/stores/knowledge/viewer";
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -242,6 +247,99 @@ describe("knowledge store slices", () => {
     expect(state.batchLastPlan).toBeNull();
     expect(state.batchExecutionLog).toBeNull();
     expect(state.batchStepStatuses).toEqual({});
+  });
+
+  it("viewer module: direct import produces identical slice", () => {
+    const set = vi.fn();
+    const sliceViaReexport = createViewerStateSlice(set);
+    const sliceDirect = createViewerStateSliceDirect(set);
+    expect(Object.keys(sliceDirect).sort()).toEqual(Object.keys(sliceViaReexport).sort());
+  });
+
+  it("viewer module: buildViewChunkError covers all error kinds", () => {
+    expect(buildViewChunkError("source-missing").kind).toBe("source-missing");
+    expect(buildViewChunkError("chunk-missing").kind).toBe("chunk-missing");
+    expect(buildViewChunkError("malformed-link").kind).toBe("malformed-link");
+  });
+
+  it("viewer module: classifyViewChunkError maps error messages to kinds", () => {
+    expect(classifyViewChunkError(new Error("malformed link"))).toBe("malformed-link");
+    expect(classifyViewChunkError(new Error("source is missing"))).toBe("source-missing");
+    expect(classifyViewChunkError(new Error("query returned no rows"))).toBe("chunk-missing");
+    expect(classifyViewChunkError(new Error("no rows found"))).toBe("chunk-missing");
+    expect(classifyViewChunkError("unknown error")).toBe("chunk-missing");
+  });
+
+  it("viewer module: viewChunk failure sets error state", async () => {
+    const set = vi.fn();
+    const slice = createViewerStateSlice(set);
+    mockedInvoke.mockRejectedValueOnce(new Error("query returned no rows"));
+
+    await slice.viewChunk(42);
+
+    expect(set).toHaveBeenNthCalledWith(1, {
+      viewChunkLoading: true,
+      viewChunkError: null,
+      lastRequestedChunkId: 42,
+    });
+    expect(set).toHaveBeenNthCalledWith(2, {
+      viewedChunk: null,
+      viewChunkLoading: false,
+      viewChunkError: { kind: "chunk-missing", message: expect.stringContaining("no longer exists") },
+    });
+  });
+
+  it("viewer module: closeChunkViewer resets all viewer state", () => {
+    const set = vi.fn();
+    const slice = createViewerStateSlice(set);
+
+    slice.closeChunkViewer();
+
+    expect(set).toHaveBeenCalledWith({
+      viewedChunk: null,
+      lastRequestedChunkId: null,
+      viewChunkError: null,
+      viewedChunkQuery: null,
+      viewedChunkScore: null,
+    });
+  });
+
+  it("viewer module: dismissChunkError only clears error", () => {
+    const set = vi.fn();
+    const slice = createViewerStateSlice(set);
+
+    slice.dismissChunkError();
+
+    expect(set).toHaveBeenCalledWith({ viewChunkError: null });
+  });
+
+  it("viewer module: viewChunk without query/score omits those fields", async () => {
+    const set = vi.fn();
+    const slice = createViewerStateSlice(set);
+    const chunk = {
+      chunkContent: "c", documentTitle: "D", documentId: 1, chunkId: 5,
+      chunkIndex: 0, totalChunks: 1, prevChunk: null, nextChunk: null,
+    };
+    mockedInvoke.mockResolvedValueOnce(chunk);
+
+    await slice.viewChunk(5);
+
+    expect(set).toHaveBeenNthCalledWith(2, {
+      viewedChunk: chunk,
+      viewChunkLoading: false,
+      viewChunkError: null,
+    });
+  });
+
+  it("viewer module: initial state values are correct", () => {
+    const set = vi.fn();
+    const slice = createViewerStateSlice(set);
+    expect(slice.viewedChunk).toBeNull();
+    expect(slice.lastRequestedChunkId).toBeNull();
+    expect(slice.viewChunkLoading).toBe(false);
+    expect(slice.viewChunkError).toBeNull();
+    expect(slice.viewedChunkQuery).toBeNull();
+    expect(slice.viewedChunkScore).toBeNull();
   });
 
   it("兼容层：store 仍暴露原有 viewer/integrity/batch action 名称", () => {

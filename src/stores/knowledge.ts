@@ -48,40 +48,11 @@ import {
   loadBatchImpactSummary,
 } from "../lib/integrity-batch-impact";
 import { createBatchActionSlice, createBatchStateSlice } from "./knowledge/batch";
+import { createViewerStateSlice } from "./knowledge/viewer";
 import { toast } from "./toast";
 
 export { createBatchActionSlice, createBatchStateSlice };
-
-function buildViewChunkError(kind: ViewChunkErrorKind): ViewChunkErrorState {
-  switch (kind) {
-    case "source-missing":
-      return {
-        kind,
-        message: "Source missing — this document is no longer in the knowledge base.",
-      };
-    case "malformed-link":
-      return {
-        kind,
-        message: "Malformed citation link — this reference is invalid.",
-      };
-    case "chunk-missing":
-    default:
-      return {
-        kind: "chunk-missing",
-        message: "Chunk missing — this citation points to content that no longer exists.",
-      };
-  }
-}
-
-function classifyViewChunkError(err: unknown): ViewChunkErrorKind {
-  const message = String(err instanceof Error ? err.message : err).toLowerCase();
-  if (message.includes("malformed")) return "malformed-link";
-  if (message.includes("source") && message.includes("missing")) return "source-missing";
-  if (message.includes("query returned no rows") || message.includes("no rows")) {
-    return "chunk-missing";
-  }
-  return "chunk-missing";
-}
+export { createViewerStateSlice };
 
 export interface KBDocument {
   id: number;
@@ -327,23 +298,11 @@ function _currentSettings(state: {
 }
 
 // ===== Slice boundaries =====
-// viewer/*   -> createViewerStateSlice
+// viewer/*   -> createViewerStateSlice  (./knowledge/viewer.ts)
 // integrity/*-> createIntegrityStateSlice
-// batch/*    -> createBatchStateSlice + createBatchActionSlice
+// batch/*    -> createBatchStateSlice + createBatchActionSlice (./knowledge/batch.ts)
 // 说明：batch action 需要同时协调 integrity/viewer 相关状态（如 refresh 与提醒设置），
 // 通过 get() 访问跨 slice action，保持职责边界清晰且对外 API 不变。
-type ViewerStateSlice = Pick<KnowledgeState,
-  "viewedChunk"
-  | "lastRequestedChunkId"
-  | "viewChunkLoading"
-  | "viewChunkError"
-  | "viewedChunkQuery"
-  | "viewedChunkScore"
-  | "viewChunk"
-  | "setViewChunkError"
-  | "closeChunkViewer"
-  | "dismissChunkError"
->;
 
 type IntegrityStateSlice = Pick<KnowledgeState,
   "integrityReport"
@@ -373,55 +332,6 @@ type IntegrityStateSlice = Pick<KnowledgeState,
   | "healthCheckLoading"
   | "runHealthCheck"
 >;
-
-export function createViewerStateSlice(
-  set: (partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>)) => void,
-): ViewerStateSlice {
-  return {
-    viewedChunk: null,
-    lastRequestedChunkId: null,
-    viewChunkLoading: false,
-    viewChunkError: null,
-    viewedChunkQuery: null,
-    viewedChunkScore: null,
-    viewChunk: async (chunkId, query, score) => {
-      set({ viewChunkLoading: true, viewChunkError: null, lastRequestedChunkId: chunkId });
-      try {
-        const chunk = await invoke<ChunkContext>("get_kb_chunk", { chunkId });
-        set({
-          viewedChunk: chunk,
-          viewChunkLoading: false,
-          viewChunkError: null,
-          ...(query !== undefined ? { viewedChunkQuery: query || null } : {}),
-          ...(score !== undefined ? { viewedChunkScore: score } : {}),
-        });
-      } catch (err) {
-        console.error("Failed to load chunk:", err);
-        const kind = classifyViewChunkError(err);
-        set({
-          viewedChunk: null,
-          viewChunkLoading: false,
-          viewChunkError: buildViewChunkError(kind),
-        });
-      }
-    },
-    setViewChunkError: (kind) =>
-      set({
-        viewedChunk: null,
-        viewChunkLoading: false,
-        viewChunkError: buildViewChunkError(kind),
-      }),
-    closeChunkViewer: () =>
-      set({
-        viewedChunk: null,
-        lastRequestedChunkId: null,
-        viewChunkError: null,
-        viewedChunkQuery: null,
-        viewedChunkScore: null,
-      }),
-    dismissChunkError: () => set({ viewChunkError: null }),
-  };
-}
 
 export function createIntegrityStateSlice(
   set: (partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>)) => void,
