@@ -171,6 +171,19 @@ describe("extractHeadings", () => {
     expect(truncated).toBe(true);
     expect(elapsed).toBeLessThan(500);
   });
+
+  it("supports abort signal in sync path", () => {
+    const controller = new AbortController();
+    controller.abort();
+    const doc = mockDoc([{ type: "heading", attrs: { level: 1 }, textContent: "Title" }]);
+    try {
+      extractHeadings(doc, HEADING_LIMIT, controller.signal);
+      throw new Error("should abort");
+    } catch (error) {
+      expect(error).toBeInstanceOf(DOMException);
+      expect((error as DOMException).name).toBe("AbortError");
+    }
+  });
 });
 
 describe("extractHeadingsAsync", () => {

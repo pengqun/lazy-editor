@@ -15,6 +15,7 @@ import {
   adaptiveDebounce,
   estimateDocSize,
   findMatchesAsync,
+  isAbortError,
   searchPluginKey,
   type SearchMatch,
 } from "../../lib/find-replace";
@@ -162,12 +163,14 @@ export function FindReplaceBar() {
               result.truncated,
               0,
             );
-            setSearching(false);
           }
+          setSearching(false);
         })
-        .catch(() => {
-          if (searchRequestIdRef.current === requestId) {
-            setSearching(false);
+        .catch((error: unknown) => {
+          if (searchRequestIdRef.current !== requestId) return;
+          setSearching(false);
+          if (!isAbortError(error)) {
+            console.error("Find failed:", error);
           }
         });
     }, debounceMs);

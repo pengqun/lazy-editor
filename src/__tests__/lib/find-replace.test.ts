@@ -199,6 +199,19 @@ describe("findMatches", () => {
     expect(matches).toHaveLength(1);
     expect(matches[0]).toEqual({ from: 10, to: 15 });
   });
+
+  it("supports abort signal in sync path", () => {
+    const controller = new AbortController();
+    controller.abort();
+    const doc = mockDoc([{ text: "hello world", pos: 1 }]);
+    try {
+      findMatches(doc, "hello", false, MATCH_LIMIT, controller.signal);
+      throw new Error("should abort");
+    } catch (error) {
+      expect(error).toBeInstanceOf(DOMException);
+      expect((error as DOMException).name).toBe("AbortError");
+    }
+  });
 });
 
 describe("findMatchesAsync", () => {
@@ -286,6 +299,21 @@ describe("findMatchesAsync", () => {
 
     expect(timeoutSpy).not.toHaveBeenCalled();
     timeoutSpy.mockRestore();
+  });
+
+  it("rapidly switching requests cancels the previous one", async () => {
+    const doc = mockLargeDoc();
+    const first = new AbortController();
+    const second = new AbortController();
+
+    const firstPromise = findMatchesAsync(doc, "needle", false, first.signal);
+    first.abort();
+    const secondResult = await findMatchesAsync(doc, "needle", false, second.signal);
+    const firstResult = await firstPromise;
+
+    expect(firstResult.cancelled).toBe(true);
+    expect(secondResult.cancelled).toBe(false);
+    expect(secondResult.matches.length).toBeGreaterThan(0);
   });
 });
 

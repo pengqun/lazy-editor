@@ -11,6 +11,7 @@ import {
   adaptiveOutlineDebounce,
   extractHeadingsAsync,
 } from "../../lib/outline";
+import { isAbortError } from "../../lib/find-replace";
 import { useEditorStore } from "../../stores/editor";
 
 /** Height (px) of each heading row — used for virtual-scroll math. */
@@ -56,12 +57,18 @@ export function OutlinePanel() {
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
 
-      void extractHeadingsAsync(editor.state.doc, controller.signal).then((result) => {
-        if (controller.signal.aborted || requestIdRef.current !== requestId) return;
-        setHeadings(result.headings);
-        setTruncated(result.truncated);
-        debounceMs.current = adaptiveOutlineDebounce(result.headings.length);
-      });
+      void extractHeadingsAsync(editor.state.doc, controller.signal)
+        .then((result) => {
+          if (controller.signal.aborted || requestIdRef.current !== requestId) return;
+          if (result.cancelled) return;
+          setHeadings(result.headings);
+          setTruncated(result.truncated);
+          debounceMs.current = adaptiveOutlineDebounce(result.headings.length);
+        })
+        .catch((error: unknown) => {
+          if (requestIdRef.current !== requestId || isAbortError(error)) return;
+          console.error("Outline extraction failed:", error);
+        });
     };
 
     // Immediate extraction on mount / editor change

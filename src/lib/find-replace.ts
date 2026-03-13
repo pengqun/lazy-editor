@@ -15,6 +15,7 @@ export const MATCH_LIMIT = 1000;
 export const LARGE_DOC_THRESHOLD = 50_000;
 export const VERY_LARGE_DOC_THRESHOLD = 200_000;
 export const YIELD_BATCH_SIZE = 500;
+export const YIELD_MATCH_BATCH_SIZE = 200;
 
 /** Estimate the character count of a ProseMirror document by summing text nodes. */
 export function estimateDocSize(doc: ProseMirrorNode): number {
@@ -50,6 +51,19 @@ function yieldToEventLoop(): Promise<void> {
   });
 }
 
+export function isAbortError(error: unknown): boolean {
+  return (
+    error instanceof DOMException
+    && error.name === "AbortError"
+  );
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException("Operation cancelled", "AbortError");
+  }
+}
+
 /**
  * Find all occurrences of `query` in a ProseMirror document.
  * Searches within individual text nodes.
@@ -63,7 +77,9 @@ export function findMatches(
   query: string,
   caseSensitive: boolean,
   limit: number = MATCH_LIMIT,
+  signal?: AbortSignal,
 ): FindMatchesResult {
+  throwIfAborted(signal);
   if (!query) return { matches: [], truncated: false };
 
   const matches: SearchMatch[] = [];
@@ -71,12 +87,14 @@ export function findMatches(
   let truncated = false;
 
   doc.descendants((node, pos) => {
+    throwIfAborted(signal);
     // Early termination: stop traversing when limit reached
     if (truncated) return false;
     if (!node.isText || !node.text) return;
     const text = caseSensitive ? node.text : node.text.toLowerCase();
     let idx = 0;
     while (idx <= text.length - search.length) {
+      throwIfAborted(signal);
       const found = text.indexOf(search, idx);
       if (found === -1) break;
       matches.push({ from: pos + found, to: pos + found + search.length });
@@ -111,9 +129,16 @@ export async function findMatchesAsync(
   const docSize = estimateDocSize(doc);
 
   if (docSize < LARGE_DOC_THRESHOLD) {
-    const result = findMatches(doc, query, caseSensitive, limit);
-    onProgress?.(result);
-    return { ...result, cancelled: false };
+    try {
+      const result = findMatches(doc, query, caseSensitive, limit, signal);
+      onProgress?.(result);
+      return { ...result, cancelled: false };
+    } catch (error) {
+      if (isAbortError(error)) {
+        return { matches: [], truncated: false, cancelled: true };
+      }
+      throw error;
+    }
   }
 
   const textNodes: { text: string; pos: number }[] = [];
@@ -127,6 +152,7 @@ export async function findMatchesAsync(
   let truncated = false;
   let cancelled = false;
   let sinceYield = 0;
+  let sinceInnerYield = 0;
 
   for (const textNode of textNodes) {
     if (signal.aborted) {
@@ -148,9 +174,20 @@ export async function findMatchesAsync(
         break;
       }
       idx = found + 1;
+
+      sinceInnerYield += 1;
+      if (sinceInnerYield >= YIELD_MATCH_BATCH_SIZE) {
+        onProgress?.({ matches: [...matches], truncated });
+        await yieldToEventLoop();
+        sinceInnerYield = 0;
+        if (signal.aborted) {
+          cancelled = true;
+          break;
+        }
+      }
     }
 
-    if (truncated) break;
+    if (cancelled || truncated) break;
 
     sinceYield += 1;
     if (sinceYield >= YIELD_BATCH_SIZE) {

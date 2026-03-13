@@ -1,5 +1,9 @@
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { LARGE_DOC_THRESHOLD, YIELD_BATCH_SIZE } from "./find-replace";
+import {
+  LARGE_DOC_THRESHOLD,
+  YIELD_BATCH_SIZE,
+  isAbortError,
+} from "./find-replace";
 
 export interface OutlineHeading {
   level: 1 | 2 | 3;
@@ -41,6 +45,12 @@ function yieldToEventLoop(): Promise<void> {
   });
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException("Operation cancelled", "AbortError");
+  }
+}
+
 /**
  * Return an appropriate outline debounce (ms) based on heading count.
  * Used by OutlinePanel to avoid excessive re-renders in huge docs.
@@ -60,11 +70,14 @@ export function adaptiveOutlineDebounce(headingCount: number): number {
 export function extractHeadings(
   doc: ProseMirrorNode,
   limit: number = HEADING_LIMIT,
+  signal?: AbortSignal,
 ): ExtractHeadingsResult {
+  throwIfAborted(signal);
   const headings: OutlineHeading[] = [];
   let truncated = false;
 
   doc.descendants((node, pos) => {
+    throwIfAborted(signal);
     if (truncated) return false;
     if (
       node.type.name === "heading" &&
@@ -103,9 +116,16 @@ export async function extractHeadingsAsync(
   const docSize = estimateOutlineDocSize(doc);
 
   if (docSize < LARGE_DOC_THRESHOLD) {
-    const result = extractHeadings(doc, limit);
-    onProgress?.(result);
-    return { ...result, cancelled: false };
+    try {
+      const result = extractHeadings(doc, limit, signal);
+      onProgress?.(result);
+      return { ...result, cancelled: false };
+    } catch (error) {
+      if (isAbortError(error)) {
+        return { headings: [], truncated: false, cancelled: true };
+      }
+      throw error;
+    }
   }
 
   const nodes: { isHeading: boolean; level: number; text: string; pos: number }[] = [];
