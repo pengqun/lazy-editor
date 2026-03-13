@@ -2484,7 +2484,7 @@ dependencies = [
 
 [[package]]
 name = "lazy-editor"
-version = "0.1.0"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "async-trait",
