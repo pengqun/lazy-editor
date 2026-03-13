@@ -41,6 +41,43 @@ function makePayload(overrides?: Partial<IntegrityExportPayload>): IntegrityExpo
   };
 }
 
+function makeBatchExecutionLog() {
+  return {
+    startedAt: "2026-03-12T11:00:00.000Z",
+    completedAt: "2026-03-12T11:01:00.000Z",
+    results: [
+      {
+        stepId: "step-relink-moved",
+        recommendationId: "relink-moved",
+        actionType: "relink-all" as const,
+        status: "success" as const,
+        outcome: "success" as const,
+        message: "Relinked moved docs",
+        durationMs: 200,
+        attempts: 1,
+        affectedItems: 2,
+      },
+      {
+        stepId: "step-remove-missing",
+        recommendationId: "remove-missing",
+        actionType: "remove-stale" as const,
+        status: "skipped" as const,
+        outcome: "skipped" as const,
+        message: "Manual-only",
+        durationMs: 0,
+        attempts: 1,
+        affectedItems: 1,
+      },
+    ],
+    summary: {
+      success: 1,
+      failed: 0,
+      skipped: 1,
+      itemChanges: { success: 2, failed: 0, skipped: 1, total: 3 },
+    },
+  };
+}
+
 describe("buildExportPayload", () => {
   it("builds payload from an empty report", () => {
     const report = makeReport();
@@ -259,6 +296,12 @@ describe("buildExportPayload with history", () => {
     const payload = buildExportPayload(makeReport());
     expect(payload.history).toBeUndefined();
   });
+
+  it("includes batch execution log when provided", () => {
+    const batchExecutionLog = makeBatchExecutionLog();
+    const payload = buildExportPayload(makeReport(), undefined, undefined, batchExecutionLog);
+    expect(payload.batchExecutionLog).toEqual(batchExecutionLog);
+  });
 });
 
 // --- Export with priority/confidence/rationale ---
@@ -305,6 +348,24 @@ describe("export includes priority/confidence/rationale", () => {
     const md = formatMarkdown(payload);
     expect(md).toContain("(confidence: high)");
     expect(md).toContain("(confidence: med)");
+  });
+
+  it("markdown export includes management summary with top priorities", () => {
+    const payload = makePayload({ healthCheck });
+    const md = formatMarkdown(payload);
+    expect(md).toContain("## Management Summary");
+    expect(md).toContain("**Current health:** Fair");
+    expect(md).toContain("**Key risk:** Relink 1 moved document");
+    expect(md).toContain("- [HIGH] (high) Relink 1 moved document");
+    expect(md).toContain("- [MEDIUM] (med) Remove 1 stale entry");
+  });
+
+  it("markdown export includes latest batch execution metrics when available", () => {
+    const payload = makePayload({ healthCheck, batchExecutionLog: makeBatchExecutionLog() });
+    const md = formatMarkdown(payload);
+    expect(md).toContain("**Batch execution metrics (latest):**");
+    expect(md).toContain("Repair rate 66.7% (2/3), Hit rate 100.0%, Skip rate 50.0%");
+    expect(md).toContain("Steps: success 1, failed 0, skipped 1");
   });
 
   it("markdown export includes estimated impact summary", () => {

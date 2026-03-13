@@ -905,7 +905,7 @@ function HealthCheckCard({
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
 
     const ir = integrityReport ?? { entries: [], healthy: 0, missing: 0, moved: 0 };
-    const payload = buildExportPayload(ir, integrityHistory, hcReport);
+    const payload = buildExportPayload(ir, integrityHistory, hcReport, batchExecutionLog);
     const content = format === "json" ? formatJSON(payload) : formatMarkdown(payload);
     const ext = format === "json" ? "json" : "md";
 

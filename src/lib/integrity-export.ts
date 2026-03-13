@@ -1,6 +1,13 @@
 import type { IntegrityEntry, IntegrityReport, IntegrityScanSnapshot } from "@/stores/knowledge";
-import { buildBatchFixPlan, formatEstimatedImpact, summarizeEstimatedImpact } from "./integrity-batch-plan";
-import type { HealthCheckReport } from "./integrity-healthcheck";
+import {
+  buildBatchFixPlan,
+  computeBatchExecutionMetrics,
+  formatEstimatedImpact,
+  formatRate,
+  summarizeEstimatedImpact,
+  type BatchExecutionLog,
+} from "./integrity-batch-plan";
+import type { HealthCheckRecommendation, HealthCheckReport } from "./integrity-healthcheck";
 
 export interface IntegrityExportPayload {
   scanTimestamp: string;
@@ -8,6 +15,7 @@ export interface IntegrityExportPayload {
   entries: IntegrityEntry[];
   history?: IntegrityScanSnapshot[];
   healthCheck?: HealthCheckReport;
+  batchExecutionLog?: BatchExecutionLog;
 }
 
 export interface IntegrityTrend {
@@ -40,6 +48,7 @@ export function buildExportPayload(
   report: IntegrityReport,
   history?: IntegrityScanSnapshot[],
   healthCheck?: HealthCheckReport,
+  batchExecutionLog?: BatchExecutionLog,
 ): IntegrityExportPayload {
   return {
     scanTimestamp: new Date().toISOString(),
@@ -52,6 +61,7 @@ export function buildExportPayload(
     entries: report.entries,
     ...(history && history.length > 0 ? { history } : {}),
     ...(healthCheck ? { healthCheck } : {}),
+    ...(batchExecutionLog ? { batchExecutionLog } : {}),
   };
 }
 
@@ -79,8 +89,19 @@ const CONFIDENCE_LABEL_MAP: Record<string, string> = {
   low: "low",
 };
 
+function firstKeyRisk(recommendations: HealthCheckRecommendation[]): string {
+  const actionable = recommendations.find((rec) => rec.id !== "all-clear");
+  return actionable ? actionable.title : "No critical risk detected";
+}
+
+function topRecommendations(recommendations: HealthCheckRecommendation[]): HealthCheckRecommendation[] {
+  return recommendations
+    .filter((rec) => rec.id !== "all-clear")
+    .slice(0, 3);
+}
+
 export function formatMarkdown(payload: IntegrityExportPayload): string {
-  const { scanTimestamp, summary, entries, history, healthCheck } = payload;
+  const { scanTimestamp, summary, entries, history, healthCheck, batchExecutionLog } = payload;
   const lines: string[] = [];
 
   lines.push("# KB Integrity Report");
@@ -97,6 +118,39 @@ export function formatMarkdown(payload: IntegrityExportPayload): string {
   lines.push(`| Missing | ${summary.missing} |`);
   lines.push(`| **Total** | **${summary.total}** |`);
   lines.push("");
+
+  if (healthCheck) {
+    const statusLabel = TIER_LABEL_MAP[healthCheck.tier] ?? healthCheck.tier;
+    lines.push("## Management Summary");
+    lines.push("");
+    lines.push(`- **Current health:** ${statusLabel}`);
+    lines.push(`- **Key risk:** ${firstKeyRisk(healthCheck.recommendations)}`);
+
+    const top3 = topRecommendations(healthCheck.recommendations);
+    lines.push("- **Top 3 priorities:**");
+    if (top3.length === 0) {
+      lines.push("  - None");
+    } else {
+      for (const rec of top3) {
+        const pLabel = PRIORITY_LABEL_MAP[rec.priority] ?? rec.priority;
+        const cLabel = CONFIDENCE_LABEL_MAP[rec.confidence] ?? rec.confidence;
+        lines.push(`  - [${pLabel}] (${cLabel}) ${rec.title}`);
+      }
+    }
+
+    if (batchExecutionLog) {
+      const metrics = computeBatchExecutionMetrics(batchExecutionLog);
+      lines.push("- **Batch execution metrics (latest):**");
+      lines.push(
+        `  - Repair rate ${formatRate(metrics.repairRate)} (${metrics.successImpactItems}/${metrics.estimatedImpactItems}), Hit rate ${formatRate(metrics.hitRate)}, Skip rate ${formatRate(metrics.skipRate)}`,
+      );
+      lines.push(
+        `  - Steps: success ${batchExecutionLog.summary.success}, failed ${batchExecutionLog.summary.failed}, skipped ${batchExecutionLog.summary.skipped}`,
+      );
+    }
+
+    lines.push("");
+  }
 
   if (entries.length === 0) {
     lines.push("_No documents scanned._");
