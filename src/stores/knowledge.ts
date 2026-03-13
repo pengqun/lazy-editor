@@ -355,6 +355,116 @@ function _buildBatchCallbacks(
   };
 }
 
+type ViewerStateSlice = Pick<KnowledgeState,
+  "viewedChunk"
+  | "lastRequestedChunkId"
+  | "viewChunkLoading"
+  | "viewChunkError"
+  | "viewedChunkQuery"
+  | "viewedChunkScore"
+  | "viewChunk"
+  | "setViewChunkError"
+  | "closeChunkViewer"
+  | "dismissChunkError"
+>;
+
+type IntegrityStateSlice = Pick<KnowledgeState,
+  "integrityReport"
+  | "integrityLoading"
+  | "integrityHistory"
+  | "integrityTrendHistory"
+  | "reminderSettings"
+  | "reminderDue"
+  | "healthThresholds"
+  | "healthThresholdSource"
+  | "healthCheckReport"
+  | "healthCheckLoading"
+>;
+
+type BatchStateSlice = Pick<KnowledgeState,
+  "batchFixPlan"
+  | "batchLastPlan"
+  | "batchExecuting"
+  | "batchStepStatuses"
+  | "batchExecutionLog"
+  | "lastBatchImpact"
+>;
+
+export function createViewerStateSlice(
+  set: (partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>)) => void,
+): ViewerStateSlice {
+  return {
+    viewedChunk: null,
+    lastRequestedChunkId: null,
+    viewChunkLoading: false,
+    viewChunkError: null,
+    viewedChunkQuery: null,
+    viewedChunkScore: null,
+    viewChunk: async (chunkId, query, score) => {
+      set({ viewChunkLoading: true, viewChunkError: null, lastRequestedChunkId: chunkId });
+      try {
+        const chunk = await invoke<ChunkContext>("get_kb_chunk", { chunkId });
+        set({
+          viewedChunk: chunk,
+          viewChunkLoading: false,
+          viewChunkError: null,
+          ...(query !== undefined ? { viewedChunkQuery: query || null } : {}),
+          ...(score !== undefined ? { viewedChunkScore: score } : {}),
+        });
+      } catch (err) {
+        console.error("Failed to load chunk:", err);
+        const kind = classifyViewChunkError(err);
+        set({
+          viewedChunk: null,
+          viewChunkLoading: false,
+          viewChunkError: buildViewChunkError(kind),
+        });
+      }
+    },
+    setViewChunkError: (kind) =>
+      set({
+        viewedChunk: null,
+        viewChunkLoading: false,
+        viewChunkError: buildViewChunkError(kind),
+      }),
+    closeChunkViewer: () =>
+      set({
+        viewedChunk: null,
+        lastRequestedChunkId: null,
+        viewChunkError: null,
+        viewedChunkQuery: null,
+        viewedChunkScore: null,
+      }),
+    dismissChunkError: () => set({ viewChunkError: null }),
+  };
+}
+
+export function createIntegrityStateSlice(): IntegrityStateSlice {
+  return {
+    integrityReport: null,
+    integrityLoading: false,
+    integrityHistory: [],
+    integrityTrendHistory: loadIntegrityTrendHistory(null),
+    reminderSettings: loadReminderSettings(),
+    reminderDue: false,
+    healthThresholds: loadThresholdSettings(),
+    healthThresholdSource: "global" as ThresholdSource,
+    healthCheckReport: null,
+    healthCheckLoading: false,
+  };
+}
+
+export function createBatchStateSlice(): BatchStateSlice {
+  return {
+    batchFixPlan: null,
+    batchLastPlan: null,
+    batchExecuting: false,
+    batchStepStatuses: {},
+    batchExecutionLog: null,
+    lastBatchImpact: loadBatchImpactSummary(null),
+  };
+}
+
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   documents: [],
   isIngesting: false,
@@ -367,12 +477,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   _activeDocPath: null,
   _workspacePath: null,
   settingsSource: "global" as RetrievalSettingsSource,
-  viewedChunk: null,
-  lastRequestedChunkId: null,
-  viewChunkLoading: false,
-  viewChunkError: null,
-  viewedChunkQuery: null,
-  viewedChunkScore: null,
+  ...createViewerStateSlice(set),
+  ...createIntegrityStateSlice(),
+  ...createBatchStateSlice(),
 
   setRetrievalTopK: (topK) => {
     const clamped = Math.max(1, Math.min(10, topK));
@@ -508,51 +615,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     });
   },
 
-  viewChunk: async (chunkId, query, score) => {
-    set({ viewChunkLoading: true, viewChunkError: null, lastRequestedChunkId: chunkId });
-    try {
-      const chunk = await invoke<ChunkContext>("get_kb_chunk", { chunkId });
-      set({
-        viewedChunk: chunk,
-        viewChunkLoading: false,
-        viewChunkError: null,
-        // Preserve query/score context when navigating between chunks (pass undefined to keep previous)
-        ...(query !== undefined ? { viewedChunkQuery: query || null } : {}),
-        ...(score !== undefined ? { viewedChunkScore: score } : {}),
-      });
-    } catch (err) {
-      console.error("Failed to load chunk:", err);
-      const kind = classifyViewChunkError(err);
-      set({
-        viewedChunk: null,
-        viewChunkLoading: false,
-        viewChunkError: buildViewChunkError(kind),
-      });
-    }
-  },
+  // viewerState actions are provided by createViewerStateSlice (compatibility kept: same API names)
 
-  setViewChunkError: (kind) =>
-    set({
-      viewedChunk: null,
-      viewChunkLoading: false,
-      viewChunkError: buildViewChunkError(kind),
-    }),
-
-  closeChunkViewer: () =>
-    set({
-      viewedChunk: null,
-      lastRequestedChunkId: null,
-      viewChunkError: null,
-      viewedChunkQuery: null,
-      viewedChunkScore: null,
-    }),
-
-  dismissChunkError: () => set({ viewChunkError: null }),
-
-  integrityReport: null,
-  integrityLoading: false,
-  integrityHistory: [],
-  integrityTrendHistory: loadIntegrityTrendHistory(null),
+  // integrityState actions remain in this file; base state comes from createIntegrityStateSlice
 
   checkIntegrity: async () => {
     set({ integrityLoading: true });
@@ -615,9 +680,6 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     }
   },
 
-  reminderSettings: loadReminderSettings(),
-  reminderDue: false, // evaluated on mount via refreshReminderDue
-
   setReminderSettings: (patch) => {
     const current = get().reminderSettings;
     const updated: IntegrityReminderSettings = {
@@ -649,9 +711,6 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     const lastScanAt = integrityHistory[0]?.scannedAt ?? null;
     set({ reminderDue: isReminderDue(reminderSettings, lastScanAt) });
   },
-
-  healthThresholds: loadThresholdSettings(),
-  healthThresholdSource: "global" as ThresholdSource,
 
   setHealthThresholds: (patch) => {
     const current = get().healthThresholds;
@@ -711,9 +770,6 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     return null;
   },
 
-  healthCheckReport: null,
-  healthCheckLoading: false,
-
   runHealthCheck: async () => {
     set({ healthCheckLoading: true, healthCheckReport: null });
     try {
@@ -752,13 +808,6 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
 
   clearHealthCheck: () =>
     set({ healthCheckReport: null, batchFixPlan: null, batchLastPlan: null, batchExecutionLog: null, batchStepStatuses: {} }),
-
-  batchFixPlan: null,
-  batchLastPlan: null,
-  batchExecuting: false,
-  batchStepStatuses: {},
-  batchExecutionLog: null,
-  lastBatchImpact: loadBatchImpactSummary(null),
 
   buildBatchPlan: () => {
     const { healthCheckReport } = get();
