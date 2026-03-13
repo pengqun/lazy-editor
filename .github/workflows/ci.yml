@@ -84,3 +84,42 @@ jobs:
         env:
           RUST_BACKTRACE: "1"
         run: src-tauri/target/debug/lazy-editor-selftest --workspace "$GITHUB_WORKSPACE" --self-test editor-formatting
+
+  ci-stability-baseline:
+    name: CI stability baseline summary (non-blocking)
+    needs: version-gate
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Restore diagnose history cache
+        uses: actions/cache@v4
+        with:
+          path: .artifacts/test-diagnose/history.json
+          key: ci-test-diagnose-history-${{ github.ref_name }}
+          restore-keys: |
+            ci-test-diagnose-history-main
+            ci-test-diagnose-history-
+
+      - name: Generate baseline summary from diagnose history
+        run: node scripts/ci-stability-baseline.mjs
+
+      - name: Publish workflow summary
+        if: always()
+        run: cat .artifacts/test-diagnose/ci-baseline/stability-baseline.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload baseline artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-stability-baseline-${{ github.run_id }}
+          path: .artifacts/test-diagnose/ci-baseline/*
+          if-no-files-found: warn

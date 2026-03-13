@@ -43,6 +43,16 @@ jobs:
         if: ${{ inputs.run_rust_tests }}
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Restore diagnose history cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .artifacts/test-diagnose/history.json
+          key: ci-test-diagnose-history-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            ci-test-diagnose-history-${{ github.ref_name }}-
+            ci-test-diagnose-history-main-
+            ci-test-diagnose-history-
+
       - name: Install JS deps
         run: npm ci
 
@@ -53,6 +63,13 @@ jobs:
           VITEST_VERBOSE: ${{ inputs.vitest_verbose }}
           REPEAT_COUNT: ${{ inputs.repeat_count }}
         run: npm run test:diagnose
+
+      - name: Save diagnose history cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .artifacts/test-diagnose/history.json
+          key: ci-test-diagnose-history-${{ github.ref_name }}-${{ github.run_id }}
 
       - name: Upload diagnose artifacts
         if: always()

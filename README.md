@@ -184,6 +184,17 @@ npm run test:diagnose
 
 若有失败，请打包对应时间戳目录并附在 issue / PR 中，便于稳定复现与定位。
 
+#### 在 CI 中查看稳定性基线摘要（常规非 release 流程）
+
+常规 `CI` workflow 现在会额外运行一个**非阻塞**的 `CI stability baseline summary (non-blocking)` job：
+
+- 在 **Actions → 对应 CI 运行 → Summary** 中可直接看到「Stability Baseline」摘要（workflow summary）。
+- 同时会上传 `ci-stability-baseline-<run_id>` artifact，包含：
+  - `.artifacts/test-diagnose/ci-baseline/stability-baseline.md`
+  - `.artifacts/test-diagnose/ci-baseline/stability-baseline.json`
+
+说明：该 job 仅做可观测输出，不影响常规开发通过/失败判定；release 流程逻辑不变。
+
 ## Development Notes
 
 Useful commands:
