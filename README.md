@@ -210,6 +210,20 @@ The app version lives in three files that must stay in sync:
 npm run version:check
 ```
 
+### 发布前版本一致性检查（建议）
+
+在打 `vX.Y.Z` 标签前，先执行：
+
+```bash
+npm run version:check
+```
+
+若准备从 tag 触发 release，可额外校验 tag 与清单版本一致：
+
+```bash
+npm run version:check -- --expect-from-tag vX.Y.Z
+```
+
 **Bump all files at once:**
 
 ```bash
@@ -224,7 +238,7 @@ git tag v0.1.6
 git push origin main --tags
 ```
 
-The CI release workflow runs `version:check` before building, so a mismatch will fail the job early with an actionable message.
+The CI/release workflows run `version:check` as an early gate. Tag releases also validate `vX.Y.Z` against manifest version, and fail fast with actionable errors on mismatch.
 
 ## CI Release Packaging (macOS Apple Silicon)
 

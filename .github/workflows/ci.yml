@@ -6,8 +6,27 @@ on:
   pull_request:
 
 jobs:
+  version-gate:
+    name: Version consistency gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Verify manifest version consistency (fail-fast)
+        run: npm run version:check
+
   smoke-desktop-editor:
     name: Desktop smoke test (Tauri self-test)
+    needs: version-gate
     runs-on: macos-14
     timeout-minutes: 20
 
