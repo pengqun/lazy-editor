@@ -3,6 +3,7 @@ import {
   loadWorkspaceRetrievalSettings,
   saveWorkspaceRetrievalSettings,
 } from "@/lib/retrieval-presets";
+import * as batchPlanLib from "@/lib/integrity-batch-plan";
 import { useKnowledgeStore } from "@/stores/knowledge";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -712,6 +713,110 @@ describe("useKnowledgeStore", () => {
 
       useKnowledgeStore.getState().clearIntegrity();
       expect(useKnowledgeStore.getState().integrityReport).toBeNull();
+    });
+  });
+
+  describe("retryBatchStep", () => {
+    const failedStepLog = {
+      startedAt: "2026-03-13T12:00:00.000Z",
+      completedAt: "2026-03-13T12:01:00.000Z",
+      results: [{
+        stepId: "step-remove-missing",
+        recommendationId: "remove-missing",
+        actionType: "remove-stale" as const,
+        status: "failed" as const,
+        outcome: "failed" as const,
+        message: "first fail",
+        durationMs: 3,
+        attempts: 1,
+        affectedItems: 2,
+      }],
+      summary: {
+        success: 0,
+        failed: 1,
+        skipped: 0,
+        itemChanges: { success: 0, failed: 2, skipped: 0, total: 2 },
+      },
+    };
+
+    const lastPlan = {
+      createdAt: "2026-03-13T12:00:00.000Z",
+      steps: [{
+        stepId: "step-remove-missing",
+        order: 0,
+        kind: "auto" as const,
+        rationale: "cleanup",
+        impact: "remove stale",
+        recommendation: {
+          id: "remove-missing",
+          priority: "high" as const,
+          confidence: "high" as const,
+          title: "remove missing",
+          description: "remove",
+          rationale: "cleanup",
+          action: { type: "remove-stale" as const, ids: [1, 2] },
+        },
+      }],
+      autoCount: 1,
+      manualCount: 0,
+    };
+
+    it("failed -> retry success", async () => {
+      const retrySpy = vi.spyOn(batchPlanLib, "executeBatchStep").mockResolvedValueOnce({
+        stepId: "step-remove-missing",
+        recommendationId: "remove-missing",
+        actionType: "remove-stale",
+        status: "success",
+        outcome: "success",
+        message: "ok",
+        durationMs: 5,
+        attempts: 2,
+        affectedItems: 2,
+      });
+
+      useKnowledgeStore.setState({
+        batchLastPlan: lastPlan,
+        batchExecutionLog: failedStepLog,
+      });
+
+      mockedInvoke
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce({ entries: [], healthy: 0, missing: 0, moved: 0 });
+
+      await useKnowledgeStore.getState().retryBatchStep("step-remove-missing");
+
+      expect(retrySpy).toHaveBeenCalledTimes(1);
+      expect(useKnowledgeStore.getState().batchExecutionLog?.results[0].outcome).toBe("success");
+      expect(useKnowledgeStore.getState().batchExecutionLog?.results[0].attempts).toBe(2);
+      expect(mockedInvoke).toHaveBeenCalledWith("list_kb_documents");
+      expect(mockedInvoke).toHaveBeenCalledWith("check_kb_integrity");
+    });
+
+    it("failed -> retry failed", async () => {
+      const retrySpy = vi.spyOn(batchPlanLib, "executeBatchStep").mockResolvedValueOnce({
+        stepId: "step-remove-missing",
+        recommendationId: "remove-missing",
+        actionType: "remove-stale",
+        status: "failed",
+        outcome: "failed",
+        message: "still fail",
+        durationMs: 4,
+        attempts: 2,
+        affectedItems: 2,
+      });
+
+      useKnowledgeStore.setState({
+        batchLastPlan: lastPlan,
+        batchExecutionLog: failedStepLog,
+      });
+
+      await useKnowledgeStore.getState().retryBatchStep("step-remove-missing");
+
+      expect(retrySpy).toHaveBeenCalledTimes(1);
+      expect(useKnowledgeStore.getState().batchExecutionLog?.results[0].outcome).toBe("failed");
+      expect(useKnowledgeStore.getState().batchExecutionLog?.results[0].attempts).toBe(2);
+      expect(mockedInvoke).not.toHaveBeenCalledWith("list_kb_documents");
+      expect(mockedInvoke).not.toHaveBeenCalledWith("check_kb_integrity");
     });
   });
 });

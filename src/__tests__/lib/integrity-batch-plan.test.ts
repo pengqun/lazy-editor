@@ -7,7 +7,9 @@ import {
   executeBatchFixPlan,
   executeBatchStep,
   executionOrder,
+  formatEstimatedImpact,
   mergeRetriedResult,
+  summarizeEstimatedImpact,
 } from "../../lib/integrity-batch-plan";
 import type { HealthCheckRecommendation, HealthCheckReport } from "../../lib/integrity-healthcheck";
 
@@ -216,6 +218,28 @@ describe("buildBatchFixPlan", () => {
       expect(step.impact).toBeTruthy();
       expect(step.impact.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("estimated impact summary", () => {
+  it("summarizes relink/remove/reminders/frequency counts", () => {
+    const recs = [
+      makeRec({ id: "relink-moved", action: { type: "relink-all" } }),
+      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [10, 11] }, confidence: "high" }),
+      makeRec({ id: "enable-reminders", action: { type: "enable-reminders" } }),
+      makeRec({ id: "adjust-frequency", action: { type: "adjust-frequency", suggested: "daily" } }),
+    ];
+    const plan = buildBatchFixPlan(makeReport(recs));
+
+    const summary = summarizeEstimatedImpact(plan, 3);
+
+    expect(summary).toEqual({ relink: 3, remove: 2, reminders: 1, frequency: 1 });
+    expect(formatEstimatedImpact(summary)).toBe("relink 3 · remove 2 · reminders 1 · frequency 1");
+  });
+
+  it("formats empty summary as none", () => {
+    const summary = formatEstimatedImpact({ relink: 0, remove: 0, reminders: 0, frequency: 0 });
+    expect(summary).toBe("none");
   });
 });
 

@@ -307,6 +307,12 @@ describe("export includes priority/confidence/rationale", () => {
     expect(md).toContain("(confidence: med)");
   });
 
+  it("markdown export includes estimated impact summary", () => {
+    const payload = makePayload({ healthCheck });
+    const md = formatMarkdown(payload);
+    expect(md).toContain("**Estimated impact:** relink 1");
+  });
+
   it("markdown export includes rationale lines", () => {
     const payload = makePayload({ healthCheck });
     const md = formatMarkdown(payload);

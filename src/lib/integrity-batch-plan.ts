@@ -142,6 +142,37 @@ function estimateAffectedItems(step: BatchPlanStep, movedEntries: Array<{ id: nu
   }
 }
 
+export interface BatchImpactSummary {
+  relink: number;
+  remove: number;
+  reminders: number;
+  frequency: number;
+}
+
+export function summarizeEstimatedImpact(plan: BatchFixPlan, movedCount = 0): BatchImpactSummary {
+  const hasRelink = plan.steps.some((s) => s.recommendation.action?.type === "relink-all");
+  const remove = plan.steps.reduce((sum, step) => {
+    const action = step.recommendation.action;
+    return action?.type === "remove-stale" ? sum + action.ids.length : sum;
+  }, 0);
+
+  return {
+    relink: hasRelink ? movedCount : 0,
+    remove,
+    reminders: plan.steps.some((s) => s.recommendation.action?.type === "enable-reminders") ? 1 : 0,
+    frequency: plan.steps.some((s) => s.recommendation.action?.type === "adjust-frequency") ? 1 : 0,
+  };
+}
+
+export function formatEstimatedImpact(summary: BatchImpactSummary): string {
+  const parts: string[] = [];
+  if (summary.relink > 0) parts.push(`relink ${summary.relink}`);
+  if (summary.remove > 0) parts.push(`remove ${summary.remove}`);
+  if (summary.reminders > 0) parts.push(`reminders ${summary.reminders}`);
+  if (summary.frequency > 0) parts.push(`frequency ${summary.frequency}`);
+  return parts.length > 0 ? parts.join(" · ") : "none";
+}
+
 // --- Ordering ---
 
 const ACTION_ORDER: Record<string, number> = {

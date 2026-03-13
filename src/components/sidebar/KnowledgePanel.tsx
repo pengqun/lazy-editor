@@ -32,7 +32,7 @@ import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdo
 import { type HealthThresholdSettings, type ThresholdSource, DEFAULT_THRESHOLD_SETTINGS, TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge, toHealthThresholds } from "../../lib/integrity-health";
 import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
 import type { HealthCheckReport, RecommendationAction } from "../../lib/integrity-healthcheck";
-import type { BatchExecutionLog, BatchFixPlan } from "../../lib/integrity-batch-plan";
+import { formatEstimatedImpact, type BatchExecutionLog, type BatchFixPlan, summarizeEstimatedImpact } from "../../lib/integrity-batch-plan";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
@@ -935,11 +935,9 @@ function HealthCheckCard({
   };
 
   const hasActionableRecs = hcReport.recommendations.some((r) => r.id !== "all-clear");
-  const hasRelink = batchFixPlan?.steps.some((s) => s.recommendation.action?.type === "relink-all") ?? false;
-  const removeStep = batchFixPlan?.steps.find((s) => s.recommendation.action?.type === "remove-stale");
-  const removeCount = removeStep?.recommendation.action?.type === "remove-stale" ? removeStep.recommendation.action.ids.length : 0;
-  const hasEnableReminder = batchFixPlan?.steps.some((s) => s.recommendation.action?.type === "enable-reminders") ?? false;
-  const hasAdjustFrequency = batchFixPlan?.steps.some((s) => s.recommendation.action?.type === "adjust-frequency") ?? false;
+  const estimatedImpact = batchFixPlan
+    ? formatEstimatedImpact(summarizeEstimatedImpact(batchFixPlan, integrityReport?.moved ?? 0))
+    : "none";
 
   return (
     <div className="border-b border-border">
@@ -1071,13 +1069,7 @@ function HealthCheckCard({
             <div className="text-[10px] text-text-tertiary">
               {batchFixPlan.autoCount} auto · {batchFixPlan.manualCount} manual-only (skipped)
             </div>
-            <div className="text-[10px] text-text-tertiary">
-              预计影响：
-              {hasRelink && <span> relink {integrityReport?.moved ?? 0}</span>}
-              {removeCount > 0 && <span> · remove {removeCount}</span>}
-              {hasEnableReminder && <span> · reminders 1</span>}
-              {hasAdjustFrequency && <span> · frequency 1</span>}
-            </div>
+            <div className="text-[10px] text-text-tertiary">预计影响：{estimatedImpact}</div>
             <div className="space-y-0.5 max-h-40 overflow-y-auto">
               {batchFixPlan.steps.map((step) => {
                 const runtimeStatus = batchStepStatuses[step.stepId] ?? "pending";

@@ -1,4 +1,5 @@
 import type { IntegrityEntry, IntegrityReport, IntegrityScanSnapshot } from "@/stores/knowledge";
+import { buildBatchFixPlan, formatEstimatedImpact, summarizeEstimatedImpact } from "./integrity-batch-plan";
 import type { HealthCheckReport } from "./integrity-healthcheck";
 
 export interface IntegrityExportPayload {
@@ -136,6 +137,11 @@ export function formatMarkdown(payload: IntegrityExportPayload): string {
     lines.push(`**Status:** ${TIER_LABEL_MAP[healthCheck.tier] ?? healthCheck.tier}`);
     lines.push(`**Last scan:** ${healthCheck.metrics.latestScanAgeMs !== null ? `${Math.round(healthCheck.metrics.latestScanAgeMs / 3600000)}h ago` : "never"}`);
     lines.push(`**7-day scans:** ${healthCheck.metrics.scansLast7d} | **30-day scans:** ${healthCheck.metrics.scansLast30d} | **Streak:** ${healthCheck.metrics.streak}d`);
+    const batchPlan = buildBatchFixPlan(healthCheck);
+    const estimatedImpact = formatEstimatedImpact(
+      summarizeEstimatedImpact(batchPlan, healthCheck.counts.moved),
+    );
+    lines.push(`**Estimated impact:** ${estimatedImpact}`);
     lines.push("");
     lines.push("### Recommendations");
     lines.push("");
