@@ -85,10 +85,12 @@ export function KnowledgePanel() {
     clearHealthCheck,
     batchFixPlan,
     batchExecuting,
+    batchStepStatuses,
     batchExecutionLog,
     buildBatchPlan,
     clearBatchPlan,
     confirmBatchPlan,
+    retryBatchStep,
     clearBatchLog,
   } = useKnowledgeStore();
 
@@ -422,10 +424,12 @@ export function KnowledgePanel() {
           onClose={clearHealthCheck}
           batchFixPlan={batchFixPlan}
           batchExecuting={batchExecuting}
+          batchStepStatuses={batchStepStatuses}
           batchExecutionLog={batchExecutionLog}
           onBuildBatchPlan={buildBatchPlan}
           onClearBatchPlan={clearBatchPlan}
           onConfirmBatchPlan={confirmBatchPlan}
+          onRetryBatchStep={retryBatchStep}
           onClearBatchLog={clearBatchLog}
         />
       )}
@@ -839,13 +843,17 @@ const CONFIDENCE_COLORS: Record<string, string> = {
   low: "text-text-tertiary border-border",
 };
 
-const OUTCOME_COLORS: Record<string, string> = {
+const STEP_STATUS_COLORS: Record<string, string> = {
+  pending: "text-text-tertiary",
+  running: "text-blue-400",
   success: "text-emerald-400",
   failed: "text-red-400",
   skipped: "text-text-tertiary",
 };
 
-const OUTCOME_ICONS: Record<string, string> = {
+const STEP_STATUS_ICONS: Record<string, string> = {
+  pending: "○",
+  running: "◔",
   success: "✓",
   failed: "✗",
   skipped: "—",
@@ -862,10 +870,12 @@ function HealthCheckCard({
   onClose,
   batchFixPlan,
   batchExecuting,
+  batchStepStatuses,
   batchExecutionLog,
   onBuildBatchPlan,
   onClearBatchPlan,
   onConfirmBatchPlan,
+  onRetryBatchStep,
   onClearBatchLog,
 }: {
   report: HealthCheckReport;
@@ -878,10 +888,12 @@ function HealthCheckCard({
   onClose: () => void;
   batchFixPlan: BatchFixPlan | null;
   batchExecuting: boolean;
+  batchStepStatuses: Record<string, string>;
   batchExecutionLog: BatchExecutionLog | null;
   onBuildBatchPlan: () => void;
   onClearBatchPlan: () => void;
   onConfirmBatchPlan: () => Promise<void>;
+  onRetryBatchStep: (stepId: string) => Promise<void>;
   onClearBatchLog: () => void;
 }) {
   const handleExport = async (format: "json" | "md") => {
@@ -923,6 +935,11 @@ function HealthCheckCard({
   };
 
   const hasActionableRecs = hcReport.recommendations.some((r) => r.id !== "all-clear");
+  const hasRelink = batchFixPlan?.steps.some((s) => s.recommendation.action?.type === "relink-all") ?? false;
+  const removeStep = batchFixPlan?.steps.find((s) => s.recommendation.action?.type === "remove-stale");
+  const removeCount = removeStep?.recommendation.action?.type === "remove-stale" ? removeStep.recommendation.action.ids.length : 0;
+  const hasEnableReminder = batchFixPlan?.steps.some((s) => s.recommendation.action?.type === "enable-reminders") ?? false;
+  const hasAdjustFrequency = batchFixPlan?.steps.some((s) => s.recommendation.action?.type === "adjust-frequency") ?? false;
 
   return (
     <div className="border-b border-border">
@@ -1054,8 +1071,17 @@ function HealthCheckCard({
             <div className="text-[10px] text-text-tertiary">
               {batchFixPlan.autoCount} auto · {batchFixPlan.manualCount} manual-only (skipped)
             </div>
+            <div className="text-[10px] text-text-tertiary">
+              预计影响：
+              {hasRelink && <span> relink {integrityReport?.moved ?? 0}</span>}
+              {removeCount > 0 && <span> · remove {removeCount}</span>}
+              {hasEnableReminder && <span> · reminders 1</span>}
+              {hasAdjustFrequency && <span> · frequency 1</span>}
+            </div>
             <div className="space-y-0.5 max-h-40 overflow-y-auto">
-              {batchFixPlan.steps.map((step) => (
+              {batchFixPlan.steps.map((step) => {
+                const runtimeStatus = batchStepStatuses[step.stepId] ?? "pending";
+                return (
                 <div
                   key={step.stepId}
                   className={cn(
@@ -1077,6 +1103,9 @@ function HealthCheckCard({
                       )}>
                         {step.kind === "auto" ? "auto" : "manual"}
                       </span>
+                      <span className={cn("text-[8px] uppercase", STEP_STATUS_COLORS[runtimeStatus])}>
+                        {runtimeStatus}
+                      </span>
                     </div>
                     <p className="text-text-tertiary leading-snug">{step.impact}</p>
                     {step.manualReason && (
@@ -1084,7 +1113,8 @@ function HealthCheckCard({
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
             {batchFixPlan.autoCount > 0 && (
               <button
@@ -1133,6 +1163,7 @@ function HealthCheckCard({
               {batchExecutionLog.summary.skipped > 0 && (
                 <span> · {batchExecutionLog.summary.skipped} skipped</span>
               )}
+              <span> · items {batchExecutionLog.summary.itemChanges.success}/{batchExecutionLog.summary.itemChanges.total}</span>
             </div>
             <div className="space-y-0.5 max-h-32 overflow-y-auto">
               {batchExecutionLog.results.map((result) => (
@@ -1140,8 +1171,8 @@ function HealthCheckCard({
                   key={result.stepId}
                   className="flex items-start gap-1.5 py-0.5 px-1.5 rounded bg-surface-2 text-[10px]"
                 >
-                  <span className={cn("shrink-0 font-mono", OUTCOME_COLORS[result.outcome])}>
-                    {OUTCOME_ICONS[result.outcome]}
+                  <span className={cn("shrink-0 font-mono", STEP_STATUS_COLORS[result.status])}>
+                    {STEP_STATUS_ICONS[result.status]}
                   </span>
                   <div className="flex-1 min-w-0">
                     <span className="text-text-primary">{result.stepId.replace("step-", "")}</span>
@@ -1149,7 +1180,17 @@ function HealthCheckCard({
                     {result.durationMs > 0 && (
                       <span className="text-text-tertiary"> ({result.durationMs}ms)</span>
                     )}
+                    {result.attempts > 1 && <span className="text-amber-400"> · retry x{result.attempts - 1}</span>}
                   </div>
+                  {result.outcome === "failed" && (
+                    <button
+                      type="button"
+                      onClick={() => onRetryBatchStep(result.stepId)}
+                      className="text-[10px] px-1 py-0.5 rounded border border-border text-text-secondary hover:bg-surface-3"
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

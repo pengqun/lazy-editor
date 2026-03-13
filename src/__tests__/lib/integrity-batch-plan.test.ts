@@ -5,7 +5,9 @@ import {
   buildBatchFixPlan,
   classifyStep,
   executeBatchFixPlan,
+  executeBatchStep,
   executionOrder,
+  mergeRetriedResult,
 } from "../../lib/integrity-batch-plan";
 import type { HealthCheckRecommendation, HealthCheckReport } from "../../lib/integrity-healthcheck";
 
@@ -338,7 +340,10 @@ describe("executeBatchFixPlan", () => {
     const log = await executeBatchFixPlan(plan, callbacks);
 
     expect(log.results).toHaveLength(0);
-    expect(log.summary).toEqual({ success: 0, failed: 0, skipped: 0 });
+    expect(log.summary.success).toBe(0);
+    expect(log.summary.failed).toBe(0);
+    expect(log.summary.skipped).toBe(0);
+    expect(log.summary.itemChanges.total).toBe(0);
   });
 
   it("skips moved entries without candidates during relink-all", async () => {
@@ -379,6 +384,38 @@ describe("result aggregation", () => {
     expect(log.summary.success).toBe(2);
     expect(log.summary.failed).toBe(1);
     expect(log.summary.skipped).toBe(1);
+    expect(log.summary.itemChanges.success).toBe(3);
+    expect(log.summary.itemChanges.failed).toBe(1);
+    expect(log.summary.itemChanges.skipped).toBe(0);
     expect(log.results).toHaveLength(4);
+  });
+
+  it("reports pending/running/success status transitions", async () => {
+    const recs = [makeRec({ id: "enable-reminders", action: { type: "enable-reminders" } })];
+    const plan = buildBatchFixPlan(makeReport(recs));
+    const callbacks = makeCallbacks();
+    const statusTrail: string[] = [];
+
+    await executeBatchFixPlan(plan, callbacks, {
+      onStepStatusChange: (_id, status) => statusTrail.push(status),
+    });
+
+    expect(statusTrail).toEqual(["pending", "running", "success"]);
+  });
+
+  it("supports merging retried failed step result", async () => {
+    const recs = [makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [1, 2] }, confidence: "high" })];
+    const plan = buildBatchFixPlan(makeReport(recs));
+    const failedLog = await executeBatchFixPlan(plan, makeCallbacks({
+      removeStaleDocuments: vi.fn().mockRejectedValue(new Error("first fail")),
+    }));
+
+    const retryResult = await executeBatchStep(plan.steps[0], makeCallbacks(), undefined, 2);
+    const merged = mergeRetriedResult(failedLog, retryResult);
+
+    expect(merged.results[0].outcome).toBe("success");
+    expect(merged.results[0].attempts).toBe(2);
+    expect(merged.summary.failed).toBe(0);
+    expect(merged.summary.success).toBe(1);
   });
 });

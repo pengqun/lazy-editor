@@ -27,7 +27,7 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
   - **KB source integrity** — scan file-sourced KB documents for stale references (moved/deleted source files). Detects move candidates by filename + content hash matching within the workspace. One-click relink, batch relink for obvious moves, and remove stale entries — all user-triggered, no silent destructive actions. Export scan results as JSON (machine-readable) or Markdown (human-readable summary with per-document table). Scan history is persisted locally (last 20 scans) with trend indicators showing deltas between consecutive scans; history is included in exports. **Scan reminders** — enable configurable reminders (daily / every 3 days / weekly) to prompt integrity scans; a subtle banner appears when a scan is due with "Scan now" and "Snooze 24h" actions. Settings persist locally
   - **scan health panel** — compact coverage dashboard showing 7-day/30-day scan counts, latest scan age, consecutive-day streak, and a tiered status indicator (Good / Fair / Poor) with configurable thresholds (min scans for Good, max age for Good/Poor tiers); thresholds can be set per workspace (overriding global defaults) with save/reset actions; settings persist locally with reset-to-defaults; toggleable from the integrity report header
   - **one-click health check** — single-action workflow that runs an integrity scan, computes health metrics, and generates prioritized recommendations (relink moved files, remove stale entries, adjust reminder frequency) with quick-action buttons; results are shown in a compact card with overall status, key counts, and export to JSON/Markdown
-  - **batch fix plan** — compose a multi-step fix plan from current recommendations with preview before execution; auto-executable steps (high-confidence relinks, stale removal, settings changes) run in sequence after explicit confirm, while high-risk/unsupported steps are marked manual-only and skipped; per-step success/failure summary with execution log kept in session memory
+  - **batch fix plan** — compose a multi-step fix plan from current recommendations with preview before execution; auto-executable steps (high-confidence relinks, stale removal, settings changes) run in sequence after explicit confirm, while high-risk/unsupported steps are marked manual-only and skipped; per-step status is explicit (`pending/running/success/failed/skipped`), failed steps can be retried one-by-one in-session, and execution log keeps compact before/after impact summaries
   - **citation notes** — after an AI action with KB sources, click "Insert references" in the status bar to append a formatted, deduplicated reference block (horizontal rule + numbered list with document titles, chunk positions, and relevance scores) at the end of your document. Toggle "Chunk" and "Rel%" buttons to show/hide chunk labels and relevance scores per entry; preferences are persisted across restarts
 - **Workspace file management** (open/save + file tree)
 - **Find & Replace** — document-level search with match highlighting, next/prev navigation, case-sensitive toggle, replace one or all (`⌘F`)
@@ -39,6 +39,12 @@ Built with **Tauri v2 (Rust)** + **React 19 (TypeScript)**.
 - **Large document performance** — debounced word count, find/replace search, and outline extraction for smooth editing in long documents; memoized status bar calculations to reduce unnecessary re-renders
 - **Diagnostics & Health Check** — in-app diagnostics panel (`⌘⇧D`) with subsystem health checks (workspace access, KB database, embedder, settings store), app/runtime info display, and one-click export to a local Markdown report. No secrets or API keys are collected
 - **Update UX** — clear state progression for update checking/downloading/applying with actionable error messages; expected dev/staging failures are silenced gracefully
+
+### 批处理执行结果怎么看
+
+- **执行前（Fix Plan Preview）**：先看「预计影响」，会按建议类型给出预计条目数（如 relink/remove/reminder/frequency），方便判断这次批处理会动到多少内容。
+- **执行中**：每个步骤都有状态（`pending/running/success/failed/skipped`），高风险或不支持动作仍是 `manual-only`，不会自动执行。
+- **执行后（Execution Results）**：先看顶部紧凑摘要（成功/失败/跳过 + items changed），再看每步明细（耗时、错误信息、重试次数）。若某步失败，可直接点 **Retry** 单步重试。
 
 ## Tech Stack
 

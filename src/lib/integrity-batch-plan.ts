@@ -14,6 +14,8 @@ import type { HealthCheckRecommendation, HealthCheckReport, RecommendationAction
 // --- Types ---
 
 export type BatchStepKind = "auto" | "manual-only";
+export type StepStatus = "pending" | "running" | "success" | "failed" | "skipped";
+export type StepOutcome = "success" | "failed" | "skipped";
 
 export interface BatchPlanStep {
   /** Unique step id (derived from recommendation id). */
@@ -43,13 +45,16 @@ export interface BatchFixPlan {
   manualCount: number;
 }
 
-export type StepOutcome = "success" | "failed" | "skipped";
-
 export interface StepExecutionResult {
   stepId: string;
+  recommendationId: string;
+  actionType: RecommendationAction["type"] | "manual" | "none";
+  status: StepStatus;
   outcome: StepOutcome;
   message: string;
   durationMs: number;
+  attempts: number;
+  affectedItems: number;
 }
 
 export interface BatchExecutionLog {
@@ -60,7 +65,12 @@ export interface BatchExecutionLog {
   /** Per-step results in execution order. */
   results: StepExecutionResult[];
   /** Summary counts. */
-  summary: { success: number; failed: number; skipped: number };
+  summary: {
+    success: number;
+    failed: number;
+    skipped: number;
+    itemChanges: { success: number; failed: number; skipped: number; total: number };
+  };
 }
 
 // --- Action classification ---
@@ -73,16 +83,6 @@ const AUTO_SAFE_ACTIONS: RecommendationAction["type"][] = [
   "adjust-frequency",
 ];
 
-/**
- * Determine whether a recommendation's action can be auto-executed.
- *
- * Rules:
- * - relink-all: auto (high-confidence hash-verified moves)
- * - remove-stale: auto only when recommendation confidence is "high"
- *   (>50% missing ratio — stale entries are clearly orphaned)
- * - enable-reminders / adjust-frequency: auto (settings changes, easily reversible)
- * - No action: manual-only (informational)
- */
 export function classifyStep(rec: HealthCheckRecommendation): BatchStepKind {
   if (!rec.action) return "manual-only";
   if (!AUTO_SAFE_ACTIONS.includes(rec.action.type)) return "manual-only";
@@ -109,7 +109,7 @@ function estimateImpact(rec: HealthCheckRecommendation): string {
   if (!rec.action) return "No changes — review recommended.";
   switch (rec.action.type) {
     case "relink-all":
-      return `Relinks moved documents to verified new locations.`;
+      return "Relinks moved documents to verified new locations.";
     case "remove-stale":
       return `Removes ${rec.action.ids.length} stale KB entr${rec.action.ids.length === 1 ? "y" : "ies"} with no source file.`;
     case "enable-reminders":
@@ -121,16 +121,29 @@ function estimateImpact(rec: HealthCheckRecommendation): string {
   }
 }
 
+function actionTypeForStep(step: BatchPlanStep): RecommendationAction["type"] | "manual" | "none" {
+  if (step.kind === "manual-only") return "manual";
+  return step.recommendation.action?.type ?? "none";
+}
+
+function estimateAffectedItems(step: BatchPlanStep, movedEntries: Array<{ id: number; movedCandidate: string | null }>): number {
+  const action = step.recommendation.action;
+  if (!action) return 0;
+  switch (action.type) {
+    case "relink-all":
+      return movedEntries.filter((e) => Boolean(e.movedCandidate)).length;
+    case "remove-stale":
+      return action.ids.length;
+    case "enable-reminders":
+    case "adjust-frequency":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 // --- Ordering ---
 
-/**
- * Execution order priority:
- * 1. relink-all (repair broken links first)
- * 2. remove-stale (clean up after relinking)
- * 3. enable-reminders (settings)
- * 4. adjust-frequency (settings)
- * 5. informational (manual-only, last)
- */
 const ACTION_ORDER: Record<string, number> = {
   "relink-all": 0,
   "remove-stale": 1,
@@ -145,23 +158,12 @@ export function executionOrder(rec: HealthCheckRecommendation): number {
 
 // --- Plan generation ---
 
-/**
- * Build a batch fix plan from a health check report's recommendations.
- * Filters out "all-clear" / pure-info items, orders by execution priority.
- */
 export function buildBatchFixPlan(
   report: HealthCheckReport,
   now: Date = new Date(),
 ): BatchFixPlan {
-  // Filter out all-clear and pure-info without actions
-  const actionable = report.recommendations.filter(
-    (r) => r.id !== "all-clear",
-  );
-
-  // Sort by execution order
-  const sorted = [...actionable].sort(
-    (a, b) => executionOrder(a) - executionOrder(b),
-  );
+  const actionable = report.recommendations.filter((r) => r.id !== "all-clear");
+  const sorted = [...actionable].sort((a, b) => executionOrder(a) - executionOrder(b));
 
   const steps: BatchPlanStep[] = sorted.map((rec, idx) => {
     const kind = classifyStep(rec);
@@ -186,57 +188,103 @@ export function buildBatchFixPlan(
 
 // --- Execution ---
 
-/** Callbacks the executor uses to perform actual mutations. */
 export interface BatchExecutionCallbacks {
   relinkDocument: (id: number, newPath: string) => Promise<void>;
   removeStaleDocuments: (ids: number[]) => Promise<void>;
   enableReminders: () => void;
   adjustFrequency: (freq: string) => void;
-  /** Moved entries from the current integrity report. */
   movedEntries: Array<{ id: number; movedCandidate: string | null }>;
 }
 
-/**
- * Execute a confirmed batch fix plan.
- * - Auto steps are executed in order.
- * - Manual-only steps are skipped with a descriptive message.
- * - Each step records success/failure/skip with timing.
- */
+export interface BatchExecutionOptions {
+  onStepStatusChange?: (stepId: string, status: StepStatus) => void;
+}
+
+function summarize(results: StepExecutionResult[]) {
+  const success = results.filter((r) => r.outcome === "success");
+  const failed = results.filter((r) => r.outcome === "failed");
+  const skipped = results.filter((r) => r.outcome === "skipped");
+  return {
+    success: success.length,
+    failed: failed.length,
+    skipped: skipped.length,
+    itemChanges: {
+      success: success.reduce((sum, r) => sum + r.affectedItems, 0),
+      failed: failed.reduce((sum, r) => sum + r.affectedItems, 0),
+      skipped: skipped.reduce((sum, r) => sum + r.affectedItems, 0),
+      total: results.reduce((sum, r) => sum + r.affectedItems, 0),
+    },
+  };
+}
+
+export async function executeBatchStep(
+  step: BatchPlanStep,
+  callbacks: BatchExecutionCallbacks,
+  options?: BatchExecutionOptions,
+  attempts = 1,
+): Promise<StepExecutionResult> {
+  if (step.kind === "manual-only") {
+    options?.onStepStatusChange?.(step.stepId, "skipped");
+    return {
+      stepId: step.stepId,
+      recommendationId: step.recommendation.id,
+      actionType: actionTypeForStep(step),
+      status: "skipped",
+      outcome: "skipped",
+      message: step.manualReason ?? "Manual intervention required.",
+      durationMs: 0,
+      attempts,
+      affectedItems: estimateAffectedItems(step, callbacks.movedEntries),
+    };
+  }
+
+  options?.onStepStatusChange?.(step.stepId, "running");
+  const t0 = performance.now();
+  try {
+    await executeStep(step, callbacks);
+    options?.onStepStatusChange?.(step.stepId, "success");
+    return {
+      stepId: step.stepId,
+      recommendationId: step.recommendation.id,
+      actionType: actionTypeForStep(step),
+      status: "success",
+      outcome: "success",
+      message: step.impact,
+      durationMs: Math.round(performance.now() - t0),
+      attempts,
+      affectedItems: estimateAffectedItems(step, callbacks.movedEntries),
+    };
+  } catch (err) {
+    options?.onStepStatusChange?.(step.stepId, "failed");
+    return {
+      stepId: step.stepId,
+      recommendationId: step.recommendation.id,
+      actionType: actionTypeForStep(step),
+      status: "failed",
+      outcome: "failed",
+      message: err instanceof Error ? err.message : String(err),
+      durationMs: Math.round(performance.now() - t0),
+      attempts,
+      affectedItems: estimateAffectedItems(step, callbacks.movedEntries),
+    };
+  }
+}
+
 export async function executeBatchFixPlan(
   plan: BatchFixPlan,
   callbacks: BatchExecutionCallbacks,
+  options?: BatchExecutionOptions,
 ): Promise<BatchExecutionLog> {
   const startedAt = new Date().toISOString();
   const results: StepExecutionResult[] = [];
 
   for (const step of plan.steps) {
-    if (step.kind === "manual-only") {
-      results.push({
-        stepId: step.stepId,
-        outcome: "skipped",
-        message: step.manualReason ?? "Manual intervention required.",
-        durationMs: 0,
-      });
-      continue;
-    }
+    options?.onStepStatusChange?.(step.stepId, "pending");
+  }
 
-    const t0 = performance.now();
-    try {
-      await executeStep(step, callbacks);
-      results.push({
-        stepId: step.stepId,
-        outcome: "success",
-        message: step.impact,
-        durationMs: Math.round(performance.now() - t0),
-      });
-    } catch (err) {
-      results.push({
-        stepId: step.stepId,
-        outcome: "failed",
-        message: err instanceof Error ? err.message : String(err),
-        durationMs: Math.round(performance.now() - t0),
-      });
-    }
+  for (const step of plan.steps) {
+    const result = await executeBatchStep(step, callbacks, options, 1);
+    results.push(result);
   }
 
   const completedAt = new Date().toISOString();
@@ -244,11 +292,27 @@ export async function executeBatchFixPlan(
     startedAt,
     completedAt,
     results,
-    summary: {
-      success: results.filter((r) => r.outcome === "success").length,
-      failed: results.filter((r) => r.outcome === "failed").length,
-      skipped: results.filter((r) => r.outcome === "skipped").length,
-    },
+    summary: summarize(results),
+  };
+}
+
+export function mergeRetriedResult(
+  log: BatchExecutionLog,
+  retried: StepExecutionResult,
+): BatchExecutionLog {
+  const results = log.results.map((r) =>
+    r.stepId === retried.stepId
+      ? {
+          ...retried,
+          attempts: r.attempts + 1,
+        }
+      : r,
+  );
+  return {
+    ...log,
+    completedAt: new Date().toISOString(),
+    results,
+    summary: summarize(results),
   };
 }
 

@@ -29,8 +29,12 @@ import { type HealthCheckReport, buildHealthCheckReport } from "../lib/integrity
 import {
   type BatchExecutionLog,
   type BatchFixPlan,
+  type BatchExecutionCallbacks,
+  type StepStatus,
   buildBatchFixPlan,
   executeBatchFixPlan,
+  executeBatchStep,
+  mergeRetriedResult,
 } from "../lib/integrity-batch-plan";
 import {
   type RetrievalPresetId,
@@ -220,8 +224,12 @@ interface KnowledgeState {
 
   /** Current batch fix plan (preview state, not yet executed). */
   batchFixPlan: BatchFixPlan | null;
+  /** Keep last executed plan for per-step retries in current session. */
+  batchLastPlan: BatchFixPlan | null;
   /** Whether batch execution is in progress. */
   batchExecuting: boolean;
+  /** Runtime status for each batch step. */
+  batchStepStatuses: Record<string, StepStatus>;
   /** Execution log from the last batch run (session-only). */
   batchExecutionLog: BatchExecutionLog | null;
   /** Generate a batch fix plan from the current health check report. */
@@ -230,6 +238,8 @@ interface KnowledgeState {
   clearBatchPlan: () => void;
   /** Confirm and execute the current batch fix plan. */
   confirmBatchPlan: () => Promise<void>;
+  /** Retry a failed step from the last execution. */
+  retryBatchStep: (stepId: string) => Promise<void>;
   /** Clear the execution log. */
   clearBatchLog: () => void;
 }
@@ -265,6 +275,29 @@ function _currentSettings(state: {
     preset: state.activePreset,
     topK: state.retrievalTopK,
     scope: state.retrievalScope,
+  };
+}
+
+function _buildBatchCallbacks(
+  integrityReport: IntegrityReport | null,
+  setReminderSettings: KnowledgeState["setReminderSettings"],
+): BatchExecutionCallbacks {
+  const movedEntries = (integrityReport?.entries ?? [])
+    .filter((e) => e.status === "moved")
+    .map((e) => ({ id: e.id, movedCandidate: e.movedCandidate }));
+
+  return {
+    relinkDocument: async (id, newPath) => {
+      await invoke("relink_kb_document", { id, newPath });
+    },
+    removeStaleDocuments: async (ids) => {
+      for (const id of ids) {
+        await invoke("remove_kb_document", { id });
+      }
+    },
+    enableReminders: () => setReminderSettings({ enabled: true }),
+    adjustFrequency: (freq) => setReminderSettings({ frequency: freq as "daily" | "every3days" | "weekly" }),
+    movedEntries,
   };
 }
 
@@ -646,47 +679,51 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     }
   },
 
-  clearHealthCheck: () => set({ healthCheckReport: null, batchFixPlan: null, batchExecutionLog: null }),
+  clearHealthCheck: () =>
+    set({ healthCheckReport: null, batchFixPlan: null, batchLastPlan: null, batchExecutionLog: null, batchStepStatuses: {} }),
 
   batchFixPlan: null,
+  batchLastPlan: null,
   batchExecuting: false,
+  batchStepStatuses: {},
   batchExecutionLog: null,
 
   buildBatchPlan: () => {
     const { healthCheckReport } = get();
     if (!healthCheckReport) return;
     const plan = buildBatchFixPlan(healthCheckReport);
-    set({ batchFixPlan: plan, batchExecutionLog: null });
+    set({ batchFixPlan: plan, batchExecutionLog: null, batchStepStatuses: {} });
   },
 
   clearBatchPlan: () => set({ batchFixPlan: null }),
 
   confirmBatchPlan: async () => {
-    const { batchFixPlan, integrityReport, relinkDocument, removeStaleDocuments, setReminderSettings } = get();
+    const { batchFixPlan, integrityReport, setReminderSettings } = get();
     if (!batchFixPlan) return;
 
-    set({ batchExecuting: true });
-    try {
-      const movedEntries = (integrityReport?.entries ?? [])
-        .filter((e) => e.status === "moved")
-        .map((e) => ({ id: e.id, movedCandidate: e.movedCandidate }));
+    const statuses: Record<string, StepStatus> = {};
+    for (const step of batchFixPlan.steps) statuses[step.stepId] = "pending";
 
-      const log = await executeBatchFixPlan(batchFixPlan, {
-        relinkDocument,
-        removeStaleDocuments,
-        enableReminders: () => setReminderSettings({ enabled: true }),
-        adjustFrequency: (freq) => setReminderSettings({ frequency: freq as "daily" | "every3days" | "weekly" }),
-        movedEntries,
+    set({ batchExecuting: true, batchStepStatuses: statuses });
+    try {
+      const callbacks = _buildBatchCallbacks(integrityReport, setReminderSettings);
+      const log = await executeBatchFixPlan(batchFixPlan, callbacks, {
+        onStepStatusChange: (stepId, status) => {
+          set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [stepId]: status } }));
+        },
       });
 
-      set({ batchExecutionLog: log, batchFixPlan: null, batchExecuting: false });
+      set({ batchExecutionLog: log, batchLastPlan: batchFixPlan, batchFixPlan: null, batchExecuting: false });
 
-      const { success, failed, skipped } = log.summary;
+      const { success, failed, skipped, itemChanges } = log.summary;
       if (failed > 0) {
-        toast.error(`Batch: ${success} ok, ${failed} failed, ${skipped} skipped`);
+        toast.error(`Batch: ${success} ok, ${failed} failed, ${skipped} skipped · ${itemChanges.success} items changed`);
       } else {
-        toast.success(`Batch complete: ${success} applied, ${skipped} skipped`);
+        toast.success(`Batch complete: ${success} applied, ${skipped} skipped · ${itemChanges.success} items changed`);
       }
+
+      await get().loadDocuments();
+      await get().checkIntegrity();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`Batch execution failed: ${message}`);
@@ -694,5 +731,32 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     }
   },
 
-  clearBatchLog: () => set({ batchExecutionLog: null }),
+  retryBatchStep: async (stepId: string) => {
+    const { batchExecutionLog, batchLastPlan, integrityReport, setReminderSettings } = get();
+    if (!batchExecutionLog || !batchLastPlan) return;
+
+    const previous = batchExecutionLog.results.find((r) => r.stepId === stepId);
+    const step = batchLastPlan.steps.find((s) => s.stepId === stepId);
+    if (!previous || !step || previous.outcome !== "failed") return;
+
+    const callbacks = _buildBatchCallbacks(integrityReport, setReminderSettings);
+    const retried = await executeBatchStep(step, callbacks, {
+      onStepStatusChange: (id, status) => {
+        set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [id]: status } }));
+      },
+    }, previous.attempts + 1);
+
+    const merged = mergeRetriedResult(batchExecutionLog, retried);
+    set({ batchExecutionLog: merged });
+
+    if (retried.outcome === "success") {
+      toast.success(`Retried ${stepId.replace("step-", "")}: success`);
+      await get().loadDocuments();
+      await get().checkIntegrity();
+    } else {
+      toast.error(`Retried ${stepId.replace("step-", "")}: ${retried.message}`);
+    }
+  },
+
+  clearBatchLog: () => set({ batchExecutionLog: null, batchStepStatuses: {} }),
 }));
