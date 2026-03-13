@@ -49,6 +49,8 @@ import {
 } from "../lib/retrieval-presets";
 import { toast } from "./toast";
 
+const inFlightBatchStepRetries = new Set<string>();
+
 export interface KBDocument {
   id: number;
   title: string;
@@ -733,28 +735,33 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
 
   retryBatchStep: async (stepId: string) => {
     const { batchExecutionLog, batchLastPlan, integrityReport, setReminderSettings } = get();
-    if (!batchExecutionLog || !batchLastPlan) return;
+    if (!batchExecutionLog || !batchLastPlan || inFlightBatchStepRetries.has(stepId)) return;
 
     const previous = batchExecutionLog.results.find((r) => r.stepId === stepId);
     const step = batchLastPlan.steps.find((s) => s.stepId === stepId);
     if (!previous || !step || previous.outcome !== "failed") return;
 
-    const callbacks = _buildBatchCallbacks(integrityReport, setReminderSettings);
-    const retried = await executeBatchStep(step, callbacks, {
-      onStepStatusChange: (id, status) => {
-        set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [id]: status } }));
-      },
-    }, previous.attempts + 1);
+    inFlightBatchStepRetries.add(stepId);
+    try {
+      const callbacks = _buildBatchCallbacks(integrityReport, setReminderSettings);
+      const retried = await executeBatchStep(step, callbacks, {
+        onStepStatusChange: (id, status) => {
+          set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [id]: status } }));
+        },
+      }, previous.attempts + 1);
 
-    const merged = mergeRetriedResult(batchExecutionLog, retried);
-    set({ batchExecutionLog: merged });
+      const merged = mergeRetriedResult(batchExecutionLog, retried);
+      set({ batchExecutionLog: merged });
 
-    if (retried.outcome === "success") {
-      toast.success(`Retried ${stepId.replace("step-", "")}: success`);
-      await get().loadDocuments();
-      await get().checkIntegrity();
-    } else {
-      toast.error(`Retried ${stepId.replace("step-", "")}: ${retried.message}`);
+      if (retried.outcome === "success") {
+        toast.success(`Retried ${stepId.replace("step-", "")}: success`);
+        await get().loadDocuments();
+        await get().checkIntegrity();
+      } else {
+        toast.error(`Retried ${stepId.replace("step-", "")}: ${retried.message}`);
+      }
+    } finally {
+      inFlightBatchStepRetries.delete(stepId);
     }
   },
 

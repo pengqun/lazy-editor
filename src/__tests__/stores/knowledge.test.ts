@@ -818,5 +818,100 @@ describe("useKnowledgeStore", () => {
       expect(mockedInvoke).not.toHaveBeenCalledWith("list_kb_documents");
       expect(mockedInvoke).not.toHaveBeenCalledWith("check_kb_integrity");
     });
+
+    it("step 不存在时安全返回且无副作用", async () => {
+      const retrySpy = vi.spyOn(batchPlanLib, "executeBatchStep");
+
+      useKnowledgeStore.setState({
+        batchLastPlan: lastPlan,
+        batchExecutionLog: failedStepLog,
+      });
+
+      await useKnowledgeStore.getState().retryBatchStep("step-not-exists");
+
+      expect(retrySpy).not.toHaveBeenCalled();
+      expect(useKnowledgeStore.getState().batchExecutionLog).toEqual(failedStepLog);
+      expect(mockedInvoke).not.toHaveBeenCalled();
+    });
+
+    it("success 或 skipped 步骤重试时不改写结果", async () => {
+      const retrySpy = vi.spyOn(batchPlanLib, "executeBatchStep");
+      const logWithNonFailed = {
+        ...failedStepLog,
+        results: [{
+          ...failedStepLog.results[0],
+          outcome: "success" as const,
+          status: "success" as const,
+          message: "already done",
+        }, {
+          ...failedStepLog.results[0],
+          stepId: "step-remove-missing-2",
+          recommendationId: "remove-missing-2",
+          outcome: "skipped" as const,
+          status: "skipped" as const,
+          message: "manual-only",
+        }],
+      };
+      const planWithTwoSteps = {
+        ...lastPlan,
+        steps: [
+          lastPlan.steps[0],
+          {
+            ...lastPlan.steps[0],
+            stepId: "step-remove-missing-2",
+            recommendation: {
+              ...lastPlan.steps[0].recommendation,
+              id: "remove-missing-2",
+            },
+          },
+        ],
+      };
+
+      useKnowledgeStore.setState({
+        batchLastPlan: planWithTwoSteps,
+        batchExecutionLog: logWithNonFailed,
+      });
+
+      await useKnowledgeStore.getState().retryBatchStep("step-remove-missing");
+      await useKnowledgeStore.getState().retryBatchStep("step-remove-missing-2");
+
+      expect(retrySpy).not.toHaveBeenCalled();
+      expect(useKnowledgeStore.getState().batchExecutionLog).toEqual(logWithNonFailed);
+      expect(mockedInvoke).not.toHaveBeenCalled();
+    });
+
+    it("连续重复点击重试时仅执行一次（防抖/幂等）", async () => {
+      let resolveRetry: ((value: any) => void) | null = null;
+      const retryPromise = new Promise<any>((resolve) => {
+        resolveRetry = resolve;
+      });
+      const retrySpy = vi.spyOn(batchPlanLib, "executeBatchStep").mockImplementationOnce(() => retryPromise);
+
+      useKnowledgeStore.setState({
+        batchLastPlan: lastPlan,
+        batchExecutionLog: failedStepLog,
+      });
+
+      const p1 = useKnowledgeStore.getState().retryBatchStep("step-remove-missing");
+      const p2 = useKnowledgeStore.getState().retryBatchStep("step-remove-missing");
+
+      expect(retrySpy).toHaveBeenCalledTimes(1);
+
+      resolveRetry?.({
+        stepId: "step-remove-missing",
+        recommendationId: "remove-missing",
+        actionType: "remove-stale",
+        status: "failed",
+        outcome: "failed",
+        message: "still fail",
+        durationMs: 4,
+        attempts: 2,
+        affectedItems: 2,
+      });
+
+      await Promise.all([p1, p2]);
+
+      expect(useKnowledgeStore.getState().batchExecutionLog?.results[0].attempts).toBe(2);
+    });
   });
 });
