@@ -11,6 +11,8 @@ INDEX_MD_FILE="$RUN_DIR/index.md"
 SUMMARY_JSON_FILE="$RUN_DIR/summary.json"
 COMMANDS_TSV_FILE="$RUN_DIR/commands.tsv"
 FAILED_LOGS_FILE="$RUN_DIR/failed-logs.txt"
+HISTORY_FILE="$ARTIFACT_DIR/history.json"
+HISTORY_LIMIT=20
 
 RUN_FRONTEND_TESTS="${RUN_FRONTEND_TESTS:-true}"
 RUN_RUST_TESTS="${RUN_RUST_TESTS:-true}"
@@ -94,57 +96,14 @@ generate_indexes() {
   local generated_at
   generated_at="$(date -Iseconds)"
 
-  : >"$INDEX_MD_FILE"
-  {
-    echo "# Test Diagnose Index"
-    echo
-    echo "- run_dir: $RUN_DIR"
-    echo "- generated_at: $generated_at"
-    echo
-    echo "## 执行参数"
-    echo "- run_frontend_tests: $RUN_FRONTEND_TESTS"
-    echo "- run_rust_tests: $RUN_RUST_TESTS"
-    echo "- vitest_verbose: $VITEST_VERBOSE"
-    echo "- repeat_count: $REPEAT_COUNT"
-    echo "- repeat_count_raw: $REPEAT_COUNT_RAW"
-    echo "- max_repeat_count: $MAX_REPEAT_COUNT"
-    echo
-    echo "## 环境版本"
-    echo "- node: $NODE_VERSION"
-    echo "- npm: $NPM_VERSION"
-    echo "- vitest: $VITEST_VERSION"
-    echo "- rustc: $RUSTC_VERSION"
-    echo "- cargo: $CARGO_VERSION"
-    echo
-    echo "## 命令状态"
-    echo "| command | status | exit_code | log |"
-    echo "| --- | --- | --- | --- |"
-
-    if [ -f "$COMMANDS_TSV_FILE" ]; then
-      while IFS=$'\t' read -r cmd rc status logfile; do
-        [ -n "$cmd" ] || continue
-        echo "| $cmd | $status | $rc | $logfile |"
-      done <"$COMMANDS_TSV_FILE"
-    else
-      echo "| (none) | skipped | - | - |"
-    fi
-
-    echo
-    echo "## 失败日志清单"
-    if [ -f "$FAILED_LOGS_FILE" ]; then
-      while IFS= read -r f; do
-        [ -n "$f" ] || continue
-        echo "- $f"
-      done <"$FAILED_LOGS_FILE"
-    else
-      echo "- 无失败日志"
-    fi
-  } >"$INDEX_MD_FILE"
-
   RUN_DIR="$RUN_DIR" \
+  ROOT_DIR="$ROOT_DIR" \
   SUMMARY_JSON_FILE="$SUMMARY_JSON_FILE" \
+  INDEX_MD_FILE="$INDEX_MD_FILE" \
   COMMANDS_TSV_FILE="$COMMANDS_TSV_FILE" \
   FAILED_LOGS_FILE="$FAILED_LOGS_FILE" \
+  HISTORY_FILE="$HISTORY_FILE" \
+  HISTORY_LIMIT="$HISTORY_LIMIT" \
   GENERATED_AT="$generated_at" \
   RUN_FRONTEND_TESTS="$RUN_FRONTEND_TESTS" \
   RUN_RUST_TESTS="$RUN_RUST_TESTS" \
@@ -158,32 +117,48 @@ generate_indexes() {
   RUSTC_VERSION="$RUSTC_VERSION" \
   CARGO_VERSION="$CARGO_VERSION" \
   node <<'NODE'
-import fs from 'node:fs';
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+const baselineModule = await import(
+  pathToFileURL(path.join(process.env.ROOT_DIR, "scripts/test-diagnose-baseline.mjs")).href
+);
+const {
+  appendHistory,
+  buildCurrentRunRecord,
+  buildStabilityBaseline,
+  parseCommandsTsv,
+  renderStabilityBaselineMarkdown,
+} = baselineModule;
 
 const commandsFile = process.env.COMMANDS_TSV_FILE;
 const failedLogsFile = process.env.FAILED_LOGS_FILE;
 const summaryJsonFile = process.env.SUMMARY_JSON_FILE;
+const indexMdFile = process.env.INDEX_MD_FILE;
+const historyFile = process.env.HISTORY_FILE;
+const historyLimit = Number(process.env.HISTORY_LIMIT);
 
 const commands = fs.existsSync(commandsFile)
-  ? fs
-      .readFileSync(commandsFile, 'utf8')
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => {
-        const [command, exitCodeRaw, status, logFile] = line.split('\t');
-        const exitCode = Number(exitCodeRaw);
-        return {
-          command,
-          status,
-          exitCode: Number.isNaN(exitCode) ? null : exitCode,
-          logFile,
-        };
-      })
+  ? parseCommandsTsv(fs.readFileSync(commandsFile, "utf8"))
   : [];
 
 const failedLogs = fs.existsSync(failedLogsFile)
-  ? fs.readFileSync(failedLogsFile, 'utf8').split('\n').filter(Boolean)
+  ? fs.readFileSync(failedLogsFile, "utf8").split("\n").filter(Boolean)
   : [];
+
+const runRecord = buildCurrentRunRecord({
+  runDir: process.env.RUN_DIR,
+  generatedAt: process.env.GENERATED_AT,
+  commands,
+});
+const history = appendHistory({
+  historyFile,
+  runRecord,
+  limit: historyLimit,
+});
+history.historyFile = historyFile;
+const stabilityBaseline = buildStabilityBaseline(history, historyLimit);
 
 const summary = {
   runDir: process.env.RUN_DIR,
@@ -205,8 +180,53 @@ const summary = {
   },
   commands,
   failedLogs,
+  stabilityBaseline,
 };
 
+const lines = [];
+lines.push("# Test Diagnose Index");
+lines.push("");
+lines.push(`- run_dir: ${process.env.RUN_DIR}`);
+lines.push(`- generated_at: ${process.env.GENERATED_AT}`);
+lines.push("");
+lines.push("## 执行参数");
+lines.push(`- run_frontend_tests: ${process.env.RUN_FRONTEND_TESTS}`);
+lines.push(`- run_rust_tests: ${process.env.RUN_RUST_TESTS}`);
+lines.push(`- vitest_verbose: ${process.env.VITEST_VERBOSE}`);
+lines.push(`- repeat_count: ${process.env.REPEAT_COUNT}`);
+lines.push(`- repeat_count_raw: ${process.env.REPEAT_COUNT_RAW}`);
+lines.push(`- max_repeat_count: ${process.env.MAX_REPEAT_COUNT}`);
+lines.push("");
+lines.push("## 环境版本");
+lines.push(`- node: ${process.env.NODE_VERSION}`);
+lines.push(`- npm: ${process.env.NPM_VERSION}`);
+lines.push(`- vitest: ${process.env.VITEST_VERSION}`);
+lines.push(`- rustc: ${process.env.RUSTC_VERSION}`);
+lines.push(`- cargo: ${process.env.CARGO_VERSION}`);
+lines.push("");
+lines.push("## 命令状态");
+lines.push("| command | status | exit_code | log |");
+lines.push("| --- | --- | --- | --- |");
+if (commands.length === 0) {
+  lines.push("| (none) | skipped | - | - |");
+} else {
+  for (const command of commands) {
+    lines.push(`| ${command.command} | ${command.status} | ${command.exitCode ?? "-"} | ${command.logFile} |`);
+  }
+}
+lines.push("");
+lines.push(renderStabilityBaselineMarkdown(stabilityBaseline));
+lines.push("");
+lines.push("## 失败日志清单");
+if (failedLogs.length === 0) {
+  lines.push("- 无失败日志");
+} else {
+  for (const failedLog of failedLogs) {
+    lines.push(`- ${failedLog}`);
+  }
+}
+
+fs.writeFileSync(indexMdFile, `${lines.join("\n")}\n`);
 fs.writeFileSync(summaryJsonFile, `${JSON.stringify(summary, null, 2)}\n`);
 NODE
 }

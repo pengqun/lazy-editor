@@ -170,12 +170,15 @@ npm run test:diagnose
 - `.artifacts/test-diagnose/<timestamp>/index.md`（人类可读索引）
 - `.artifacts/test-diagnose/<timestamp>/summary.json`（结构化索引）
 - `.artifacts/test-diagnose/<timestamp>/*.log`
+- `.artifacts/test-diagnose/history.json`（最近 20 次诊断的滚动稳定性基线）
 
 #### 如何阅读诊断产物索引
 
 1. 先打开 `index.md`：快速查看本次执行参数、环境版本、每条测试命令状态。
-2. 如果有失败，直接看 `index.md` 的“失败日志清单”，按路径打开对应 `*.log`。
-3. 需要自动化分析或二次处理时，读取 `summary.json`：其中包含同样信息的结构化字段（`parameters` / `versions` / `commands` / `failedLogs`）。
+2. 再看 `index.md` 的“稳定性基线”：这里会汇总最近 20 次诊断运行的 overall pass rate、分命令 pass rate，以及常见失败类型计数，用来判断是单次偶发，还是长期不稳定。
+3. `summary.json` 里会同步暴露 `stabilityBaseline` 字段，便于后续脚本或 CI 做结构化分析。
+4. 如果有失败，直接看 `index.md` 的“失败日志清单”，按路径打开对应 `*.log`。
+5. 需要自动化分析或二次处理时，读取 `summary.json`：其中包含同样信息的结构化字段（`parameters` / `versions` / `commands` / `failedLogs` / `stabilityBaseline`）。
 
 若有失败，请打包对应时间戳目录并附在 issue / PR 中，便于稳定复现与定位。
 
