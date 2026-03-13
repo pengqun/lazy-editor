@@ -47,6 +47,7 @@ import {
   savePresetToStorage,
   saveWorkspaceRetrievalSettings,
 } from "../lib/retrieval-presets";
+import { type IntegrityTrendPoint, loadIntegrityTrendHistory, syncIntegrityTrendHistory } from "../lib/integrity-trend-history";
 import { toast } from "./toast";
 
 const inFlightBatchStepRetries = new Set<string>();
@@ -106,6 +107,7 @@ export interface IntegrityScanSnapshot {
   healthy: number;
   missing: number;
   moved: number;
+  invalid?: number;
   notes: string | null;
 }
 
@@ -173,6 +175,8 @@ interface KnowledgeState {
   integrityLoading: boolean;
   /** Recent integrity scan history snapshots. */
   integrityHistory: IntegrityScanSnapshot[];
+  /** Local aggregated integrity trend history (workspace-scoped, persisted in localStorage). */
+  integrityTrendHistory: IntegrityTrendPoint[];
   /** Run an integrity scan on all file-sourced documents. */
   checkIntegrity: () => Promise<void>;
   /** Relink a stale document to a new path. */
@@ -343,7 +347,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   },
 
   setWorkspacePath: (path) => {
-    set({ _workspacePath: path });
+    set({ _workspacePath: path, integrityTrendHistory: loadIntegrityTrendHistory(path) });
     // Re-resolve health thresholds for new workspace
     const { settings, source } = resolveThresholdSettings(path);
     set({ healthThresholds: settings, healthThresholdSource: source });
@@ -486,6 +490,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   integrityReport: null,
   integrityLoading: false,
   integrityHistory: [],
+  integrityTrendHistory: loadIntegrityTrendHistory(null),
 
   checkIntegrity: async () => {
     set({ integrityLoading: true });
@@ -537,7 +542,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     try {
       const history = await invoke<IntegrityScanSnapshot[]>("get_integrity_history");
       const safeHistory = Array.isArray(history) ? history : [];
-      set({ integrityHistory: safeHistory });
+      const trendHistory = syncIntegrityTrendHistory(get()._workspacePath, safeHistory);
+      set({ integrityHistory: safeHistory, integrityTrendHistory: trendHistory });
       // Re-evaluate reminder whenever history changes
       const state = get();
       const lastScanAt = safeHistory.length > 0 ? safeHistory[0].scannedAt : null;
@@ -656,7 +662,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       // 2. Refresh history (auto-saved by backend)
       const history = await invoke<IntegrityScanSnapshot[]>("get_integrity_history");
       const safeHistory = Array.isArray(history) ? history : [];
-      set({ integrityHistory: safeHistory });
+      const trendHistory = syncIntegrityTrendHistory(get()._workspacePath, safeHistory);
+      set({ integrityHistory: safeHistory, integrityTrendHistory: trendHistory });
 
       // Re-evaluate reminder
       const lastScanAt = safeHistory.length > 0 ? safeHistory[0].scannedAt : null;

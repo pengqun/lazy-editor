@@ -34,6 +34,7 @@ import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../l
 import type { HealthCheckReport, RecommendationAction } from "../../lib/integrity-healthcheck";
 import { formatEstimatedImpact, type BatchExecutionLog, type BatchFixPlan, summarizeEstimatedImpact } from "../../lib/integrity-batch-plan";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
+import { toSparkline } from "../../lib/integrity-trend-history";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
 import { useFilesStore } from "../../stores/files";
@@ -69,6 +70,7 @@ export function KnowledgePanel() {
     integrityReport,
     integrityLoading,
     integrityHistory,
+    integrityTrendHistory,
     checkIntegrity,
     relinkDocument,
     removeStaleDocuments,
@@ -439,6 +441,7 @@ export function KnowledgePanel() {
         <IntegritySection
           report={integrityReport}
           history={integrityHistory}
+          trendHistory={integrityTrendHistory}
           onRelink={relinkDocument}
           onRemove={removeStaleDocuments}
           onClose={clearIntegrity}
@@ -1196,6 +1199,7 @@ function HealthCheckCard({
 function IntegritySection({
   report,
   history,
+  trendHistory,
   onRelink,
   onRemove,
   onClose,
@@ -1213,6 +1217,7 @@ function IntegritySection({
 }: {
   report: { entries: IntegrityEntry[]; healthy: number; missing: number; moved: number };
   history: IntegrityScanSnapshot[];
+  trendHistory: Array<{ scannedAt: string; missing: number; moved: number; invalid: number }>;
   onRelink: (id: number, newPath: string) => Promise<void>;
   onRemove: (ids: number[]) => Promise<void>;
   onClose: () => void;
@@ -1236,6 +1241,7 @@ function IntegritySection({
   const missingEntries = report.entries.filter((e) => e.status === "missing");
   const allHealthy = staleEntries.length === 0;
   const trend = computeTrend(history);
+  const recentTrend = trendHistory.slice(0, 8).reverse();
   const coverage = computeScanCoverage(history);
   const internalThresholds = toHealthThresholds(healthThresholds);
   const healthTier = computeHealthTier(coverage, internalThresholds);
@@ -1351,6 +1357,26 @@ function IntegritySection({
             </span>
           )}
         </div>
+
+        {recentTrend.length > 1 && (
+          <div className="rounded border border-border/60 bg-surface-2 px-2 py-1.5 space-y-1">
+            <div className="text-[10px] text-text-tertiary uppercase tracking-wider">Trend (recent {recentTrend.length})</div>
+            <div className="grid grid-cols-3 gap-2 text-[10px]">
+              <div>
+                <div className="text-red-400 tabular-nums">missing {recentTrend[recentTrend.length - 1]?.missing ?? 0}</div>
+                <div className="font-mono text-[11px] leading-none text-red-300/90">{toSparkline(recentTrend.map((p) => p.missing))}</div>
+              </div>
+              <div>
+                <div className="text-amber-400 tabular-nums">moved {recentTrend[recentTrend.length - 1]?.moved ?? 0}</div>
+                <div className="font-mono text-[11px] leading-none text-amber-300/90">{toSparkline(recentTrend.map((p) => p.moved))}</div>
+              </div>
+              <div>
+                <div className="text-violet-400 tabular-nums">invalid {recentTrend[recentTrend.length - 1]?.invalid ?? 0}</div>
+                <div className="font-mono text-[11px] leading-none text-violet-300/90">{toSparkline(recentTrend.map((p) => p.invalid))}</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Scan health panel */}
         {showHealth && history.length > 0 && (
@@ -1554,6 +1580,7 @@ function IntegritySection({
                   <span className="text-emerald-400 tabular-nums">{snap.healthy}h</span>
                   {snap.missing > 0 && <span className="text-red-400 tabular-nums">{snap.missing}m</span>}
                   {snap.moved > 0 && <span className="text-amber-400 tabular-nums">{snap.moved}mv</span>}
+                  {(snap.invalid ?? 0) > 0 && <span className="text-violet-400 tabular-nums">{snap.invalid}iv</span>}
                   {snap.notes && (
                     <span className="text-text-tertiary truncate" title={snap.notes}>
                       {snap.notes}
