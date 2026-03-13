@@ -35,6 +35,7 @@ thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
 env_logger = "0.11"
+scraper = "0.20"
 
 [dev-dependencies]
 tempfile = "3"
