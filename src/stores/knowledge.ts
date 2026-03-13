@@ -48,6 +48,12 @@ import {
   saveWorkspaceRetrievalSettings,
 } from "../lib/retrieval-presets";
 import { type IntegrityTrendPoint, loadIntegrityTrendHistory, syncIntegrityTrendHistory } from "../lib/integrity-trend-history";
+import {
+  type BatchImpactSummary,
+  buildBatchImpactSummary,
+  loadBatchImpactSummary,
+  saveBatchImpactSummary,
+} from "../lib/integrity-batch-impact";
 import { toast } from "./toast";
 
 const inFlightBatchStepRetries = new Set<string>();
@@ -238,6 +244,8 @@ interface KnowledgeState {
   batchStepStatuses: Record<string, StepStatus>;
   /** Execution log from the last batch run (session-only). */
   batchExecutionLog: BatchExecutionLog | null;
+  /** Latest persisted batch impact summary (workspace-scoped). */
+  lastBatchImpact: BatchImpactSummary | null;
   /** Generate a batch fix plan from the current health check report. */
   buildBatchPlan: () => void;
   /** Clear the batch fix plan (cancel preview). */
@@ -347,7 +355,11 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   },
 
   setWorkspacePath: (path) => {
-    set({ _workspacePath: path, integrityTrendHistory: loadIntegrityTrendHistory(path) });
+    set({
+      _workspacePath: path,
+      integrityTrendHistory: loadIntegrityTrendHistory(path),
+      lastBatchImpact: loadBatchImpactSummary(path),
+    });
     // Re-resolve health thresholds for new workspace
     const { settings, source } = resolveThresholdSettings(path);
     set({ healthThresholds: settings, healthThresholdSource: source });
@@ -696,6 +708,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   batchExecuting: false,
   batchStepStatuses: {},
   batchExecutionLog: null,
+  lastBatchImpact: loadBatchImpactSummary(null),
 
   buildBatchPlan: () => {
     const { healthCheckReport } = get();
@@ -722,7 +735,15 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         },
       });
 
-      set({ batchExecutionLog: log, batchLastPlan: batchFixPlan, batchFixPlan: null, batchExecuting: false });
+      const summary = buildBatchImpactSummary(log);
+      saveBatchImpactSummary(get()._workspacePath, summary);
+      set({
+        batchExecutionLog: log,
+        batchLastPlan: batchFixPlan,
+        batchFixPlan: null,
+        batchExecuting: false,
+        lastBatchImpact: summary,
+      });
 
       const { success, failed, skipped, itemChanges } = log.summary;
       if (failed > 0) {
@@ -758,7 +779,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       }, previous.attempts + 1);
 
       const merged = mergeRetriedResult(batchExecutionLog, retried);
-      set({ batchExecutionLog: merged });
+      const summary = buildBatchImpactSummary(merged);
+      saveBatchImpactSummary(get()._workspacePath, summary);
+      set({ batchExecutionLog: merged, lastBatchImpact: summary });
 
       if (retried.outcome === "success") {
         toast.success(`Retried ${stepId.replace("step-", "")}: success`);

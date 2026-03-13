@@ -34,6 +34,7 @@ import { type HealthThresholdSettings, type ThresholdSource, DEFAULT_THRESHOLD_S
 import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
 import type { HealthCheckReport, RecommendationAction } from "../../lib/integrity-healthcheck";
 import { buildBatchExecutionSummaryText, buildBatchFailureAdvices, computeBatchExecutionMetrics, formatEstimatedImpact, formatRate, type BatchExecutionLog, type BatchFixPlan, summarizeEstimatedImpact } from "../../lib/integrity-batch-plan";
+import { type BatchImpactSummary, shouldShowBatchImpact } from "../../lib/integrity-batch-impact";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { toSparkline } from "../../lib/integrity-trend-history";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
@@ -90,6 +91,7 @@ export function KnowledgePanel() {
     batchExecuting,
     batchStepStatuses,
     batchExecutionLog,
+    lastBatchImpact,
     buildBatchPlan,
     clearBatchPlan,
     confirmBatchPlan,
@@ -443,6 +445,7 @@ export function KnowledgePanel() {
           report={integrityReport}
           history={integrityHistory}
           trendHistory={integrityTrendHistory}
+          lastBatchImpact={lastBatchImpact}
           onRelink={relinkDocument}
           onRemove={removeStaleDocuments}
           onClose={clearIntegrity}
@@ -1258,6 +1261,7 @@ function IntegritySection({
   report,
   history,
   trendHistory,
+  lastBatchImpact,
   onRelink,
   onRemove,
   onClose,
@@ -1276,6 +1280,7 @@ function IntegritySection({
   report: { entries: IntegrityEntry[]; healthy: number; missing: number; moved: number };
   history: IntegrityScanSnapshot[];
   trendHistory: Array<{ scannedAt: string; missing: number; moved: number; invalid: number }>;
+  lastBatchImpact: BatchImpactSummary | null;
   onRelink: (id: number, newPath: string) => Promise<void>;
   onRemove: (ids: number[]) => Promise<void>;
   onClose: () => void;
@@ -1433,6 +1438,17 @@ function IntegritySection({
                 <div className="font-mono text-[11px] leading-none text-violet-300/90">{toSparkline(recentTrend.map((p) => p.invalid))}</div>
               </div>
             </div>
+            {shouldShowBatchImpact(lastBatchImpact) && (
+              <div className="pt-0.5 text-[10px] text-text-secondary/90 border-t border-border/50">
+                <span className="text-text-tertiary">Last batch impact</span>
+                <span className="ml-1 tabular-nums">
+                  {formatRate(lastBatchImpact.repairRate)} repair · {formatRate(lastBatchImpact.hitRate)} hit · {formatRate(lastBatchImpact.skipRate)} skip
+                </span>
+                <span className="ml-1 text-text-tertiary">
+                  (ok {lastBatchImpact.successSteps} · fail {lastBatchImpact.failedSteps} · skip {lastBatchImpact.skippedSteps})
+                </span>
+              </div>
+            )}
           </div>
         )}
 
