@@ -175,6 +175,15 @@ describe("knowledge store slices", () => {
     expect(state.integrityReport).toBeNull();
   });
 
+  it("batchState slice: 提供稳定初始状态", () => {
+    const slice = useKnowledgeStore.getState();
+    expect(slice.batchFixPlan).toBeNull();
+    expect(slice.batchLastPlan).toBeNull();
+    expect(slice.batchExecuting).toBe(false);
+    expect(slice.batchExecutionLog).toBeNull();
+    expect(slice.batchStepStatuses).toEqual({});
+  });
+
   it("batchAction slice: build/clear plan 基本行为", () => {
     const state: Record<string, any> = {
       healthCheckReport: {
