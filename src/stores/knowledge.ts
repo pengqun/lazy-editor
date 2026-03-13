@@ -355,6 +355,10 @@ function _buildBatchCallbacks(
   };
 }
 
+// ===== Slice boundaries (for upcoming file split) =====
+// viewer/*   -> createViewerStateSlice
+// integrity/*-> createIntegrityStateSlice
+// batch/*    -> createBatchStateSlice (+ root action wiring for now)
 type ViewerStateSlice = Pick<KnowledgeState,
   "viewedChunk"
   | "lastRequestedChunkId"
@@ -374,6 +378,9 @@ type IntegrityStateSlice = Pick<KnowledgeState,
   | "integrityHistory"
   | "integrityTrendHistory"
   | "checkIntegrity"
+  | "relinkDocument"
+  | "removeStaleDocuments"
+  | "clearIntegrity"
   | "loadIntegrityHistory"
   | "reminderSettings"
   | "reminderDue"
@@ -476,6 +483,37 @@ export function createIntegrityStateSlice(
         set({ integrityLoading: false });
       }
     },
+
+    relinkDocument: async (id, newPath) => {
+      try {
+        await invoke("relink_kb_document", { id, newPath });
+        toast.success("Document relinked successfully");
+        // Re-run integrity check and refresh document list
+        await get().checkIntegrity();
+        await get().loadDocuments();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to relink document:", message);
+        toast.error(`Relink failed: ${message}`);
+      }
+    },
+
+    removeStaleDocuments: async (ids) => {
+      try {
+        for (const id of ids) {
+          await invoke("remove_kb_document", { id });
+        }
+        toast.success(`Removed ${ids.length} stale document${ids.length > 1 ? "s" : ""}`);
+        await get().loadDocuments();
+        await get().checkIntegrity();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to remove stale documents:", message);
+        toast.error(`Remove failed: ${message}`);
+      }
+    },
+
+    clearIntegrity: () => set({ integrityReport: null }),
 
     loadIntegrityHistory: async () => {
       try {
@@ -790,39 +828,10 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     });
   },
 
-  // viewerState actions are provided by createViewerStateSlice (compatibility kept: same API names)
-  // integrityState actions are provided by createIntegrityStateSlice (compatibility kept: same API names)
-
-  relinkDocument: async (id, newPath) => {
-    try {
-      await invoke("relink_kb_document", { id, newPath });
-      toast.success("Document relinked successfully");
-      // Re-run integrity check and refresh document list
-      await get().checkIntegrity();
-      await get().loadDocuments();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("Failed to relink document:", message);
-      toast.error(`Relink failed: ${message}`);
-    }
-  },
-
-  removeStaleDocuments: async (ids) => {
-    try {
-      for (const id of ids) {
-        await invoke("remove_kb_document", { id });
-      }
-      toast.success(`Removed ${ids.length} stale document${ids.length > 1 ? "s" : ""}`);
-      await get().loadDocuments();
-      await get().checkIntegrity();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("Failed to remove stale documents:", message);
-      toast.error(`Remove failed: ${message}`);
-    }
-  },
-
-  clearIntegrity: () => set({ integrityReport: null }),
+  // ===== Compatibility boundary (next split targets) =====
+  // viewer/* actions live in createViewerStateSlice
+  // integrity/* actions live in createIntegrityStateSlice
+  // batch/* actions remain in root store for now (next extraction: createBatchActionSlice)
 
   clearHealthCheck: () =>
     set({ healthCheckReport: null, batchFixPlan: null, batchLastPlan: null, batchExecutionLog: null, batchStepStatuses: {} }),

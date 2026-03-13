@@ -115,6 +115,66 @@ describe("knowledge store slices", () => {
     expect(state.integrityHistory).toHaveLength(1);
   });
 
+  it("integrityState slice: relinkDocument 调用后触发完整刷新链路", async () => {
+    const state: Record<string, any> = {
+      _workspacePath: null,
+      integrityHistory: [],
+      reminderSettings: { enabled: true, frequency: "weekly", snoozedUntil: null },
+      healthThresholds: { goodMinScans7d: 2, goodMaxAgeDays: 7, poorMaxAgeDays: 14 },
+      loadDocuments: vi.fn().mockResolvedValue(undefined),
+    };
+    const set = vi.fn((partial: any) => {
+      const patch = typeof partial === "function" ? partial(state) : partial;
+      Object.assign(state, patch);
+    });
+    const get = () => state as any;
+    const slice = createIntegrityStateSlice(set as any, get as any);
+    Object.assign(state, slice);
+
+    mockedInvoke
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ entries: [], healthy: 1, missing: 0, moved: 0 })
+      .mockResolvedValueOnce([]);
+
+    await slice.relinkDocument(7, "/new/doc.md");
+
+    expect(mockedInvoke).toHaveBeenNthCalledWith(1, "relink_kb_document", { id: 7, newPath: "/new/doc.md" });
+    expect(mockedInvoke).toHaveBeenNthCalledWith(2, "check_kb_integrity");
+    expect(mockedInvoke).toHaveBeenNthCalledWith(3, "get_integrity_history");
+    expect(state.loadDocuments).toHaveBeenCalledTimes(1);
+  });
+
+  it("integrityState slice: removeStaleDocuments 与 clearIntegrity 基本行为", async () => {
+    const state: Record<string, any> = {
+      _workspacePath: null,
+      integrityHistory: [],
+      reminderSettings: { enabled: true, frequency: "weekly", snoozedUntil: null },
+      healthThresholds: { goodMinScans7d: 2, goodMaxAgeDays: 7, poorMaxAgeDays: 14 },
+      loadDocuments: vi.fn().mockResolvedValue(undefined),
+      integrityReport: { entries: [], healthy: 1, missing: 0, moved: 0 },
+    };
+    const set = vi.fn((partial: any) => {
+      const patch = typeof partial === "function" ? partial(state) : partial;
+      Object.assign(state, patch);
+    });
+    const get = () => state as any;
+    const slice = createIntegrityStateSlice(set as any, get as any);
+    Object.assign(state, slice);
+
+    mockedInvoke
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ entries: [], healthy: 0, missing: 0, moved: 0 })
+      .mockResolvedValueOnce([]);
+
+    await slice.removeStaleDocuments([11, 12]);
+    expect(mockedInvoke).toHaveBeenNthCalledWith(1, "remove_kb_document", { id: 11 });
+    expect(mockedInvoke).toHaveBeenNthCalledWith(2, "remove_kb_document", { id: 12 });
+
+    slice.clearIntegrity();
+    expect(state.integrityReport).toBeNull();
+  });
+
   it("兼容层：store 仍暴露原有 viewer/integrity action 名称", () => {
     const state = useKnowledgeStore.getState();
     expect(typeof state.viewChunk).toBe("function");
@@ -124,6 +184,9 @@ describe("knowledge store slices", () => {
     expect(typeof state.checkIntegrity).toBe("function");
     expect(typeof state.loadIntegrityHistory).toBe("function");
     expect(typeof state.setReminderSettings).toBe("function");
+    expect(typeof state.relinkDocument).toBe("function");
+    expect(typeof state.removeStaleDocuments).toBe("function");
+    expect(typeof state.clearIntegrity).toBe("function");
     expect(typeof state.runHealthCheck).toBe("function");
   });
 });
