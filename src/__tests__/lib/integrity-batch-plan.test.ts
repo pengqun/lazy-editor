@@ -3,7 +3,9 @@ import {
   type BatchExecutionCallbacks,
   type BatchFixPlan,
   buildBatchExecutionSummaryText,
+  buildBatchFailureAdvices,
   buildBatchFixPlan,
+  classifyBatchFailure,
   classifyStep,
   computeBatchExecutionMetrics,
   executeBatchFixPlan,
@@ -444,6 +446,110 @@ describe("result aggregation", () => {
     expect(merged.results[0].attempts).toBe(2);
     expect(merged.summary.failed).toBe(0);
     expect(merged.summary.success).toBe(1);
+  });
+});
+
+describe("failure classification and advice", () => {
+  it("classifies manual-only skip, unsupported and invoke errors", () => {
+    expect(classifyBatchFailure({
+      stepId: "step-a",
+      recommendationId: "a",
+      actionType: "manual",
+      status: "skipped",
+      outcome: "skipped",
+      message: "Manual intervention required.",
+      durationMs: 0,
+      attempts: 1,
+      affectedItems: 0,
+    })).toBe("manual-only");
+
+    expect(classifyBatchFailure({
+      stepId: "step-b",
+      recommendationId: "b",
+      actionType: "relink-all",
+      status: "failed",
+      outcome: "failed",
+      message: "Unsupported action type: foo",
+      durationMs: 3,
+      attempts: 1,
+      affectedItems: 1,
+    })).toBe("unsupported");
+
+    expect(classifyBatchFailure({
+      stepId: "step-c",
+      recommendationId: "c",
+      actionType: "remove-stale",
+      status: "failed",
+      outcome: "failed",
+      message: "permission denied",
+      durationMs: 8,
+      attempts: 1,
+      affectedItems: 2,
+    })).toBe("invoke-error");
+  });
+
+  it("builds grouped failure advice from failed/skipped results", () => {
+    const advices = buildBatchFailureAdvices({
+      startedAt: "2026-03-13T10:00:00.000Z",
+      completedAt: "2026-03-13T10:00:01.000Z",
+      summary: {
+        success: 1,
+        failed: 2,
+        skipped: 1,
+        itemChanges: { success: 1, failed: 2, skipped: 0, total: 3 },
+      },
+      results: [
+        {
+          stepId: "step-manual",
+          recommendationId: "manual",
+          actionType: "manual",
+          status: "skipped",
+          outcome: "skipped",
+          message: "Manual intervention required.",
+          durationMs: 0,
+          attempts: 1,
+          affectedItems: 0,
+        },
+        {
+          stepId: "step-unsupported",
+          recommendationId: "unsupported",
+          actionType: "remove-stale",
+          status: "failed",
+          outcome: "failed",
+          message: "Unsupported action type: archive",
+          durationMs: 5,
+          attempts: 1,
+          affectedItems: 1,
+        },
+        {
+          stepId: "step-invoke",
+          recommendationId: "invoke",
+          actionType: "relink-all",
+          status: "failed",
+          outcome: "failed",
+          message: "tauri invoke failed",
+          durationMs: 12,
+          attempts: 1,
+          affectedItems: 1,
+        },
+        {
+          stepId: "step-ok",
+          recommendationId: "ok",
+          actionType: "enable-reminders",
+          status: "success",
+          outcome: "success",
+          message: "done",
+          durationMs: 1,
+          attempts: 1,
+          affectedItems: 1,
+        },
+      ],
+    });
+
+    expect(advices.map((a) => a.category)).toEqual(["manual-only", "unsupported", "invoke-error"]);
+    expect(advices[0].actions.join(" ")).toContain("单步处理");
+    expect(advices[1].actions.join(" ")).toContain("导出摘要");
+    expect(advices[2].actions.join(" ")).toContain("重试失败步骤");
   });
 });
 

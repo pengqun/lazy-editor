@@ -33,7 +33,7 @@ import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdo
 import { type HealthThresholdSettings, type ThresholdSource, DEFAULT_THRESHOLD_SETTINGS, TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge, toHealthThresholds } from "../../lib/integrity-health";
 import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
 import type { HealthCheckReport, RecommendationAction } from "../../lib/integrity-healthcheck";
-import { buildBatchExecutionSummaryText, computeBatchExecutionMetrics, formatEstimatedImpact, formatRate, type BatchExecutionLog, type BatchFixPlan, summarizeEstimatedImpact } from "../../lib/integrity-batch-plan";
+import { buildBatchExecutionSummaryText, buildBatchFailureAdvices, computeBatchExecutionMetrics, formatEstimatedImpact, formatRate, type BatchExecutionLog, type BatchFixPlan, summarizeEstimatedImpact } from "../../lib/integrity-batch-plan";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { toSparkline } from "../../lib/integrity-trend-history";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
@@ -943,6 +943,7 @@ function HealthCheckCard({
     ? formatEstimatedImpact(summarizeEstimatedImpact(batchFixPlan, integrityReport?.moved ?? 0))
     : "none";
   const executionMetrics = batchExecutionLog ? computeBatchExecutionMetrics(batchExecutionLog) : null;
+  const failureAdvices = batchExecutionLog ? buildBatchFailureAdvices(batchExecutionLog) : [];
 
   const handleCopyExecutionSummary = async () => {
     if (!batchExecutionLog) return;
@@ -1193,6 +1194,30 @@ function HealthCheckCard({
                 </div>
               )}
             </div>
+            {failureAdvices.length > 0 && (
+              <div className="rounded border border-amber-500/20 bg-amber-500/5 p-1.5 space-y-1">
+                <div className="text-[10px] text-amber-300 uppercase tracking-wider">失败处置建议</div>
+                <div className="space-y-1">
+                  {failureAdvices.map((advice) => (
+                    <div key={advice.category} className="text-[10px] leading-snug">
+                      <div className="text-text-primary">
+                        {advice.title}
+                        <span className="text-text-tertiary"> · {advice.stepIds.length} 步</span>
+                      </div>
+                      <div className="text-text-tertiary">{advice.reason}</div>
+                      <div className="text-amber-200/90">建议：{advice.actions.join(" · ")}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded border border-border/60 bg-surface-1 p-1.5 text-[10px] leading-snug text-text-tertiary">
+              <div className="text-text-primary">回滚提示（手动）</div>
+              <div>可逆向恢复：relink-all（可改回原路径）、remove-stale（若文件仍在可重新导入）、提醒设置（可随时关闭/改频率）。</div>
+              <div>不可自动回滚：批处理不会执行自动高风险回滚；manual-only 步骤仍需人工确认与执行。</div>
+            </div>
+
             <div className="space-y-0.5 max-h-32 overflow-y-auto">
               {batchExecutionLog.results.map((result) => (
                 <div

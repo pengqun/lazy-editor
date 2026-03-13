@@ -237,6 +237,77 @@ export function buildBatchExecutionSummaryText(log: BatchExecutionLog): string {
   ].join("\n");
 }
 
+export type BatchFailureCategory = "manual-only" | "unsupported" | "invoke-error" | "skipped-other" | "unknown";
+
+export interface BatchFailureAdvice {
+  category: BatchFailureCategory;
+  title: string;
+  reason: string;
+  actions: string[];
+  stepIds: string[];
+}
+
+export function classifyBatchFailure(result: StepExecutionResult): BatchFailureCategory {
+  const message = result.message.toLowerCase();
+  if (result.outcome === "skipped" && result.actionType === "manual") return "manual-only";
+  if (result.outcome === "skipped") return "skipped-other";
+  if (message.includes("unsupported action")) return "unsupported";
+  if (result.outcome === "failed") return "invoke-error";
+  return "unknown";
+}
+
+const BATCH_FAILURE_ADVICE_TEMPLATE: Record<BatchFailureCategory, Omit<BatchFailureAdvice, "stepIds">> = {
+  "manual-only": {
+    category: "manual-only",
+    title: "需要手动处理（manual-only）",
+    reason: "该步骤被安全策略标记为需人工确认，批处理会跳过。",
+    actions: ["单步处理（人工确认后执行）", "重新扫描以刷新状态", "导出摘要给协作方"],
+  },
+  unsupported: {
+    category: "unsupported",
+    title: "动作暂不支持（unsupported）",
+    reason: "当前执行器不支持该动作类型或参数。",
+    actions: ["导出摘要并提交问题", "改用单步处理", "重新扫描确认是否仍需该动作"],
+  },
+  "invoke-error": {
+    category: "invoke-error",
+    title: "执行调用失败（invoke error）",
+    reason: "执行步骤时出现运行时错误（权限、IO、状态变化等）。",
+    actions: ["重试失败步骤", "切换到单步处理定位问题", "重新扫描后再执行"],
+  },
+  "skipped-other": {
+    category: "skipped-other",
+    title: "步骤被跳过（skipped）",
+    reason: "步骤未执行，通常是前置条件不满足或计划已变化。",
+    actions: ["重新生成批处理计划", "单步处理后再批量", "导出摘要以便复盘"],
+  },
+  unknown: {
+    category: "unknown",
+    title: "未知失败类型",
+    reason: "无法自动归类，请查看步骤详情。",
+    actions: ["重试失败步骤", "单步处理排查", "导出摘要并附日志"],
+  },
+};
+
+export function buildBatchFailureAdvices(log: BatchExecutionLog): BatchFailureAdvice[] {
+  const grouped = new Map<BatchFailureCategory, StepExecutionResult[]>();
+  for (const result of log.results) {
+    if (result.outcome !== "failed" && result.outcome !== "skipped") continue;
+    const category = classifyBatchFailure(result);
+    const bucket = grouped.get(category) ?? [];
+    bucket.push(result);
+    grouped.set(category, bucket);
+  }
+
+  return Array.from(grouped.entries()).map(([category, items]) => {
+    const template = BATCH_FAILURE_ADVICE_TEMPLATE[category] ?? BATCH_FAILURE_ADVICE_TEMPLATE.unknown;
+    return {
+      ...template,
+      stepIds: items.map((i) => i.stepId),
+    };
+  });
+}
+
 // --- Ordering ---
 
 const ACTION_ORDER: Record<string, number> = {
