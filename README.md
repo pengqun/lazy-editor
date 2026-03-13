@@ -126,11 +126,31 @@ cd src-tauri && cargo test         # Rust unit tests
 
 ### 偶发测试失败：一键采集诊断信息
 
-当 CI 或本地出现“偶发失败 / 难以复现”时，优先运行（CI 可在 GitHub Actions 手动触发 `CI Diagnose` workflow 并保持 `run_diagnose=true`）：
+当 CI 或本地出现“偶发失败 / 难以复现”时，优先运行（CI 可在 GitHub Actions 手动触发 `CI Diagnose` workflow）：
 
 ```bash
 npm run test:diagnose
 ```
+
+手动触发 `CI Diagnose` 时可按需选择参数（仅影响该手动诊断任务，不影响常规 push/tag/release 流程）：
+
+- `run_frontend_tests`（默认 `true`）：是否执行前端诊断测试组
+- `run_rust_tests`（默认 `true`）：是否执行 Rust 诊断测试组
+- `vitest_verbose`（默认 `false`）：是否额外执行 verbose vitest
+- `repeat_count`（默认 `1`，上限 `5`）：重复执行选中测试组次数
+
+示例：
+
+- 只跑前端并启用 verbose：
+  - `run_frontend_tests=true`
+  - `run_rust_tests=false`
+  - `vitest_verbose=true`
+  - `repeat_count=2`
+- 只跑 Rust：
+  - `run_frontend_tests=false`
+  - `run_rust_tests=true`
+  - `vitest_verbose=false`
+  - `repeat_count=1`
 
 该命令会一次性执行并记录：
 

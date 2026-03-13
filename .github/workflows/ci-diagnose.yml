@@ -3,16 +3,30 @@ name: CI Diagnose
 on:
   workflow_dispatch:
     inputs:
-      run_diagnose:
-        description: 'Run test diagnose script (npm run test:diagnose)'
+      run_frontend_tests:
+        description: 'Run frontend test group (npm/vitest)'
         required: true
         type: boolean
         default: true
+      run_rust_tests:
+        description: 'Run rust test group (cargo test -q)'
+        required: true
+        type: boolean
+        default: true
+      vitest_verbose:
+        description: 'Include verbose vitest run in frontend group'
+        required: true
+        type: boolean
+        default: false
+      repeat_count:
+        description: 'Repeat selected test group(s), 1-5'
+        required: true
+        type: string
+        default: '1'
 
 jobs:
   test-diagnose:
     name: Test diagnose (manual)
-    if: ${{ inputs.run_diagnose }}
     runs-on: macos-14
     timeout-minutes: 30
 
@@ -26,12 +40,18 @@ jobs:
           cache: npm
 
       - name: Setup Rust
+        if: ${{ inputs.run_rust_tests }}
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install JS deps
         run: npm ci
 
       - name: Run diagnose tests
+        env:
+          RUN_FRONTEND_TESTS: ${{ inputs.run_frontend_tests }}
+          RUN_RUST_TESTS: ${{ inputs.run_rust_tests }}
+          VITEST_VERBOSE: ${{ inputs.vitest_verbose }}
+          REPEAT_COUNT: ${{ inputs.repeat_count }}
         run: npm run test:diagnose
 
       - name: Upload diagnose artifacts
