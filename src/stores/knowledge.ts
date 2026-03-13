@@ -3,29 +3,11 @@ import { create } from "zustand";
 import {
   type HealthThresholdSettings,
   type ThresholdSource,
-  DEFAULT_THRESHOLD_SETTINGS,
-  clampThresholdSettings,
-  loadThresholdSettings,
-  removeWorkspaceThresholdSettings,
   resolveThresholdSettings,
-  saveThresholdSettings,
-  saveWorkspaceThresholdSettings,
   toHealthThresholds,
 } from "../lib/integrity-health";
-import {
-  applyThresholdConfig,
-  buildThresholdExportPayload,
-  parseThresholdConfig,
-  serializeThresholdConfig,
-} from "../lib/integrity-threshold-io";
-import {
-  type IntegrityReminderSettings,
-  computeSnoozeUntil,
-  isReminderDue,
-  loadReminderSettings,
-  saveReminderSettings,
-} from "../lib/integrity-reminder";
-import { type HealthCheckReport, buildHealthCheckReport } from "../lib/integrity-healthcheck";
+import { type IntegrityReminderSettings } from "../lib/integrity-reminder";
+import { type HealthCheckReport } from "../lib/integrity-healthcheck";
 import {
   type BatchExecutionLog,
   type BatchFixPlan,
@@ -42,16 +24,18 @@ import {
   savePresetToStorage,
   saveWorkspaceRetrievalSettings,
 } from "../lib/retrieval-presets";
-import { type IntegrityTrendPoint, loadIntegrityTrendHistory, syncIntegrityTrendHistory } from "../lib/integrity-trend-history";
+import { type IntegrityTrendPoint, loadIntegrityTrendHistory } from "../lib/integrity-trend-history";
 import {
   type BatchImpactSummary,
   loadBatchImpactSummary,
 } from "../lib/integrity-batch-impact";
 import { createBatchActionSlice, createBatchStateSlice } from "./knowledge/batch";
+import { createIntegrityStateSlice } from "./knowledge/integrity";
 import { createViewerStateSlice } from "./knowledge/viewer";
 import { toast } from "./toast";
 
 export { createBatchActionSlice, createBatchStateSlice };
+export { createIntegrityStateSlice };
 export { createViewerStateSlice };
 
 export interface KBDocument {
@@ -294,250 +278,6 @@ function _currentSettings(state: {
     preset: state.activePreset,
     topK: state.retrievalTopK,
     scope: state.retrievalScope,
-  };
-}
-
-// ===== Slice boundaries =====
-// viewer/*   -> createViewerStateSlice  (./knowledge/viewer.ts)
-// integrity/*-> createIntegrityStateSlice
-// batch/*    -> createBatchStateSlice + createBatchActionSlice (./knowledge/batch.ts)
-// 说明：batch action 需要同时协调 integrity/viewer 相关状态（如 refresh 与提醒设置），
-// 通过 get() 访问跨 slice action，保持职责边界清晰且对外 API 不变。
-
-type IntegrityStateSlice = Pick<KnowledgeState,
-  "integrityReport"
-  | "integrityLoading"
-  | "integrityHistory"
-  | "integrityTrendHistory"
-  | "checkIntegrity"
-  | "relinkDocument"
-  | "removeStaleDocuments"
-  | "clearIntegrity"
-  | "loadIntegrityHistory"
-  | "reminderSettings"
-  | "reminderDue"
-  | "setReminderSettings"
-  | "snoozeReminder"
-  | "refreshReminderDue"
-  | "healthThresholds"
-  | "healthThresholdSource"
-  | "setHealthThresholds"
-  | "resetHealthThresholds"
-  | "getHealthThresholds"
-  | "saveThresholdsForWorkspace"
-  | "resetWorkspaceThresholds"
-  | "exportThresholdConfig"
-  | "importThresholdConfig"
-  | "healthCheckReport"
-  | "healthCheckLoading"
-  | "runHealthCheck"
->;
-
-export function createIntegrityStateSlice(
-  set: (partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>)) => void,
-  get: () => KnowledgeState,
-): IntegrityStateSlice {
-  return {
-    integrityReport: null,
-    integrityLoading: false,
-    integrityHistory: [],
-    integrityTrendHistory: loadIntegrityTrendHistory(null),
-
-    checkIntegrity: async () => {
-      set({ integrityLoading: true });
-      try {
-        const report = await invoke<IntegrityReport>("check_kb_integrity");
-        set({ integrityReport: report, integrityLoading: false });
-        // Refresh history after scan (auto-saved by backend)
-        await get().loadIntegrityHistory();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("Failed to check KB integrity:", message);
-        toast.error(`Integrity check failed: ${message}`);
-        set({ integrityLoading: false });
-      }
-    },
-
-    relinkDocument: async (id, newPath) => {
-      try {
-        await invoke("relink_kb_document", { id, newPath });
-        toast.success("Document relinked successfully");
-        // Re-run integrity check and refresh document list
-        await get().checkIntegrity();
-        await get().loadDocuments();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("Failed to relink document:", message);
-        toast.error(`Relink failed: ${message}`);
-      }
-    },
-
-    removeStaleDocuments: async (ids) => {
-      try {
-        for (const id of ids) {
-          await invoke("remove_kb_document", { id });
-        }
-        toast.success(`Removed ${ids.length} stale document${ids.length > 1 ? "s" : ""}`);
-        await get().loadDocuments();
-        await get().checkIntegrity();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("Failed to remove stale documents:", message);
-        toast.error(`Remove failed: ${message}`);
-      }
-    },
-
-    clearIntegrity: () => set({ integrityReport: null }),
-
-    loadIntegrityHistory: async () => {
-      try {
-        const history = await invoke<IntegrityScanSnapshot[]>("get_integrity_history");
-        const safeHistory = Array.isArray(history) ? history : [];
-        const trendHistory = syncIntegrityTrendHistory(get()._workspacePath, safeHistory);
-        set({ integrityHistory: safeHistory, integrityTrendHistory: trendHistory });
-        // Re-evaluate reminder whenever history changes
-        const state = get();
-        const lastScanAt = safeHistory.length > 0 ? safeHistory[0].scannedAt : null;
-        set({ reminderDue: isReminderDue(state.reminderSettings, lastScanAt) });
-      } catch (err) {
-        console.error("Failed to load integrity history:", err);
-      }
-    },
-
-    reminderSettings: loadReminderSettings(),
-    reminderDue: false,
-
-    setReminderSettings: (patch) => {
-      const current = get().reminderSettings;
-      const updated: IntegrityReminderSettings = {
-        ...current,
-        ...patch,
-        // Clear snooze when toggling enabled or changing frequency
-        snoozedUntil: null,
-      };
-      saveReminderSettings(updated);
-      const lastScanAt = get().integrityHistory[0]?.scannedAt ?? null;
-      set({
-        reminderSettings: updated,
-        reminderDue: isReminderDue(updated, lastScanAt),
-      });
-    },
-
-    snoozeReminder: () => {
-      const current = get().reminderSettings;
-      const updated: IntegrityReminderSettings = {
-        ...current,
-        snoozedUntil: computeSnoozeUntil(),
-      };
-      saveReminderSettings(updated);
-      set({ reminderSettings: updated, reminderDue: false });
-    },
-
-    refreshReminderDue: () => {
-      const { reminderSettings, integrityHistory } = get();
-      const lastScanAt = integrityHistory[0]?.scannedAt ?? null;
-      set({ reminderDue: isReminderDue(reminderSettings, lastScanAt) });
-    },
-
-    healthThresholds: loadThresholdSettings(),
-    healthThresholdSource: "global" as ThresholdSource,
-
-    setHealthThresholds: (patch) => {
-      const current = get().healthThresholds;
-      const updated = clampThresholdSettings({ ...current, ...patch });
-      const { _workspacePath, healthThresholdSource } = get();
-      // Persist to the active source layer
-      if (healthThresholdSource === "workspace" && _workspacePath) {
-        saveWorkspaceThresholdSettings(_workspacePath, updated);
-      } else {
-        saveThresholdSettings(updated);
-      }
-      set({ healthThresholds: updated });
-    },
-
-    resetHealthThresholds: () => {
-      const defaults = { ...DEFAULT_THRESHOLD_SETTINGS };
-      saveThresholdSettings(defaults);
-      // Also clear workspace override if active
-      const { _workspacePath } = get();
-      if (_workspacePath) {
-        removeWorkspaceThresholdSettings(_workspacePath);
-      }
-      set({ healthThresholds: defaults, healthThresholdSource: "global" });
-    },
-
-    getHealthThresholds: () => toHealthThresholds(get().healthThresholds),
-
-    saveThresholdsForWorkspace: () => {
-      const { _workspacePath, healthThresholds } = get();
-      if (!_workspacePath) return;
-      saveWorkspaceThresholdSettings(_workspacePath, healthThresholds);
-      set({ healthThresholdSource: "workspace" });
-    },
-
-    resetWorkspaceThresholds: () => {
-      const { _workspacePath } = get();
-      if (!_workspacePath) return;
-      removeWorkspaceThresholdSettings(_workspacePath);
-      // Fall back to global
-      const globalSettings = loadThresholdSettings();
-      set({ healthThresholds: globalSettings, healthThresholdSource: "global" });
-    },
-
-    exportThresholdConfig: () => {
-      const payload = buildThresholdExportPayload();
-      return serializeThresholdConfig(payload);
-    },
-
-    importThresholdConfig: (jsonString) => {
-      const result = parseThresholdConfig(jsonString);
-      if (!result.ok) return result.error;
-      applyThresholdConfig(result.payload);
-      // Re-resolve for current workspace
-      const { _workspacePath } = get();
-      const { settings, source } = resolveThresholdSettings(_workspacePath);
-      set({ healthThresholds: settings, healthThresholdSource: source });
-      return null;
-    },
-
-    healthCheckReport: null,
-    healthCheckLoading: false,
-
-    runHealthCheck: async () => {
-      set({ healthCheckLoading: true, healthCheckReport: null });
-      try {
-        // 1. Run integrity scan (persists snapshot + refreshes history)
-        const report = await invoke<IntegrityReport>("check_kb_integrity");
-        set({ integrityReport: report, integrityLoading: false });
-
-        // 2. Refresh history (auto-saved by backend)
-        const history = await invoke<IntegrityScanSnapshot[]>("get_integrity_history");
-        const safeHistory = Array.isArray(history) ? history : [];
-        const trendHistory = syncIntegrityTrendHistory(get()._workspacePath, safeHistory);
-        set({ integrityHistory: safeHistory, integrityTrendHistory: trendHistory });
-
-        // Re-evaluate reminder
-        const lastScanAt = safeHistory.length > 0 ? safeHistory[0].scannedAt : null;
-        set({ reminderDue: isReminderDue(get().reminderSettings, lastScanAt) });
-
-        // 3. Build health check report
-        const { healthThresholds, reminderSettings } = get();
-        const hcReport = buildHealthCheckReport(
-          report,
-          safeHistory,
-          healthThresholds,
-          reminderSettings,
-        );
-
-        set({ healthCheckReport: hcReport, healthCheckLoading: false });
-        toast.success("Health check complete");
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("Health check failed:", message);
-        toast.error(`Health check failed: ${message}`);
-        set({ healthCheckLoading: false });
-      }
-    },
   };
 }
 

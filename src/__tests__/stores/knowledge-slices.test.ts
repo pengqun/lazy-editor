@@ -6,6 +6,9 @@ import {
   classifyViewChunkError,
   createViewerStateSlice as createViewerStateSliceDirect,
 } from "@/stores/knowledge/viewer";
+import {
+  createIntegrityStateSlice as createIntegrityStateSliceDirect,
+} from "@/stores/knowledge/integrity";
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -340,6 +343,26 @@ describe("knowledge store slices", () => {
     expect(slice.viewChunkError).toBeNull();
     expect(slice.viewedChunkQuery).toBeNull();
     expect(slice.viewedChunkScore).toBeNull();
+  });
+
+  it("integrity module: direct import produces identical slice keys", () => {
+    const set = vi.fn();
+    const get = (() => ({})) as any;
+    const sliceViaReexport = createIntegrityStateSlice(set, get);
+    const sliceDirect = createIntegrityStateSliceDirect(set, get);
+    expect(Object.keys(sliceDirect).sort()).toEqual(Object.keys(sliceViaReexport).sort());
+  });
+
+  it("integrity module: initial state values are correct", () => {
+    const set = vi.fn();
+    const get = (() => ({})) as any;
+    const slice = createIntegrityStateSliceDirect(set, get);
+    expect(slice.integrityReport).toBeNull();
+    expect(slice.integrityLoading).toBe(false);
+    expect(slice.integrityHistory).toEqual([]);
+    expect(slice.reminderDue).toBe(false);
+    expect(slice.healthCheckReport).toBeNull();
+    expect(slice.healthCheckLoading).toBe(false);
   });
 
   it("兼容层：store 仍暴露原有 viewer/integrity/batch action 名称", () => {
