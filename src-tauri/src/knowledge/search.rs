@@ -11,6 +11,7 @@ const SCORE_THRESHOLD: f64 = 0.25;
 /// 1. Embed the query text
 /// 2. Compute cosine similarity against all stored embeddings
 /// 3. Return top-k results with chunk content and document metadata
+#[allow(dead_code)]
 pub fn search(
     db: &Database,
     embedder: &Embedder,

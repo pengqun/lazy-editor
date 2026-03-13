@@ -21,7 +21,6 @@ impl Default for ChunkOptions {
 
 pub struct TextChunk {
     pub content: String,
-    pub index: usize,
     pub approx_tokens: usize,
 }
 
@@ -51,11 +50,9 @@ pub fn chunk_text(text: &str, options: &ChunkOptions) -> Vec<TextChunk> {
         if !current_chunk.is_empty()
             && current_chunk.len() + para.len() + 2 > options.max_chars
         {
-            let chunk_index = chunks.len();
             let approx_tokens = current_chunk.len() / 4; // rough approximation
             chunks.push(TextChunk {
                 content: current_chunk.clone(),
-                index: chunk_index,
                 approx_tokens,
             });
 
@@ -89,11 +86,9 @@ pub fn chunk_text(text: &str, options: &ChunkOptions) -> Vec<TextChunk> {
 
     // Don't forget the last chunk
     if !current_chunk.is_empty() {
-        let chunk_index = chunks.len();
         let approx_tokens = current_chunk.len() / 4;
         chunks.push(TextChunk {
             content: current_chunk,
-            index: chunk_index,
             approx_tokens,
         });
     }
@@ -126,7 +121,6 @@ mod tests {
         let chunks = chunk_text("Hello world", &ChunkOptions::default());
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].content, "Hello world");
-        assert_eq!(chunks[0].index, 0);
     }
 
     #[test]
@@ -153,19 +147,6 @@ mod tests {
         );
         for chunk in &chunks {
             assert!(!chunk.content.is_empty());
-        }
-    }
-
-    #[test]
-    fn chunk_indices_are_sequential() {
-        let opts = ChunkOptions {
-            max_chars: 30,
-            overlap_chars: 0,
-        };
-        let text = "Short para A.\n\nShort para B.\n\nShort para C.";
-        let chunks = chunk_text(text, &opts);
-        for (i, chunk) in chunks.iter().enumerate() {
-            assert_eq!(chunk.index, i);
         }
     }
 
