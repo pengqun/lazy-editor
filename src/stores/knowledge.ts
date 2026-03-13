@@ -27,6 +27,12 @@ import {
 } from "../lib/integrity-reminder";
 import { type HealthCheckReport, buildHealthCheckReport } from "../lib/integrity-healthcheck";
 import {
+  type BatchExecutionLog,
+  type BatchFixPlan,
+  buildBatchFixPlan,
+  executeBatchFixPlan,
+} from "../lib/integrity-batch-plan";
+import {
   type RetrievalPresetId,
   type RetrievalSettingsSource,
   RETRIEVAL_PRESETS,
@@ -211,6 +217,21 @@ interface KnowledgeState {
   runHealthCheck: () => Promise<void>;
   /** Clear the health check report. */
   clearHealthCheck: () => void;
+
+  /** Current batch fix plan (preview state, not yet executed). */
+  batchFixPlan: BatchFixPlan | null;
+  /** Whether batch execution is in progress. */
+  batchExecuting: boolean;
+  /** Execution log from the last batch run (session-only). */
+  batchExecutionLog: BatchExecutionLog | null;
+  /** Generate a batch fix plan from the current health check report. */
+  buildBatchPlan: () => void;
+  /** Clear the batch fix plan (cancel preview). */
+  clearBatchPlan: () => void;
+  /** Confirm and execute the current batch fix plan. */
+  confirmBatchPlan: () => Promise<void>;
+  /** Clear the execution log. */
+  clearBatchLog: () => void;
 }
 
 // Initialise from persisted preset (if any), falling back to defaults
@@ -625,5 +646,53 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     }
   },
 
-  clearHealthCheck: () => set({ healthCheckReport: null }),
+  clearHealthCheck: () => set({ healthCheckReport: null, batchFixPlan: null, batchExecutionLog: null }),
+
+  batchFixPlan: null,
+  batchExecuting: false,
+  batchExecutionLog: null,
+
+  buildBatchPlan: () => {
+    const { healthCheckReport } = get();
+    if (!healthCheckReport) return;
+    const plan = buildBatchFixPlan(healthCheckReport);
+    set({ batchFixPlan: plan, batchExecutionLog: null });
+  },
+
+  clearBatchPlan: () => set({ batchFixPlan: null }),
+
+  confirmBatchPlan: async () => {
+    const { batchFixPlan, integrityReport, relinkDocument, removeStaleDocuments, setReminderSettings } = get();
+    if (!batchFixPlan) return;
+
+    set({ batchExecuting: true });
+    try {
+      const movedEntries = (integrityReport?.entries ?? [])
+        .filter((e) => e.status === "moved")
+        .map((e) => ({ id: e.id, movedCandidate: e.movedCandidate }));
+
+      const log = await executeBatchFixPlan(batchFixPlan, {
+        relinkDocument,
+        removeStaleDocuments,
+        enableReminders: () => setReminderSettings({ enabled: true }),
+        adjustFrequency: (freq) => setReminderSettings({ frequency: freq as "daily" | "every3days" | "weekly" }),
+        movedEntries,
+      });
+
+      set({ batchExecutionLog: log, batchFixPlan: null, batchExecuting: false });
+
+      const { success, failed, skipped } = log.summary;
+      if (failed > 0) {
+        toast.error(`Batch: ${success} ok, ${failed} failed, ${skipped} skipped`);
+      } else {
+        toast.success(`Batch complete: ${success} applied, ${skipped} skipped`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`Batch execution failed: ${message}`);
+      set({ batchExecuting: false });
+    }
+  },
+
+  clearBatchLog: () => set({ batchExecutionLog: null }),
 }));

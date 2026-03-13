@@ -32,6 +32,7 @@ import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdo
 import { type HealthThresholdSettings, type ThresholdSource, DEFAULT_THRESHOLD_SETTINGS, TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge, toHealthThresholds } from "../../lib/integrity-health";
 import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
 import type { HealthCheckReport, RecommendationAction } from "../../lib/integrity-healthcheck";
+import type { BatchExecutionLog, BatchFixPlan } from "../../lib/integrity-batch-plan";
 import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
 import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
@@ -82,6 +83,13 @@ export function KnowledgePanel() {
     healthCheckLoading,
     runHealthCheck,
     clearHealthCheck,
+    batchFixPlan,
+    batchExecuting,
+    batchExecutionLog,
+    buildBatchPlan,
+    clearBatchPlan,
+    confirmBatchPlan,
+    clearBatchLog,
   } = useKnowledgeStore();
 
   const activeFilePath = useFilesStore((s) => s.activeFilePath);
@@ -412,6 +420,13 @@ export function KnowledgePanel() {
           onEnableReminders={() => setReminderSettings({ enabled: true })}
           onAdjustFrequency={(freq) => setReminderSettings({ frequency: freq })}
           onClose={clearHealthCheck}
+          batchFixPlan={batchFixPlan}
+          batchExecuting={batchExecuting}
+          batchExecutionLog={batchExecutionLog}
+          onBuildBatchPlan={buildBatchPlan}
+          onClearBatchPlan={clearBatchPlan}
+          onConfirmBatchPlan={confirmBatchPlan}
+          onClearBatchLog={clearBatchLog}
         />
       )}
 
@@ -824,6 +839,18 @@ const CONFIDENCE_COLORS: Record<string, string> = {
   low: "text-text-tertiary border-border",
 };
 
+const OUTCOME_COLORS: Record<string, string> = {
+  success: "text-emerald-400",
+  failed: "text-red-400",
+  skipped: "text-text-tertiary",
+};
+
+const OUTCOME_ICONS: Record<string, string> = {
+  success: "✓",
+  failed: "✗",
+  skipped: "—",
+};
+
 function HealthCheckCard({
   report: hcReport,
   integrityReport,
@@ -833,6 +860,13 @@ function HealthCheckCard({
   onEnableReminders,
   onAdjustFrequency,
   onClose,
+  batchFixPlan,
+  batchExecuting,
+  batchExecutionLog,
+  onBuildBatchPlan,
+  onClearBatchPlan,
+  onConfirmBatchPlan,
+  onClearBatchLog,
 }: {
   report: HealthCheckReport;
   integrityReport: IntegrityReport | null;
@@ -842,6 +876,13 @@ function HealthCheckCard({
   onEnableReminders: () => void;
   onAdjustFrequency: (freq: import("../../lib/integrity-reminder").ReminderFrequency) => void;
   onClose: () => void;
+  batchFixPlan: BatchFixPlan | null;
+  batchExecuting: boolean;
+  batchExecutionLog: BatchExecutionLog | null;
+  onBuildBatchPlan: () => void;
+  onClearBatchPlan: () => void;
+  onConfirmBatchPlan: () => Promise<void>;
+  onClearBatchLog: () => void;
 }) {
   const handleExport = async (format: "json" | "md") => {
     const { save } = await import("@tauri-apps/plugin-dialog");
@@ -880,6 +921,8 @@ function HealthCheckCard({
         break;
     }
   };
+
+  const hasActionableRecs = hcReport.recommendations.some((r) => r.id !== "all-clear");
 
   return (
     <div className="border-b border-border">
@@ -979,6 +1022,139 @@ function HealthCheckCard({
             </div>
           ))}
         </div>
+
+        {/* Batch Fix Plan button */}
+        {hasActionableRecs && !batchFixPlan && !batchExecutionLog && (
+          <button
+            type="button"
+            onClick={onBuildBatchPlan}
+            className="w-full text-[11px] px-2 py-1.5 rounded border border-border text-text-secondary hover:bg-surface-3 transition-colors flex items-center justify-center gap-1"
+          >
+            <Activity size={11} />
+            Batch Fix Plan
+          </button>
+        )}
+
+        {/* Batch Fix Plan Preview */}
+        {batchFixPlan && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
+                Fix Plan Preview
+              </span>
+              <button
+                type="button"
+                onClick={onClearBatchPlan}
+                className="p-0.5 hover:bg-surface-3 rounded"
+                title="Cancel plan"
+              >
+                <X size={10} className="text-text-tertiary" />
+              </button>
+            </div>
+            <div className="text-[10px] text-text-tertiary">
+              {batchFixPlan.autoCount} auto · {batchFixPlan.manualCount} manual-only (skipped)
+            </div>
+            <div className="space-y-0.5 max-h-40 overflow-y-auto">
+              {batchFixPlan.steps.map((step) => (
+                <div
+                  key={step.stepId}
+                  className={cn(
+                    "flex items-start gap-1.5 py-1 px-1.5 rounded text-[10px]",
+                    step.kind === "auto" ? "bg-surface-2" : "bg-surface-1 opacity-60",
+                  )}
+                >
+                  <span className="shrink-0 tabular-nums text-text-tertiary mt-px">
+                    {step.order + 1}.
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className="text-text-primary">{step.recommendation.title}</span>
+                      <span className={cn(
+                        "text-[8px] uppercase leading-none px-1 py-px border rounded",
+                        step.kind === "auto"
+                          ? "text-emerald-400 border-emerald-400/30"
+                          : "text-text-tertiary border-border",
+                      )}>
+                        {step.kind === "auto" ? "auto" : "manual"}
+                      </span>
+                    </div>
+                    <p className="text-text-tertiary leading-snug">{step.impact}</p>
+                    {step.manualReason && (
+                      <p className="text-amber-400/70 leading-snug italic">{step.manualReason}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {batchFixPlan.autoCount > 0 && (
+              <button
+                type="button"
+                onClick={onConfirmBatchPlan}
+                disabled={batchExecuting}
+                className="w-full text-[11px] px-2 py-1.5 rounded bg-accent text-white hover:bg-accent/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+              >
+                {batchExecuting ? (
+                  <>
+                    <Loader2 size={11} className="animate-spin" />
+                    Executing…
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck size={11} />
+                    Confirm & Execute {batchFixPlan.autoCount} step{batchFixPlan.autoCount > 1 ? "s" : ""}
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Batch Execution Log */}
+        {batchExecutionLog && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
+                Execution Results
+              </span>
+              <button
+                type="button"
+                onClick={onClearBatchLog}
+                className="p-0.5 hover:bg-surface-3 rounded"
+                title="Dismiss log"
+              >
+                <X size={10} className="text-text-tertiary" />
+              </button>
+            </div>
+            <div className="text-[10px] text-text-tertiary">
+              <span className="text-emerald-400">{batchExecutionLog.summary.success} ok</span>
+              {batchExecutionLog.summary.failed > 0 && (
+                <span className="text-red-400"> · {batchExecutionLog.summary.failed} failed</span>
+              )}
+              {batchExecutionLog.summary.skipped > 0 && (
+                <span> · {batchExecutionLog.summary.skipped} skipped</span>
+              )}
+            </div>
+            <div className="space-y-0.5 max-h-32 overflow-y-auto">
+              {batchExecutionLog.results.map((result) => (
+                <div
+                  key={result.stepId}
+                  className="flex items-start gap-1.5 py-0.5 px-1.5 rounded bg-surface-2 text-[10px]"
+                >
+                  <span className={cn("shrink-0 font-mono", OUTCOME_COLORS[result.outcome])}>
+                    {OUTCOME_ICONS[result.outcome]}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-text-primary">{result.stepId.replace("step-", "")}</span>
+                    <span className="text-text-tertiary"> — {result.message}</span>
+                    {result.durationMs > 0 && (
+                      <span className="text-text-tertiary"> ({result.durationMs}ms)</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
