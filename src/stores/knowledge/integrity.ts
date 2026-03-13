@@ -27,7 +27,7 @@ import {
 import { buildHealthCheckReport } from "../../lib/integrity-healthcheck";
 import { loadIntegrityTrendHistory, syncIntegrityTrendHistory } from "../../lib/integrity-trend-history";
 import { toast } from "../toast";
-import type { IntegrityReport, IntegrityScanSnapshot, KnowledgeState } from "../knowledge";
+import type { IntegrityReport, IntegrityScanSnapshot, KnowledgeState } from "./types";
 
 export type IntegrityStateSlice = Pick<KnowledgeState,
   "integrityReport"

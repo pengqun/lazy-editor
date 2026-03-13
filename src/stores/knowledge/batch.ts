@@ -12,7 +12,7 @@ import {
   saveBatchImpactSummary,
 } from "../../lib/integrity-batch-impact";
 import { toast } from "../toast";
-import type { IntegrityReport, KnowledgeState } from "../knowledge";
+import type { IntegrityReport, KnowledgeState } from "./types";
 
 const inFlightBatchStepRetries = new Set<string>();
 

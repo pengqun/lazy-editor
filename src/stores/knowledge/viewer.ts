@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ChunkContext, KnowledgeState, ViewChunkErrorKind, ViewChunkErrorState } from "../knowledge";
+import type { ChunkContext, KnowledgeState, ViewChunkErrorKind, ViewChunkErrorState } from "./types";
 
 export type ViewerStateSlice = Pick<KnowledgeState,
   "viewedChunk"
