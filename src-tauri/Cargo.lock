@@ -2489,6 +2489,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "ego-tree",
  "env_logger",
  "fastembed",
  "futures",
