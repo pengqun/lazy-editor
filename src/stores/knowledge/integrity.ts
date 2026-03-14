@@ -27,6 +27,7 @@ import {
 import { buildHealthCheckReport } from "../../lib/integrity-healthcheck";
 import { loadIntegrityTrendHistory, syncIntegrityTrendHistory } from "../../lib/integrity-trend-history";
 import { toast } from "../toast";
+import { ensureHistoryArray, extractErrorMessage, lastScanAt } from "./integrity-utils";
 import type { IntegrityReport, IntegrityScanSnapshot, KnowledgeState } from "./types";
 
 export type IntegrityStateSlice = Pick<KnowledgeState,
@@ -76,7 +77,7 @@ export function createIntegrityStateSlice(
         // Refresh history after scan (auto-saved by backend)
         await get().loadIntegrityHistory();
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = extractErrorMessage(err);
         console.error("Failed to check KB integrity:", message);
         toast.error(`Integrity check failed: ${message}`);
         set({ integrityLoading: false });
@@ -91,7 +92,7 @@ export function createIntegrityStateSlice(
         await get().checkIntegrity();
         await get().loadDocuments();
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = extractErrorMessage(err);
         console.error("Failed to relink document:", message);
         toast.error(`Relink failed: ${message}`);
       }
@@ -106,7 +107,7 @@ export function createIntegrityStateSlice(
         await get().loadDocuments();
         await get().checkIntegrity();
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = extractErrorMessage(err);
         console.error("Failed to remove stale documents:", message);
         toast.error(`Remove failed: ${message}`);
       }
@@ -117,13 +118,11 @@ export function createIntegrityStateSlice(
     loadIntegrityHistory: async () => {
       try {
         const history = await invoke<IntegrityScanSnapshot[]>("get_integrity_history");
-        const safeHistory = Array.isArray(history) ? history : [];
+        const safeHistory = ensureHistoryArray(history);
         const trendHistory = syncIntegrityTrendHistory(get()._workspacePath, safeHistory);
         set({ integrityHistory: safeHistory, integrityTrendHistory: trendHistory });
         // Re-evaluate reminder whenever history changes
-        const state = get();
-        const lastScanAt = safeHistory.length > 0 ? safeHistory[0].scannedAt : null;
-        set({ reminderDue: isReminderDue(state.reminderSettings, lastScanAt) });
+        set({ reminderDue: isReminderDue(get().reminderSettings, lastScanAt(safeHistory)) });
       } catch (err) {
         console.error("Failed to load integrity history:", err);
       }
@@ -141,10 +140,9 @@ export function createIntegrityStateSlice(
         snoozedUntil: null,
       };
       saveReminderSettings(updated);
-      const lastScanAt = get().integrityHistory[0]?.scannedAt ?? null;
       set({
         reminderSettings: updated,
-        reminderDue: isReminderDue(updated, lastScanAt),
+        reminderDue: isReminderDue(updated, lastScanAt(get().integrityHistory)),
       });
     },
 
@@ -160,8 +158,7 @@ export function createIntegrityStateSlice(
 
     refreshReminderDue: () => {
       const { reminderSettings, integrityHistory } = get();
-      const lastScanAt = integrityHistory[0]?.scannedAt ?? null;
-      set({ reminderDue: isReminderDue(reminderSettings, lastScanAt) });
+      set({ reminderDue: isReminderDue(reminderSettings, lastScanAt(integrityHistory)) });
     },
 
     healthThresholds: loadThresholdSettings(),
@@ -237,13 +234,12 @@ export function createIntegrityStateSlice(
 
         // 2. Refresh history (auto-saved by backend)
         const history = await invoke<IntegrityScanSnapshot[]>("get_integrity_history");
-        const safeHistory = Array.isArray(history) ? history : [];
+        const safeHistory = ensureHistoryArray(history);
         const trendHistory = syncIntegrityTrendHistory(get()._workspacePath, safeHistory);
         set({ integrityHistory: safeHistory, integrityTrendHistory: trendHistory });
 
         // Re-evaluate reminder
-        const lastScanAt = safeHistory.length > 0 ? safeHistory[0].scannedAt : null;
-        set({ reminderDue: isReminderDue(get().reminderSettings, lastScanAt) });
+        set({ reminderDue: isReminderDue(get().reminderSettings, lastScanAt(safeHistory)) });
 
         // 3. Build health check report
         const { healthThresholds, reminderSettings } = get();
@@ -257,7 +253,7 @@ export function createIntegrityStateSlice(
         set({ healthCheckReport: hcReport, healthCheckLoading: false });
         toast.success("Health check complete");
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = extractErrorMessage(err);
         console.error("Health check failed:", message);
         toast.error(`Health check failed: ${message}`);
         set({ healthCheckLoading: false });
