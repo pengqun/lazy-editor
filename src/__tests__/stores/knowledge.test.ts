@@ -913,7 +913,7 @@ describe("useKnowledgeStore", () => {
 
       expect(retrySpy).toHaveBeenCalledTimes(1);
 
-      resolveRetry?.({
+      resolveRetry!({
         stepId: "step-remove-missing",
         recommendationId: "remove-missing",
         actionType: "remove-stale",

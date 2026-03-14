@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
-  type HealthThresholdSettings,
   type ThresholdSource,
   DEFAULT_THRESHOLD_SETTINGS,
   clampThresholdSettings,

@@ -406,8 +406,8 @@ describe("knowledge store slices", () => {
     const executeSpy = vi.spyOn(batchPlanModule, "executeBatchFixPlan").mockResolvedValueOnce({
       startedAt: "2026-03-14T00:00:00Z",
       completedAt: "2026-03-14T00:00:01Z",
-      results: [{ stepId: "step-1", outcome: "success", message: "ok", attempts: 1, itemsChanged: 0 }],
-      summary: { success: 1, failed: 0, skipped: 0, itemChanges: { success: 0, failed: 0 } },
+      results: [{ stepId: "step-1", recommendationId: "enable-reminders", actionType: "enable-reminders", status: "success" as const, outcome: "success", message: "ok", durationMs: 1, attempts: 1, affectedItems: 0 }],
+      summary: { success: 1, failed: 0, skipped: 0, itemChanges: { success: 0, failed: 0, skipped: 0, total: 0 } },
     });
 
     await slice.confirmBatchPlan();
@@ -455,7 +455,7 @@ describe("knowledge store slices", () => {
     Object.assign(state, slice);
 
     const retrySpy = vi.spyOn(batchPlanModule, "executeBatchStep").mockResolvedValueOnce({
-      stepId: "step-1", outcome: "success", message: "ok", attempts: 2, itemsChanged: 1,
+      stepId: "step-1", recommendationId: "enable-reminders", actionType: "enable-reminders", status: "success" as const, outcome: "success", message: "ok", durationMs: 1, attempts: 2, affectedItems: 1,
     });
 
     await slice.retryBatchStep("step-1");
@@ -499,7 +499,7 @@ describe("knowledge store slices", () => {
     Object.assign(state, slice);
 
     const retrySpy = vi.spyOn(batchPlanModule, "executeBatchStep").mockResolvedValueOnce({
-      stepId: "step-2", outcome: "failed", message: "still broken", attempts: 2, itemsChanged: 0,
+      stepId: "step-2", recommendationId: "enable-reminders", actionType: "enable-reminders", status: "failed" as const, outcome: "failed", message: "still broken", durationMs: 1, attempts: 2, affectedItems: 0,
     });
 
     await slice.retryBatchStep("step-2");
