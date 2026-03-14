@@ -12,6 +12,7 @@ import {
   saveBatchImpactSummary,
 } from "../../lib/integrity-batch-impact";
 import { toast } from "../toast";
+import { extractErrorMessage } from "./integrity-utils";
 import type { IntegrityReport, KnowledgeState } from "./types";
 
 const inFlightBatchStepRetries = new Set<string>();
@@ -121,8 +122,7 @@ export function createBatchActionSlice(
         await get().loadDocuments();
         await get().checkIntegrity();
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        toast.error(`Batch execution failed: ${message}`);
+        toast.error(`Batch execution failed: ${extractErrorMessage(err)}`);
         set({ batchExecuting: false });
       }
     },

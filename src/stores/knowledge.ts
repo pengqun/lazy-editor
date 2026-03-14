@@ -17,6 +17,7 @@ import { createBatchActionSlice, createBatchStateSlice } from "./knowledge/batch
 import { createIntegrityStateSlice } from "./knowledge/integrity";
 import { createViewerStateSlice } from "./knowledge/viewer";
 import { toast } from "./toast";
+import { extractErrorMessage } from "./knowledge/integrity-utils";
 
 // Re-exports: types (from ./knowledge/types)
 export type {
@@ -139,7 +140,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       await get().loadDocuments();
       toast.success("Document added to knowledge base");
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err);
       console.error("Failed to ingest file:", message);
       toast.error(message);
     } finally {
@@ -154,7 +155,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       await get().loadDocuments();
       toast.success("Text added to knowledge base");
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err);
       console.error("Failed to ingest text:", message);
       toast.error(message);
     } finally {
