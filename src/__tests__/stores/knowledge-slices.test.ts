@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createBatchActionSlice, createIntegrityStateSlice, createViewerStateSlice, useKnowledgeStore } from "@/stores/knowledge";
+import { createBatchActionSlice, createBatchStateSlice, createIntegrityStateSlice, createViewerStateSlice, useKnowledgeStore } from "@/stores/knowledge";
 import {
   buildViewChunkError,
   classifyViewChunkError,
@@ -9,6 +9,8 @@ import {
 import {
   createIntegrityStateSlice as createIntegrityStateSliceDirect,
 } from "@/stores/knowledge/integrity";
+import { createBatchActionSlice as createBatchActionSliceDirect, createBatchStateSlice as createBatchStateSliceDirect } from "@/stores/knowledge/batch";
+import * as batchPlanModule from "@/lib/integrity-batch-plan";
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -363,6 +365,176 @@ describe("knowledge store slices", () => {
     expect(slice.reminderDue).toBe(false);
     expect(slice.healthCheckReport).toBeNull();
     expect(slice.healthCheckLoading).toBe(false);
+  });
+
+  it("batch module: direct import produces identical slice keys", () => {
+    const stateSlice = createBatchStateSlice();
+    const stateSliceDirect = createBatchStateSliceDirect();
+    expect(Object.keys(stateSliceDirect).sort()).toEqual(Object.keys(stateSlice).sort());
+
+    const set = vi.fn();
+    const get = (() => ({})) as any;
+    const actionSlice = createBatchActionSlice(set, get);
+    const actionSliceDirect = createBatchActionSliceDirect(set, get);
+    expect(Object.keys(actionSliceDirect).sort()).toEqual(Object.keys(actionSlice).sort());
+  });
+
+  it("cross-slice: confirmBatchPlan calls loadDocuments + checkIntegrity after execution", async () => {
+    const loadDocuments = vi.fn().mockResolvedValue(undefined);
+    const checkIntegrity = vi.fn().mockResolvedValue(undefined);
+    const setReminderSettings = vi.fn();
+    const state: Record<string, any> = {
+      _workspacePath: null,
+      integrityReport: null,
+      setReminderSettings,
+      loadDocuments,
+      checkIntegrity,
+      batchFixPlan: {
+        generatedAt: "2026-03-14T00:00:00Z",
+        steps: [{ stepId: "step-1", type: "enable-reminders", title: "Enable", description: "d", actionPayload: {} }],
+      },
+    };
+    const set = vi.fn((partial: any) => {
+      const patch = typeof partial === "function" ? partial(state) : partial;
+      Object.assign(state, patch);
+    });
+    const get = () => state as any;
+    const slice = createBatchActionSlice(set as any, get as any);
+    Object.assign(state, slice);
+
+    // Mock executeBatchFixPlan to return a minimal successful log
+    const executeSpy = vi.spyOn(batchPlanModule, "executeBatchFixPlan").mockResolvedValueOnce({
+      startedAt: "2026-03-14T00:00:00Z",
+      completedAt: "2026-03-14T00:00:01Z",
+      results: [{ stepId: "step-1", outcome: "success", message: "ok", attempts: 1, itemsChanged: 0 }],
+      summary: { success: 1, failed: 0, skipped: 0, itemChanges: { success: 0, failed: 0 } },
+    });
+
+    await slice.confirmBatchPlan();
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    // Cross-slice calls must happen after batch execution
+    expect(loadDocuments).toHaveBeenCalledTimes(1);
+    expect(checkIntegrity).toHaveBeenCalledTimes(1);
+    // Batch state must be cleaned up
+    expect(state.batchFixPlan).toBeNull();
+    expect(state.batchExecuting).toBe(false);
+    expect(state.batchExecutionLog).toBeTruthy();
+
+    executeSpy.mockRestore();
+  });
+
+  it("cross-slice: retryBatchStep calls loadDocuments + checkIntegrity on success", async () => {
+    const loadDocuments = vi.fn().mockResolvedValue(undefined);
+    const checkIntegrity = vi.fn().mockResolvedValue(undefined);
+    const setReminderSettings = vi.fn();
+    const state: Record<string, any> = {
+      _workspacePath: null,
+      integrityReport: null,
+      setReminderSettings,
+      loadDocuments,
+      checkIntegrity,
+      batchLastPlan: {
+        generatedAt: "2026-03-14T00:00:00Z",
+        steps: [{ stepId: "step-1", type: "enable-reminders", title: "Enable", description: "d", actionPayload: {} }],
+      },
+      batchExecutionLog: {
+        startedAt: "2026-03-14T00:00:00Z",
+        completedAt: "2026-03-14T00:00:01Z",
+        results: [{ stepId: "step-1", outcome: "failed", message: "err", attempts: 1, itemsChanged: 0 }],
+        summary: { success: 0, failed: 1, skipped: 0, itemChanges: { success: 0, failed: 0 } },
+      },
+      batchStepStatuses: { "step-1": "failed" },
+    };
+    const set = vi.fn((partial: any) => {
+      const patch = typeof partial === "function" ? partial(state) : partial;
+      Object.assign(state, patch);
+    });
+    const get = () => state as any;
+    const slice = createBatchActionSlice(set as any, get as any);
+    Object.assign(state, slice);
+
+    const retrySpy = vi.spyOn(batchPlanModule, "executeBatchStep").mockResolvedValueOnce({
+      stepId: "step-1", outcome: "success", message: "ok", attempts: 2, itemsChanged: 1,
+    });
+
+    await slice.retryBatchStep("step-1");
+
+    expect(retrySpy).toHaveBeenCalledTimes(1);
+    // On success, cross-slice refresh must happen
+    expect(loadDocuments).toHaveBeenCalledTimes(1);
+    expect(checkIntegrity).toHaveBeenCalledTimes(1);
+
+    retrySpy.mockRestore();
+  });
+
+  it("cross-slice: retryBatchStep does NOT call loadDocuments/checkIntegrity on failure", async () => {
+    const loadDocuments = vi.fn().mockResolvedValue(undefined);
+    const checkIntegrity = vi.fn().mockResolvedValue(undefined);
+    const setReminderSettings = vi.fn();
+    const state: Record<string, any> = {
+      _workspacePath: null,
+      integrityReport: null,
+      setReminderSettings,
+      loadDocuments,
+      checkIntegrity,
+      batchLastPlan: {
+        generatedAt: "2026-03-14T00:00:00Z",
+        steps: [{ stepId: "step-2", type: "enable-reminders", title: "Enable", description: "d", actionPayload: {} }],
+      },
+      batchExecutionLog: {
+        startedAt: "2026-03-14T00:00:00Z",
+        completedAt: "2026-03-14T00:00:01Z",
+        results: [{ stepId: "step-2", outcome: "failed", message: "err", attempts: 1, itemsChanged: 0 }],
+        summary: { success: 0, failed: 1, skipped: 0, itemChanges: { success: 0, failed: 0 } },
+      },
+      batchStepStatuses: { "step-2": "failed" },
+    };
+    const set = vi.fn((partial: any) => {
+      const patch = typeof partial === "function" ? partial(state) : partial;
+      Object.assign(state, patch);
+    });
+    const get = () => state as any;
+    const slice = createBatchActionSlice(set as any, get as any);
+    Object.assign(state, slice);
+
+    const retrySpy = vi.spyOn(batchPlanModule, "executeBatchStep").mockResolvedValueOnce({
+      stepId: "step-2", outcome: "failed", message: "still broken", attempts: 2, itemsChanged: 0,
+    });
+
+    await slice.retryBatchStep("step-2");
+
+    // On failure, cross-slice refresh must NOT happen
+    expect(loadDocuments).not.toHaveBeenCalled();
+    expect(checkIntegrity).not.toHaveBeenCalled();
+
+    retrySpy.mockRestore();
+  });
+
+  it("cross-slice: clearHealthCheck resets integrity healthCheckReport alongside batch state", () => {
+    const state: Record<string, any> = {
+      healthCheckReport: { generatedAt: "t", metrics: {}, trend: {}, recommendations: [] },
+      batchFixPlan: { steps: [] },
+      batchLastPlan: { steps: [] },
+      batchExecutionLog: { results: [] },
+      batchStepStatuses: { "step-1": "success" },
+    };
+    const set = vi.fn((partial: any) => {
+      const patch = typeof partial === "function" ? partial(state) : partial;
+      Object.assign(state, patch);
+    });
+    const get = () => state as any;
+    const slice = createBatchActionSlice(set as any, get as any);
+
+    slice.clearHealthCheck();
+
+    // Integrity state field
+    expect(state.healthCheckReport).toBeNull();
+    // Batch state fields
+    expect(state.batchFixPlan).toBeNull();
+    expect(state.batchLastPlan).toBeNull();
+    expect(state.batchExecutionLog).toBeNull();
+    expect(state.batchStepStatuses).toEqual({});
   });
 
   it("兼容层：store 仍暴露原有 viewer/integrity/batch action 名称", () => {
