@@ -7,15 +7,25 @@ on:
 
 jobs:
   version-gate:
-    name: Version consistency gate
+    name: "Version gate (Node ${{ matrix.node-version }})"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 24]
+        include:
+          - node-version: 20
+            experimental: false
+          - node-version: 24
+            experimental: true
+    continue-on-error: ${{ matrix.experimental }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       - name: Install JS deps
@@ -23,6 +33,13 @@ jobs:
 
       - name: Verify manifest version consistency (fail-fast)
         run: npm run version:check
+
+      - name: "Node ${{ matrix.node-version }} compat: build + test"
+        if: matrix.node-version != 20
+        run: |
+          echo "::notice::Node ${{ matrix.node-version }} compatibility check (experimental)"
+          npm run build:selftest
+          npm test
 
   smoke-desktop-editor:
     name: Desktop smoke test (Tauri self-test)
