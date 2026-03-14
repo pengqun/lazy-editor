@@ -209,14 +209,24 @@ pub async fn remove_kb_document(id: i64, state: State<'_, AppState>) -> Result<(
 }
 
 /// Retrieve a KB chunk with surrounding context for source recall.
+///
+/// Returns structured error codes for frontend classification:
+/// - `chunk-not-found:<id>` — no chunk with this ID exists
+/// - `chunk-error:<details>` — unexpected database error
 #[tauri::command]
 pub async fn get_kb_chunk(
     #[allow(non_snake_case)] chunkId: i64,
     state: State<'_, AppState>,
 ) -> Result<ChunkContext, String> {
     let db = state.db.lock().await;
-    db.get_chunk_with_context(chunkId)
-        .map_err(|e| format!("Failed to get chunk: {}", e))
+    db.get_chunk_with_context(chunkId).map_err(|e| {
+        let msg = e.to_string();
+        if msg.contains("no rows") || msg.contains("No rows") || msg.contains("QueryReturnedNoRows") {
+            format!("chunk-not-found:{}", chunkId)
+        } else {
+            format!("chunk-error:{}", msg)
+        }
+    })
 }
 
 // ── KB Integrity ──

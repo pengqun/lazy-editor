@@ -36,12 +36,13 @@ export function buildViewChunkError(kind: ViewChunkErrorKind): ViewChunkErrorSta
 }
 
 export function classifyViewChunkError(err: unknown): ViewChunkErrorKind {
-  const message = String(err instanceof Error ? err.message : err).toLowerCase();
+  const message = String(err instanceof Error ? err.message : err);
+  // Structured error codes from Rust backend (preferred path)
+  if (message.startsWith("chunk-not-found:")) return "chunk-missing";
+  if (message.startsWith("chunk-error:")) return "chunk-missing";
+  // Frontend-only error kinds (set before backend call)
   if (message.includes("malformed")) return "malformed-link";
   if (message.includes("source") && message.includes("missing")) return "source-missing";
-  if (message.includes("query returned no rows") || message.includes("no rows")) {
-    return "chunk-missing";
-  }
   return "chunk-missing";
 }
 

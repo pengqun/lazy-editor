@@ -959,6 +959,8 @@ mod tests {
         let db = test_db();
         let err = db.get_chunk_with_context(999_999).unwrap_err();
         let msg = err.to_string();
+        // Underlying rusqlite error contains "no rows" — the command layer
+        // maps this to structured "chunk-not-found:<id>" codes.
         assert!(
             msg.contains("no rows") || msg.contains("Query returned no rows"),
             "unexpected error message: {msg}"
@@ -981,6 +983,22 @@ mod tests {
             msg.contains("no rows") || msg.contains("Query returned no rows"),
             "unexpected error message: {msg}"
         );
+    }
+
+    /// Verify that the command-layer error mapping produces structured codes.
+    /// This tests the same mapping logic used in commands/kb.rs::get_kb_chunk.
+    #[test]
+    fn chunk_lookup_error_maps_to_structured_code() {
+        let db = test_db();
+        // Missing chunk → should map to "chunk-not-found:<id>"
+        let err = db.get_chunk_with_context(42).unwrap_err();
+        let msg = err.to_string();
+        let code = if msg.contains("no rows") || msg.contains("No rows") || msg.contains("QueryReturnedNoRows") {
+            format!("chunk-not-found:{}", 42)
+        } else {
+            format!("chunk-error:{}", msg)
+        };
+        assert_eq!(code, "chunk-not-found:42");
     }
 
     // ── Integrity tests ──

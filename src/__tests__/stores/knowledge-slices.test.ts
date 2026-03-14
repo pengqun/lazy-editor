@@ -275,18 +275,22 @@ describe("knowledge store slices", () => {
     expect(buildViewChunkError("malformed-link").kind).toBe("malformed-link");
   });
 
-  it("viewer module: classifyViewChunkError maps error messages to kinds", () => {
+  it("viewer module: classifyViewChunkError maps structured error codes to kinds", () => {
+    // Structured codes from Rust backend
+    expect(classifyViewChunkError("chunk-not-found:42")).toBe("chunk-missing");
+    expect(classifyViewChunkError("chunk-not-found:999")).toBe("chunk-missing");
+    expect(classifyViewChunkError("chunk-error:database locked")).toBe("chunk-missing");
+    // Frontend-only error kinds
     expect(classifyViewChunkError(new Error("malformed link"))).toBe("malformed-link");
     expect(classifyViewChunkError(new Error("source is missing"))).toBe("source-missing");
-    expect(classifyViewChunkError(new Error("query returned no rows"))).toBe("chunk-missing");
-    expect(classifyViewChunkError(new Error("no rows found"))).toBe("chunk-missing");
+    // Fallback for unknown errors
     expect(classifyViewChunkError("unknown error")).toBe("chunk-missing");
   });
 
   it("viewer module: viewChunk failure sets error state", async () => {
     const set = vi.fn();
     const slice = createViewerStateSlice(set);
-    mockedInvoke.mockRejectedValueOnce(new Error("query returned no rows"));
+    mockedInvoke.mockRejectedValueOnce("chunk-not-found:42");
 
     await slice.viewChunk(42);
 
