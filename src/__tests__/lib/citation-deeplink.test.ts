@@ -299,7 +299,7 @@ describe("navigateToCitationSource", () => {
     });
   });
 
-  it("classifies source-missing when document id is absent locally", () => {
+  it("classifies source-missing via backend when document id does not exist", async () => {
     useKnowledgeStore.setState({
       documents: [
         {
@@ -313,9 +313,16 @@ describe("navigateToCitationSource", () => {
       ],
     });
 
+    // Backend returns source-not-found error code
+    mockedInvoke.mockRejectedValueOnce("source-not-found:12345");
+
     navigateToCitationSource(88, "query", 0.5, 12345);
 
-    expect(mockedInvoke).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(useKnowledgeStore.getState().viewChunkLoading).toBe(false);
+    });
+
+    expect(mockedInvoke).toHaveBeenCalledWith("get_kb_chunk", { chunkId: 88, documentId: 12345 });
     expect(useKnowledgeStore.getState().viewChunkError).toEqual({
       kind: "source-missing",
       message: "Source missing — this document is no longer in the knowledge base.",

@@ -277,12 +277,13 @@ describe("knowledge store slices", () => {
 
   it("viewer module: classifyViewChunkError maps structured error codes to kinds", () => {
     // Structured codes from Rust backend
+    expect(classifyViewChunkError("source-not-found:7")).toBe("source-missing");
+    expect(classifyViewChunkError("source-not-found:123")).toBe("source-missing");
     expect(classifyViewChunkError("chunk-not-found:42")).toBe("chunk-missing");
     expect(classifyViewChunkError("chunk-not-found:999")).toBe("chunk-missing");
     expect(classifyViewChunkError("chunk-error:database locked")).toBe("chunk-missing");
     // Frontend-only error kinds
     expect(classifyViewChunkError(new Error("malformed link"))).toBe("malformed-link");
-    expect(classifyViewChunkError(new Error("source is missing"))).toBe("source-missing");
     // Fallback for unknown errors
     expect(classifyViewChunkError("unknown error")).toBe("chunk-missing");
   });

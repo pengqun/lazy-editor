@@ -128,8 +128,8 @@ export interface KnowledgeState {
   removeDocument: (id: number) => Promise<void>;
   togglePinDocument: (id: number) => void;
 
-  /** Fetch and display a specific chunk for source recall. Optional query/score for highlighting. */
-  viewChunk: (chunkId: number, query?: string, score?: number) => Promise<void>;
+  /** Fetch and display a specific chunk for source recall. Optional query/score for highlighting, documentId for backend source-existence check. */
+  viewChunk: (chunkId: number, query?: string, score?: number, documentId?: number) => Promise<void>;
   setViewChunkError: (kind: ViewChunkErrorKind) => void;
   closeChunkViewer: () => void;
   dismissChunkError: () => void;

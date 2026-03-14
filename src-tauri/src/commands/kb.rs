@@ -211,14 +211,27 @@ pub async fn remove_kb_document(id: i64, state: State<'_, AppState>) -> Result<(
 /// Retrieve a KB chunk with surrounding context for source recall.
 ///
 /// Returns structured error codes for frontend classification:
-/// - `chunk-not-found:<id>` — no chunk with this ID exists
+/// - `source-not-found:<documentId>` — source document no longer exists
+/// - `chunk-not-found:<chunkId>` — no chunk with this ID exists
 /// - `chunk-error:<details>` — unexpected database error
 #[tauri::command]
 pub async fn get_kb_chunk(
     #[allow(non_snake_case)] chunkId: i64,
+    #[allow(non_snake_case)] documentId: Option<i64>,
     state: State<'_, AppState>,
 ) -> Result<ChunkContext, String> {
     let db = state.db.lock().await;
+
+    // If caller provided a documentId, check document existence first.
+    // This distinguishes "source removed" from "chunk missing" even with CASCADE DELETE.
+    if let Some(doc_id) = documentId {
+        match db.document_exists(doc_id) {
+            Ok(false) => return Err(format!("source-not-found:{}", doc_id)),
+            Err(e) => return Err(format!("chunk-error:{}", e)),
+            Ok(true) => {} // document exists, proceed to chunk lookup
+        }
+    }
+
     db.get_chunk_with_context(chunkId).map_err(|e| {
         let msg = e.to_string();
         if msg.contains("no rows") || msg.contains("No rows") || msg.contains("QueryReturnedNoRows") {

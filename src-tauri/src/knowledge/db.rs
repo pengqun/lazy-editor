@@ -370,6 +370,15 @@ impl Database {
         Ok(results)
     }
 
+    /// Check if a document with the given ID exists.
+    pub fn document_exists(&self, document_id: i64) -> Result<bool> {
+        let exists: bool = self
+            .conn
+            .prepare("SELECT EXISTS(SELECT 1 FROM documents WHERE id = ?1)")?
+            .query_row(params![document_id], |row| row.get(0))?;
+        Ok(exists)
+    }
+
     pub fn get_chunk_with_document(
         &self,
         chunk_id: i64,
@@ -999,6 +1008,27 @@ mod tests {
             format!("chunk-error:{}", msg)
         };
         assert_eq!(code, "chunk-not-found:42");
+    }
+
+    #[test]
+    fn document_exists_returns_true_for_existing() {
+        let db = test_db();
+        let doc_id = db.insert_document("Doc", "paste", None, "content").unwrap();
+        assert!(db.document_exists(doc_id).unwrap());
+    }
+
+    #[test]
+    fn document_exists_returns_false_for_missing() {
+        let db = test_db();
+        assert!(!db.document_exists(99999).unwrap());
+    }
+
+    #[test]
+    fn document_exists_returns_false_after_removal() {
+        let db = test_db();
+        let doc_id = db.insert_document("Doc", "paste", None, "content").unwrap();
+        db.remove_document(doc_id).unwrap();
+        assert!(!db.document_exists(doc_id).unwrap());
     }
 
     // ── Integrity tests ──

@@ -38,11 +38,11 @@ export function buildViewChunkError(kind: ViewChunkErrorKind): ViewChunkErrorSta
 export function classifyViewChunkError(err: unknown): ViewChunkErrorKind {
   const message = String(err instanceof Error ? err.message : err);
   // Structured error codes from Rust backend (preferred path)
+  if (message.startsWith("source-not-found:")) return "source-missing";
   if (message.startsWith("chunk-not-found:")) return "chunk-missing";
   if (message.startsWith("chunk-error:")) return "chunk-missing";
   // Frontend-only error kinds (set before backend call)
   if (message.includes("malformed")) return "malformed-link";
-  if (message.includes("source") && message.includes("missing")) return "source-missing";
   return "chunk-missing";
 }
 
@@ -56,10 +56,13 @@ export function createViewerStateSlice(
     viewChunkError: null,
     viewedChunkQuery: null,
     viewedChunkScore: null,
-    viewChunk: async (chunkId, query, score) => {
+    viewChunk: async (chunkId, query, score, documentId) => {
       set({ viewChunkLoading: true, viewChunkError: null, lastRequestedChunkId: chunkId });
       try {
-        const chunk = await invoke<ChunkContext>("get_kb_chunk", { chunkId });
+        const chunk = await invoke<ChunkContext>("get_kb_chunk", {
+          chunkId,
+          ...(documentId != null ? { documentId } : {}),
+        });
         set({
           viewedChunk: chunk,
           viewChunkLoading: false,

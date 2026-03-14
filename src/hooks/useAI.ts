@@ -59,16 +59,8 @@ export function navigateToCitationSource(
   documentId?: number,
 ): void {
   const kbStore = useKnowledgeStore.getState();
-  if (documentId != null && kbStore.documents.length > 0) {
-    const exists = kbStore.documents.some((doc) => doc.id === documentId);
-    if (!exists) {
-      kbStore.setViewChunkError("source-missing");
-      useEditorStore.getState().setRightPanel("knowledge");
-      return;
-    }
-  }
-  kbStore.viewChunk(chunkId, query, score);
-  // Ensure the knowledge panel is visible
+  // Pass documentId to backend for authoritative source-existence check
+  kbStore.viewChunk(chunkId, query, score, documentId);
   useEditorStore.getState().setRightPanel("knowledge");
 }
 
