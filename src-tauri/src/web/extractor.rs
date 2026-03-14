@@ -1,8 +1,9 @@
 use std::collections::HashSet;
+use std::path::Path;
 
 use anyhow::Result;
 use scraper::{Html, Node, Selector};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 pub struct ArticleContent {
@@ -11,8 +12,38 @@ pub struct ArticleContent {
     pub url: String,
 }
 
+/// User-configurable extractor settings loaded from `.lazy-editor/extractor.json`.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct ExtractorConfig {
+    /// Extra CSS selectors to treat as noise (merged with built-in rules).
+    #[serde(default)]
+    pub extra_noise_selectors: Vec<String>,
+}
+
+/// Load extractor config from `<workspace>/.lazy-editor/extractor.json`.
+/// Returns default config if file is missing or unreadable.
+pub fn load_extractor_config(workspace_path: Option<&str>) -> ExtractorConfig {
+    let Some(ws) = workspace_path else {
+        return ExtractorConfig::default();
+    };
+    let path = Path::new(ws).join(".lazy-editor").join("extractor.json");
+    let Ok(contents) = std::fs::read_to_string(&path) else {
+        return ExtractorConfig::default();
+    };
+    serde_json::from_str(&contents).unwrap_or_default()
+}
+
+/// Build the merged noise selector string from built-in + extra selectors.
+fn build_noise_selector_str(extra: &[String]) -> String {
+    if extra.is_empty() {
+        return NOISE_SELECTOR_STR.to_string();
+    }
+    let extra_joined = extra.join(", ");
+    format!("{}, {}", NOISE_SELECTOR_STR, extra_joined)
+}
+
 /// Fetch a URL and extract its readable content.
-pub async fn fetch_and_extract(url: &str) -> Result<ArticleContent> {
+pub async fn fetch_and_extract(url: &str, config: &ExtractorConfig) -> Result<ArticleContent> {
     let client = reqwest::Client::new();
     let resp = client
         .get(url)
@@ -22,7 +53,7 @@ pub async fn fetch_and_extract(url: &str) -> Result<ArticleContent> {
 
     let html = resp.text().await?;
     let title = extract_title(&html).unwrap_or_else(|| url.to_string());
-    let text = extract_text_with_fallback(&html);
+    let text = extract_text_with_fallback(&html, &config.extra_noise_selectors);
 
     Ok(ArticleContent {
         title,
@@ -31,8 +62,8 @@ pub async fn fetch_and_extract(url: &str) -> Result<ArticleContent> {
     })
 }
 
-fn extract_text_with_fallback(html: &str) -> String {
-    extract_readable_text(html).unwrap_or_else(|| strip_html_tags(html))
+fn extract_text_with_fallback(html: &str, extra_noise: &[String]) -> String {
+    extract_readable_text(html, extra_noise).unwrap_or_else(|| strip_html_tags(html))
 }
 
 /// CSS selector matching common noise containers to strip from content.
@@ -80,9 +111,10 @@ fn collect_clean_text(el: &scraper::ElementRef, noise_sel: &Selector) -> String 
     normalize_text(&parts.join(" "))
 }
 
-fn extract_readable_text(html: &str) -> Option<String> {
+fn extract_readable_text(html: &str, extra_noise: &[String]) -> Option<String> {
     let document = Html::parse_document(html);
-    let noise_sel = Selector::parse(NOISE_SELECTOR_STR).ok()?;
+    let merged = build_noise_selector_str(extra_noise);
+    let noise_sel = Selector::parse(&merged).ok()?;
 
     // 优先使用语义化容器。
     let semantic_candidates = ["article", "main", "[role='main']"];
@@ -230,7 +262,7 @@ mod tests {
         </html>
         "#;
 
-        let text = extract_text_with_fallback(html);
+        let text = extract_text_with_fallback(html, &[]);
         assert!(text.contains("Rust makes systems programming approachable"));
         assert!(text.contains("main readable content"));
     }
@@ -251,7 +283,7 @@ mod tests {
         </html>
         "#;
 
-        let text = extract_text_with_fallback(html);
+        let text = extract_text_with_fallback(html, &[]);
         assert!(text.contains("Lazy Editor focuses on writing flow"));
         assert!(!text.contains("Home Products Docs Pricing"));
         assert!(!text.contains("Copyright 2026"));
@@ -261,7 +293,7 @@ mod tests {
     fn falls_back_when_readability_fails() {
         let html = "<html><head><title>x</title></head><body><span>tiny</span></body></html>";
 
-        let text = extract_text_with_fallback(html);
+        let text = extract_text_with_fallback(html, &[]);
         assert_eq!(text, "x tiny");
     }
 
@@ -280,7 +312,7 @@ mod tests {
         </body></html>
         "#;
 
-        let text = extract_text_with_fallback(html);
+        let text = extract_text_with_fallback(html, &[]);
         assert!(text.contains("Main article content"), "should keep main content");
         assert!(text.contains("More article text"), "should keep body paragraphs");
         assert!(!text.contains("Home > Blog"), "should filter nav breadcrumbs");
@@ -303,7 +335,7 @@ mod tests {
         </body></html>
         "#;
 
-        let text = extract_text_with_fallback(html);
+        let text = extract_text_with_fallback(html, &[]);
         assert!(text.contains("primary content"), "should keep main content");
         assert!(text.contains("article continues"), "should keep body text");
         assert!(!text.contains("Buy our product"), "should filter adverts");
@@ -323,7 +355,7 @@ mod tests {
         </body></html>
         "#;
 
-        let text = extract_text_with_fallback(html);
+        let text = extract_text_with_fallback(html, &[]);
         assert!(text.contains("Clean Article"));
         assert!(text.contains("no noise elements"));
         assert!(text.contains("Second paragraph"));
@@ -340,7 +372,7 @@ mod tests {
         </body></html>
         "#;
 
-        let text = extract_text_with_fallback(html);
+        let text = extract_text_with_fallback(html, &[]);
         assert!(text.contains("long enough body text"), "should keep body content");
         assert!(!text.contains("Home About Contact"), "should filter nav in body fallback");
         assert!(!text.contains("Copyright 2026"), "should filter footer in body fallback");
@@ -363,10 +395,71 @@ mod tests {
         </body></html>
         "#;
 
-        let text = extract_text_with_fallback(html);
+        let text = extract_text_with_fallback(html, &[]);
         assert!(text.contains("Top level content"));
         assert!(text.contains("Content after the comments"));
         assert!(!text.contains("Nested comment text"));
         assert!(!text.contains("Even deeper nested reply"));
+    }
+
+    #[test]
+    fn extra_noise_selectors_filter_custom_elements() {
+        let html = r#"
+        <html><body>
+            <main>
+              <p>Important article content that is long enough to pass the minimum threshold for extraction heuristics in the extractor module.</p>
+              <div class="sponsors-block">Check out our sponsors!</div>
+              <p>More meaningful content continues after the sponsor section.</p>
+            </main>
+        </body></html>
+        "#;
+
+        // Without extra selector, sponsor block is kept
+        let text_default = extract_text_with_fallback(html, &[]);
+        assert!(text_default.contains("Check out our sponsors"));
+
+        // With extra selector, sponsor block is filtered
+        let extra = vec!["[class*='sponsor']".to_string()];
+        let text_custom = extract_text_with_fallback(html, &extra);
+        assert!(text_custom.contains("Important article content"));
+        assert!(!text_custom.contains("Check out our sponsors"));
+    }
+
+    #[test]
+    fn build_noise_selector_str_merges_correctly() {
+        let base = build_noise_selector_str(&[]);
+        assert_eq!(base, NOISE_SELECTOR_STR);
+
+        let merged = build_noise_selector_str(&["[class*='promo']".to_string(), ".banner".to_string()]);
+        assert!(merged.starts_with(NOISE_SELECTOR_STR));
+        assert!(merged.contains("[class*='promo']"));
+        assert!(merged.contains(".banner"));
+    }
+
+    #[test]
+    fn load_extractor_config_returns_default_for_missing_file() {
+        let config = load_extractor_config(Some("/nonexistent/path"));
+        assert_eq!(config, ExtractorConfig::default());
+    }
+
+    #[test]
+    fn load_extractor_config_returns_default_for_none_workspace() {
+        let config = load_extractor_config(None);
+        assert_eq!(config, ExtractorConfig::default());
+    }
+
+    #[test]
+    fn load_extractor_config_reads_from_file() {
+        let tmp = std::env::temp_dir().join("lazy-editor-test-extractor-config");
+        let config_dir = tmp.join(".lazy-editor");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("extractor.json");
+        std::fs::write(&config_path, r##"{"extra_noise_selectors": [".promo", "#banner"]}"##).unwrap();
+
+        let config = load_extractor_config(Some(tmp.to_str().unwrap()));
+        assert_eq!(config.extra_noise_selectors, vec![".promo", "#banner"]);
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
