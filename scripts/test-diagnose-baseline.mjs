@@ -263,6 +263,8 @@ export function buildStabilityBaseline(history, limit = HISTORY_LIMIT) {
     (a, b) => b.count - a.count || a.label.localeCompare(b.label),
   );
 
+  const warnings = buildBaselineWarnings(recentRuns);
+
   return {
     historyLimit: limit,
     runsIncluded: recentRuns.length,
@@ -274,9 +276,38 @@ export function buildStabilityBaseline(history, limit = HISTORY_LIMIT) {
     },
     commands,
     failureTypes,
+    warnings,
     historyFile: history.historyFile,
   };
 }
+
+function buildBaselineWarnings(recentRuns) {
+  const warnings = [];
+
+  if (recentRuns.length < 3) {
+    warnings.push({ level: "info", message: "Insufficient history for trend analysis (need ≥3 runs)" });
+    return warnings;
+  }
+
+  // Check if the most recent run has any failures
+  const latest = recentRuns[recentRuns.length - 1];
+  if (latest && latest.failedCommands > 0) {
+    warnings.push({ level: "warn", message: `Recent run has ${latest.failedCommands} failure(s)` });
+  }
+
+  // Check if failure rate is trending up over last 3 runs
+  const last3 = recentRuns.slice(-3);
+  const failRates = last3.map((run) =>
+    run.totalCommands > 0 ? run.failedCommands / run.totalCommands : 0
+  );
+  if (failRates.length === 3 && failRates[2] > failRates[1] && failRates[1] > failRates[0]) {
+    warnings.push({ level: "warn", message: "Failure rate trending up over last 3 runs" });
+  }
+
+  return warnings;
+}
+
+export { buildBaselineWarnings };
 
 export function renderStabilityBaselineMarkdown(stabilityBaseline) {
   const lines = [];
@@ -310,6 +341,16 @@ export function renderStabilityBaselineMarkdown(stabilityBaseline) {
       lines.push(
         `| ${command.label} | ${formatRate(command.passRate)} | ${command.passedRuns}/${command.totalRuns} |`,
       );
+    }
+  }
+
+  // Render warnings (if any)
+  if (stabilityBaseline.warnings && stabilityBaseline.warnings.length > 0) {
+    lines.push("");
+    lines.push("### 告警");
+    for (const w of stabilityBaseline.warnings) {
+      const icon = w.level === "warn" ? "⚠️" : "ℹ️";
+      lines.push(`> ${icon} ${w.message}`);
     }
   }
 

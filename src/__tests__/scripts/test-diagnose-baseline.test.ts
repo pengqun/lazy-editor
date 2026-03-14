@@ -4,6 +4,7 @@ import path from "node:path";
 
 import {
   appendHistory,
+  buildBaselineWarnings,
   buildCurrentRunRecord,
   buildStabilityBaseline,
   detectFailureType,
@@ -115,6 +116,76 @@ describe("test-diagnose baseline helpers", () => {
       label: "npm test -- --no-file-parallelism --maxWorkers=1",
       pattern: /^npm-test-(?:serial|runInBand)(?:-r\d+)?$/,
     });
+  });
+
+  it("buildStabilityBaseline includes warnings field", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "test-diagnose-warn-"));
+    const historyFile = path.join(tempDir, "history.json");
+    const logFile = path.join(tempDir, "run.log");
+    fs.writeFileSync(logFile, "ok\n");
+
+    // Single run → info warning about insufficient history
+    appendHistory({
+      historyFile,
+      limit: 20,
+      runRecord: buildCurrentRunRecord({
+        runDir: path.join(tempDir, "run-1"),
+        generatedAt: "2026-03-14T10:00:00Z",
+        commands: [{ command: "npm-test", status: "passed", exitCode: 0, logFile }],
+      }),
+    });
+
+    const history = JSON.parse(fs.readFileSync(historyFile, "utf8"));
+    history.historyFile = historyFile;
+    const baseline = buildStabilityBaseline(history, 20);
+
+    expect(baseline.warnings).toEqual([
+      { level: "info", message: expect.stringContaining("Insufficient history") },
+    ]);
+
+    const md = renderStabilityBaselineMarkdown(baseline);
+    expect(md).toContain("ℹ️");
+    expect(md).toContain("Insufficient history");
+  });
+
+  it("warns when recent run has failures", () => {
+    const makeRun = (idx: number, failed: boolean) => ({
+      runDir: `/tmp/run-${idx}`,
+      generatedAt: `2026-03-14T1${idx}:00:00Z`,
+      totalCommands: 1,
+      passedCommands: failed ? 0 : 1,
+      failedCommands: failed ? 1 : 0,
+      overallPassRate: failed ? 0 : 100,
+      commands: [{ command: "npm-test", key: "npm-test", label: "npm test", status: failed ? "failed" : "passed", exitCode: failed ? 1 : 0, logFile: null, failureType: failed ? { key: "test_failure", label: "test failure" } : null }],
+      failureTypes: failed ? [{ key: "test_failure", label: "test failure", count: 1 }] : [],
+    });
+
+    const warnings = buildBaselineWarnings([makeRun(1, false), makeRun(2, false), makeRun(3, true)]);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        { level: "warn", message: expect.stringContaining("Recent run has 1 failure") },
+      ]),
+    );
+  });
+
+  it("warns when failure rate trends up over 3 runs", () => {
+    const makeRun = (idx: number, failed: number, total: number) => ({
+      runDir: `/tmp/run-${idx}`,
+      generatedAt: `2026-03-14T1${idx}:00:00Z`,
+      totalCommands: total,
+      passedCommands: total - failed,
+      failedCommands: failed,
+      overallPassRate: ((total - failed) / total) * 100,
+      commands: [],
+      failureTypes: [],
+    });
+
+    const warnings = buildBaselineWarnings([makeRun(1, 0, 4), makeRun(2, 1, 4), makeRun(3, 2, 4)]);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        { level: "warn", message: expect.stringContaining("trending up") },
+      ]),
+    );
   });
 
   it("classifies known failure types", () => {
