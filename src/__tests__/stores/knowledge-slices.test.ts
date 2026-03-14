@@ -12,6 +12,14 @@ import {
 import { createBatchActionSlice as createBatchActionSliceDirect, createBatchStateSlice as createBatchStateSliceDirect } from "@/stores/knowledge/batch";
 import * as batchPlanModule from "@/lib/integrity-batch-plan";
 
+// Raw source imports for guardian tests
+import viewerRaw from "@/stores/knowledge/viewer.ts?raw";
+import integrityRaw from "@/stores/knowledge/integrity.ts?raw";
+import batchRaw from "@/stores/knowledge/batch.ts?raw";
+import typesRaw from "@/stores/knowledge/types.ts?raw";
+import integrityUtilsRaw from "@/stores/knowledge/integrity-utils.ts?raw";
+import aggregationRaw from "@/stores/knowledge.ts?raw";
+
 const mockedInvoke = vi.mocked(invoke);
 
 describe("knowledge store slices", () => {
@@ -567,6 +575,21 @@ describe("knowledge store slices", () => {
     expect(typeof mod.createBatchActionSlice).toBe("function");
     // Store hook
     expect(typeof mod.useKnowledgeStore).toBe("function");
+  });
+
+  it("guardian: slice modules do not import from aggregation layer '../knowledge'", () => {
+    const sliceSources = { viewerRaw, integrityRaw, batchRaw, typesRaw, integrityUtilsRaw };
+    for (const [name, source] of Object.entries(sliceSources)) {
+      // Must not import from "../knowledge" (the aggregation layer)
+      expect(source, `${name} imports from ../knowledge`).not.toMatch(/from\s+["']\.\.\/knowledge["']/);
+      // Must not import useKnowledgeStore
+      expect(source, `${name} references useKnowledgeStore`).not.toMatch(/useKnowledgeStore/);
+    }
+  });
+
+  it("guardian: aggregation layer knowledge.ts stays under 220 lines", () => {
+    const lineCount = aggregationRaw.split("\n").length;
+    expect(lineCount).toBeLessThanOrEqual(220);
   });
 
   it("public API: store exposes complete state shape with all expected keys", () => {
