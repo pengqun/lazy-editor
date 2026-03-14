@@ -13,6 +13,7 @@ import {
 } from "../../lib/integrity-batch-impact";
 import { toast } from "../toast";
 import { extractErrorMessage } from "./integrity-utils";
+import { refreshAfterMutation } from "./refresh";
 import type { IntegrityReport, KnowledgeState } from "./types";
 
 const inFlightBatchStepRetries = new Set<string>();
@@ -119,8 +120,7 @@ export function createBatchActionSlice(
           toast.success(`Batch complete: ${success} applied, ${skipped} skipped · ${itemChanges.success} items changed`);
         }
 
-        await get().loadDocuments();
-        await get().checkIntegrity();
+        await refreshAfterMutation(get);
       } catch (err) {
         toast.error(`Batch execution failed: ${extractErrorMessage(err)}`);
         set({ batchExecuting: false });
@@ -151,8 +151,7 @@ export function createBatchActionSlice(
 
         if (retried.outcome === "success") {
           toast.success(`Retried ${stepId.replace("step-", "")}: success`);
-          await get().loadDocuments();
-          await get().checkIntegrity();
+          await refreshAfterMutation(get);
         } else {
           toast.error(`Retried ${stepId.replace("step-", "")}: ${retried.message}`);
         }

@@ -27,6 +27,7 @@ import { buildHealthCheckReport } from "../../lib/integrity-healthcheck";
 import { loadIntegrityTrendHistory, syncIntegrityTrendHistory } from "../../lib/integrity-trend-history";
 import { toast } from "../toast";
 import { ensureHistoryArray, extractErrorMessage, lastScanAt } from "./integrity-utils";
+import { refreshAfterMutation } from "./refresh";
 import type { IntegrityReport, IntegrityScanSnapshot, KnowledgeState } from "./types";
 
 export type IntegrityStateSlice = Pick<KnowledgeState,
@@ -87,9 +88,7 @@ export function createIntegrityStateSlice(
       try {
         await invoke("relink_kb_document", { id, newPath });
         toast.success("Document relinked successfully");
-        // Re-run integrity check and refresh document list
-        await get().checkIntegrity();
-        await get().loadDocuments();
+        await refreshAfterMutation(get);
       } catch (err) {
         const message = extractErrorMessage(err);
         console.error("Failed to relink document:", message);
@@ -103,8 +102,7 @@ export function createIntegrityStateSlice(
           await invoke("remove_kb_document", { id });
         }
         toast.success(`Removed ${ids.length} stale document${ids.length > 1 ? "s" : ""}`);
-        await get().loadDocuments();
-        await get().checkIntegrity();
+        await refreshAfterMutation(get);
       } catch (err) {
         const message = extractErrorMessage(err);
         console.error("Failed to remove stale documents:", message);

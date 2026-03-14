@@ -18,6 +18,7 @@ import integrityRaw from "@/stores/knowledge/integrity.ts?raw";
 import batchRaw from "@/stores/knowledge/batch.ts?raw";
 import typesRaw from "@/stores/knowledge/types.ts?raw";
 import integrityUtilsRaw from "@/stores/knowledge/integrity-utils.ts?raw";
+import refreshRaw from "@/stores/knowledge/refresh.ts?raw";
 import aggregationRaw from "@/stores/knowledge.ts?raw";
 
 const mockedInvoke = vi.mocked(invoke);
@@ -583,7 +584,7 @@ describe("knowledge store slices", () => {
   });
 
   it("guardian: slice modules do not import from aggregation layer '../knowledge'", () => {
-    const sliceSources = { viewerRaw, integrityRaw, batchRaw, typesRaw, integrityUtilsRaw };
+    const sliceSources = { viewerRaw, integrityRaw, batchRaw, typesRaw, integrityUtilsRaw, refreshRaw };
     for (const [name, source] of Object.entries(sliceSources)) {
       // Must not import from "../knowledge" (the aggregation layer)
       expect(source, `${name} imports from ../knowledge`).not.toMatch(/from\s+["']\.\.\/knowledge["']/);
