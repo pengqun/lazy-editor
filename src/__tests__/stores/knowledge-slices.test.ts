@@ -592,6 +592,56 @@ describe("knowledge store slices", () => {
     expect(lineCount).toBeLessThanOrEqual(220);
   });
 
+  it("guardian: each slice factory returns all required initial fields", () => {
+    const set = vi.fn();
+    const get = (() => ({})) as any;
+
+    // viewer must include all state + action fields
+    const viewerKeys = Object.keys(createViewerStateSlice(set)).sort();
+    const requiredViewerKeys = [
+      "viewedChunk", "lastRequestedChunkId", "viewChunkLoading", "viewChunkError",
+      "viewedChunkQuery", "viewedChunkScore",
+      "viewChunk", "setViewChunkError", "closeChunkViewer", "dismissChunkError",
+    ].sort();
+    expect(viewerKeys).toEqual(requiredViewerKeys);
+
+    // batch state must include all state fields
+    const batchStateKeys = Object.keys(createBatchStateSlice()).sort();
+    const requiredBatchStateKeys = [
+      "batchFixPlan", "batchLastPlan", "batchExecuting",
+      "batchStepStatuses", "batchExecutionLog", "lastBatchImpact",
+    ].sort();
+    expect(batchStateKeys).toEqual(requiredBatchStateKeys);
+
+    // batch action must include all action fields
+    const batchActionKeys = Object.keys(createBatchActionSlice(set, get)).sort();
+    const requiredBatchActionKeys = [
+      "clearHealthCheck", "buildBatchPlan", "clearBatchPlan",
+      "confirmBatchPlan", "retryBatchStep", "clearBatchLog",
+    ].sort();
+    expect(batchActionKeys).toEqual(requiredBatchActionKeys);
+
+    // integrity must include all required keys (superset check — new keys are allowed)
+    const integrityKeys = Object.keys(createIntegrityStateSlice(set, get));
+    const requiredIntegrityKeys = [
+      "integrityReport", "integrityLoading", "integrityHistory",
+      "checkIntegrity", "relinkDocument", "removeStaleDocuments", "clearIntegrity",
+      "loadIntegrityHistory", "reminderSettings", "reminderDue",
+      "healthCheckReport", "healthCheckLoading", "runHealthCheck",
+    ];
+    for (const key of requiredIntegrityKeys) {
+      expect(integrityKeys, `integrity slice missing: ${key}`).toContain(key);
+    }
+  });
+
+  it("guardian: aggregation layer re-exports all 4 slice factories", () => {
+    // Verify the aggregation module exports match direct imports (identity check)
+    expect(createViewerStateSlice).toBe(createViewerStateSliceDirect);
+    expect(createIntegrityStateSlice).toBe(createIntegrityStateSliceDirect);
+    expect(createBatchStateSlice).toBe(createBatchStateSliceDirect);
+    expect(createBatchActionSlice).toBe(createBatchActionSliceDirect);
+  });
+
   it("public API: store exposes complete state shape with all expected keys", () => {
     const state = useKnowledgeStore.getState();
     const expectedKeys = [

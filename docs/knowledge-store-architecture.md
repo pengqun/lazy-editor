@@ -100,3 +100,34 @@ All external consumers import from `@/stores/knowledge`. The re-exports ensure a
 | 内联 `err instanceof Error ? err.message : String(err)` | 使用 `extractErrorMessage()` from `integrity-utils.ts` |
 | 在多个 slice 中重复定义相同的默认值常量 | 提取到 `types.ts` 或 `integrity-utils.ts` 中共享 |
 | 合并 slice 回 `knowledge.ts` | 保持 `knowledge.ts` 为薄聚合层（<220 行） |
+
+---
+
+## 变更影响检查清单
+
+提交涉及 knowledge store 的变更前，逐项确认：
+
+### 结构完整性
+- [ ] `knowledge.ts` 行数 ≤ 220
+- [ ] slice 模块无 `import … from "../knowledge"` 或 `useKnowledgeStore` 引用
+- [ ] slice 间无直接 `import`（viewer ↛ batch, integrity ↛ viewer 等）
+- [ ] `types.ts` 无新增运行时逻辑（仅 `import type` 和接口定义）
+
+### 导出稳定性
+- [ ] `useKnowledgeStore.getState()` 包含所有已记录的 key（见测试中 `expectedKeys` 列表）
+- [ ] 每个 slice factory 返回的 key 集合与 re-export 版本一致
+- [ ] 新增 action 已加入对应 slice 的 `Pick<KnowledgeState, …>` 类型
+
+### 初始化安全
+- [ ] 每个 slice factory 返回的对象包含所有声明的状态字段（无遗漏）
+- [ ] 初始值与 `KnowledgeState` 接口声明的类型兼容
+- [ ] 新增状态字段有合理的零值（null / false / [] / {}）
+
+### 跨-slice 调用
+- [ ] 跨-slice 调用仅出现在 action 完成后的刷新链路中
+- [ ] 跨-slice 调用有对应的测试覆盖（见 `knowledge-slices.test.ts` cross-slice 用例）
+
+### 测试
+- [ ] `npm run build:selftest` 通过（tsc + vite build）
+- [ ] `npm test` 全部通过
+- [ ] `cd src-tauri && cargo test -q` 全部通过
