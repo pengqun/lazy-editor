@@ -48,34 +48,11 @@
 
 ---
 
-## M2：deep-link 错误码精确分离
+## M2：deep-link 错误码精确分离 ✅
 
-### 现状
-- 后端 `get_kb_chunk` 返回 `chunk-not-found:<id>` / `chunk-error:<msg>`
-- 前端 `navigateToCitationSource` 通过缓存 documents 列表预判 `source-missing`（不可靠：列表可能过时）
-- 后端无法区分 "chunk 从未存在" vs "source document 被删除"（CASCADE DELETE 导致两者都 no rows）
+> **已完成** — 完整规范见 [kb-deeplink-error-contract.md](./kb-deeplink-error-contract.md)
 
-### 目标
-后端直接返回 `source-not-found:<documentId>` 错误码，消除前端预判依赖。
-
-### 方案
-1. Rust `get_kb_chunk` 命令增加可选参数 `documentId: Option<i64>`
-2. 查询逻辑改为：
-   - 若提供 `documentId`，先查 `SELECT 1 FROM documents WHERE id = ?`
-   - 若 document 不存在 → 返回 `source-not-found:<documentId>`
-   - 否则按现有逻辑查 chunk → `chunk-not-found:<chunkId>` / 成功
-3. 前端 `viewChunk` 透传 `documentId`（从 citation link data attributes 获取）
-4. `classifyViewChunkError` 增加 `source-not-found:` 前缀匹配 → `source-missing`
-5. `navigateToCitationSource` 移除前端预判分支，统一走后端
-
-### 验收标准
-- Rust 测试：document 不存在时返回 `source-not-found:*`
-- 前端测试：classifyViewChunkError 处理新错误码
-- 前端 navigateToCitationSource 不再依赖 documents 缓存
-- 所有现有测试通过
-
-### 风险
-低。`documentId` 为可选参数，不传时退化为现有行为。
+后端 `get_kb_chunk` 新增可选 `documentId` 参数，区分 `source-not-found` / `chunk-not-found` / `chunk-error` 三种错误码。前端 `classifyViewChunkError` 同步更新映射。
 
 ---
 

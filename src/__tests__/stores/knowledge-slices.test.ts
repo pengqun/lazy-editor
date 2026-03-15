@@ -289,6 +289,45 @@ describe("knowledge store slices", () => {
     expect(classifyViewChunkError("unknown error")).toBe("chunk-missing");
   });
 
+  it("guardian: ViewChunkErrorKind type literals match buildViewChunkError coverage", () => {
+    // Extract the literal union members from the type definition source
+    const match = typesRaw.match(/type\s+ViewChunkErrorKind\s*=\s*([^;]+)/);
+    expect(match).not.toBeNull();
+    const kinds = match![1]
+      .split("|")
+      .map((s) => s.trim().replace(/^"|"$/g, ""))
+      .filter(Boolean);
+    expect(kinds.length).toBeGreaterThanOrEqual(3);
+
+    // Every kind declared in the type must be handled by buildViewChunkError
+    for (const kind of kinds) {
+      const result = buildViewChunkError(kind as never);
+      expect(result.kind).toBe(kind);
+      expect(typeof result.message).toBe("string");
+      expect(result.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("guardian: classifyViewChunkError maps every backend prefix to a declared kind", () => {
+    // Extract declared error kinds from type source
+    const match = typesRaw.match(/type\s+ViewChunkErrorKind\s*=\s*([^;]+)/);
+    const declaredKinds = new Set(
+      match![1].split("|").map((s) => s.trim().replace(/^"|"$/g, "")).filter(Boolean),
+    );
+
+    // Every backend prefix pattern in classifyViewChunkError must map to a declared kind
+    const backendPrefixes: [string, string][] = [
+      ["source-not-found:1", "source-missing"],
+      ["chunk-not-found:1", "chunk-missing"],
+      ["chunk-error:err", "chunk-missing"],
+    ];
+    for (const [input, expectedKind] of backendPrefixes) {
+      const result = classifyViewChunkError(input);
+      expect(result).toBe(expectedKind);
+      expect(declaredKinds.has(result)).toBe(true);
+    }
+  });
+
   it("viewer module: viewChunk failure sets error state", async () => {
     const set = vi.fn();
     const slice = createViewerStateSlice(set);
