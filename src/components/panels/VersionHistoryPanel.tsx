@@ -122,9 +122,7 @@ export function VersionHistoryPanel({ onClose }: VersionHistoryPanelProps) {
                 className="px-4 py-3 border-b border-border hover:bg-surface-1/50 transition-colors group"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-text-secondary">
-                    {formatDate(snap.createdAt)}
-                  </span>
+                  <span className="text-xs text-text-secondary">{formatDate(snap.createdAt)}</span>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       type="button"

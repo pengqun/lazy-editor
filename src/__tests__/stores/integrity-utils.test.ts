@@ -1,5 +1,9 @@
+import {
+  ensureHistoryArray,
+  extractErrorMessage,
+  lastScanAt,
+} from "@/stores/knowledge/integrity-utils";
 import { describe, expect, it } from "vitest";
-import { ensureHistoryArray, extractErrorMessage, lastScanAt } from "@/stores/knowledge/integrity-utils";
 
 describe("integrity-utils", () => {
   describe("extractErrorMessage", () => {
@@ -27,8 +31,24 @@ describe("integrity-utils", () => {
   describe("lastScanAt", () => {
     it("returns scannedAt of the first entry", () => {
       const history = [
-        { id: 2, scannedAt: "2026-03-14T10:00:00Z", total: 5, healthy: 5, missing: 0, moved: 0, notes: null },
-        { id: 1, scannedAt: "2026-03-13T10:00:00Z", total: 5, healthy: 4, missing: 1, moved: 0, notes: null },
+        {
+          id: 2,
+          scannedAt: "2026-03-14T10:00:00Z",
+          total: 5,
+          healthy: 5,
+          missing: 0,
+          moved: 0,
+          notes: null,
+        },
+        {
+          id: 1,
+          scannedAt: "2026-03-13T10:00:00Z",
+          total: 5,
+          healthy: 4,
+          missing: 1,
+          moved: 0,
+          notes: null,
+        },
       ];
       expect(lastScanAt(history)).toBe("2026-03-14T10:00:00Z");
     });
@@ -40,7 +60,9 @@ describe("integrity-utils", () => {
 
   describe("ensureHistoryArray", () => {
     it("passes through a valid array", () => {
-      const arr = [{ id: 1, scannedAt: "t", total: 1, healthy: 1, missing: 0, moved: 0, notes: null }];
+      const arr = [
+        { id: 1, scannedAt: "t", total: 1, healthy: 1, missing: 0, moved: 0, notes: null },
+      ];
       expect(ensureHistoryArray(arr)).toBe(arr);
     });
 

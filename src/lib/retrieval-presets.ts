@@ -145,7 +145,10 @@ export function loadWorkspaceRetrievalSettings(workspacePath: string): DocRetrie
 }
 
 /** Persist retrieval defaults for a specific workspace. */
-export function saveWorkspaceRetrievalSettings(workspacePath: string, settings: DocRetrievalSettings): void {
+export function saveWorkspaceRetrievalSettings(
+  workspacePath: string,
+  settings: DocRetrievalSettings,
+): void {
   try {
     localStorage.setItem(WORKSPACE_STORAGE_PREFIX + workspacePath, JSON.stringify(settings));
   } catch {

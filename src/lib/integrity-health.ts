@@ -60,7 +60,7 @@ export function computeScanCoverage(
   const scanTimestamps: number[] = [];
 
   for (const snap of history) {
-    const scanMs = new Date(snap.scannedAt + "Z").getTime();
+    const scanMs = new Date(`${snap.scannedAt}Z`).getTime();
     const age = nowMs - scanMs;
     if (age <= ms7d) scansLast7d++;
     if (age <= ms30d) scansLast30d++;
@@ -100,7 +100,7 @@ export function computeStreak(scanTimestamps: number[], now: Date = new Date()):
   const startOfToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 
   // Allow starting from today or yesterday
-  let offset = scanDays.has(todayKey) ? 0 : 1;
+  const offset = scanDays.has(todayKey) ? 0 : 1;
 
   for (let i = offset; ; i++) {
     const checkMs = startOfToday - i * dayMs;
@@ -130,11 +130,17 @@ export function computeHealthTier(
   if (metrics.latestScanAgeMs > thresholds.warningMaxAgeMs) return "poor";
 
   // Check 7d coverage
-  if (metrics.scansLast7d >= thresholds.good7d && metrics.latestScanAgeMs <= thresholds.goodMaxAgeMs) {
+  if (
+    metrics.scansLast7d >= thresholds.good7d &&
+    metrics.latestScanAgeMs <= thresholds.goodMaxAgeMs
+  ) {
     return "good";
   }
 
-  if (metrics.scansLast7d >= thresholds.warning7d || metrics.latestScanAgeMs <= thresholds.goodMaxAgeMs) {
+  if (
+    metrics.scansLast7d >= thresholds.warning7d ||
+    metrics.latestScanAgeMs <= thresholds.goodMaxAgeMs
+  ) {
     return "warning";
   }
 
@@ -211,9 +217,18 @@ export function loadThresholdSettings(): HealthThresholdSettings {
     const parsed = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return { ...DEFAULT_THRESHOLD_SETTINGS };
     return clampThresholdSettings({
-      goodMinScans7d: typeof parsed.goodMinScans7d === "number" ? parsed.goodMinScans7d : DEFAULT_THRESHOLD_SETTINGS.goodMinScans7d,
-      goodMaxAgeDays: typeof parsed.goodMaxAgeDays === "number" ? parsed.goodMaxAgeDays : DEFAULT_THRESHOLD_SETTINGS.goodMaxAgeDays,
-      poorMaxAgeDays: typeof parsed.poorMaxAgeDays === "number" ? parsed.poorMaxAgeDays : DEFAULT_THRESHOLD_SETTINGS.poorMaxAgeDays,
+      goodMinScans7d:
+        typeof parsed.goodMinScans7d === "number"
+          ? parsed.goodMinScans7d
+          : DEFAULT_THRESHOLD_SETTINGS.goodMinScans7d,
+      goodMaxAgeDays:
+        typeof parsed.goodMaxAgeDays === "number"
+          ? parsed.goodMaxAgeDays
+          : DEFAULT_THRESHOLD_SETTINGS.goodMaxAgeDays,
+      poorMaxAgeDays:
+        typeof parsed.poorMaxAgeDays === "number"
+          ? parsed.poorMaxAgeDays
+          : DEFAULT_THRESHOLD_SETTINGS.poorMaxAgeDays,
     });
   } catch {
     return { ...DEFAULT_THRESHOLD_SETTINGS };
@@ -233,16 +248,27 @@ export function saveThresholdSettings(settings: HealthThresholdSettings): void {
 export type ThresholdSource = "global" | "workspace";
 
 /** Load workspace-specific threshold override (null if none set). */
-export function loadWorkspaceThresholdSettings(workspacePath: string): HealthThresholdSettings | null {
+export function loadWorkspaceThresholdSettings(
+  workspacePath: string,
+): HealthThresholdSettings | null {
   try {
     const raw = localStorage.getItem(WORKSPACE_THRESHOLD_PREFIX + workspacePath);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return null;
     return clampThresholdSettings({
-      goodMinScans7d: typeof parsed.goodMinScans7d === "number" ? parsed.goodMinScans7d : DEFAULT_THRESHOLD_SETTINGS.goodMinScans7d,
-      goodMaxAgeDays: typeof parsed.goodMaxAgeDays === "number" ? parsed.goodMaxAgeDays : DEFAULT_THRESHOLD_SETTINGS.goodMaxAgeDays,
-      poorMaxAgeDays: typeof parsed.poorMaxAgeDays === "number" ? parsed.poorMaxAgeDays : DEFAULT_THRESHOLD_SETTINGS.poorMaxAgeDays,
+      goodMinScans7d:
+        typeof parsed.goodMinScans7d === "number"
+          ? parsed.goodMinScans7d
+          : DEFAULT_THRESHOLD_SETTINGS.goodMinScans7d,
+      goodMaxAgeDays:
+        typeof parsed.goodMaxAgeDays === "number"
+          ? parsed.goodMaxAgeDays
+          : DEFAULT_THRESHOLD_SETTINGS.goodMaxAgeDays,
+      poorMaxAgeDays:
+        typeof parsed.poorMaxAgeDays === "number"
+          ? parsed.poorMaxAgeDays
+          : DEFAULT_THRESHOLD_SETTINGS.poorMaxAgeDays,
     });
   } catch {
     return null;
@@ -250,7 +276,10 @@ export function loadWorkspaceThresholdSettings(workspacePath: string): HealthThr
 }
 
 /** Save threshold settings as a workspace-specific override. */
-export function saveWorkspaceThresholdSettings(workspacePath: string, settings: HealthThresholdSettings): void {
+export function saveWorkspaceThresholdSettings(
+  workspacePath: string,
+  settings: HealthThresholdSettings,
+): void {
   try {
     localStorage.setItem(WORKSPACE_THRESHOLD_PREFIX + workspacePath, JSON.stringify(settings));
   } catch {
@@ -271,9 +300,10 @@ export function removeWorkspaceThresholdSettings(workspacePath: string): void {
  * Resolve effective threshold settings: workspace override → global defaults.
  * Returns the settings and their source.
  */
-export function resolveThresholdSettings(
-  workspacePath: string | null,
-): { settings: HealthThresholdSettings; source: ThresholdSource } {
+export function resolveThresholdSettings(workspacePath: string | null): {
+  settings: HealthThresholdSettings;
+  source: ThresholdSource;
+} {
   if (workspacePath) {
     const ws = loadWorkspaceThresholdSettings(workspacePath);
     if (ws) return { settings: ws, source: "workspace" };

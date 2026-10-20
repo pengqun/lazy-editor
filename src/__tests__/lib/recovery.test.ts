@@ -87,10 +87,7 @@ describe("recovery draft utilities", () => {
       content: "old",
       timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000, // 8 days ago
     };
-    localStorage.setItem(
-      "lazy-editor:recovery:/ws/old.md",
-      JSON.stringify(oldDraft),
-    );
+    localStorage.setItem("lazy-editor:recovery:/ws/old.md", JSON.stringify(oldDraft));
     persistDraft("/ws/recent.md", "recent");
 
     cleanupDrafts();
@@ -107,10 +104,7 @@ describe("recovery draft utilities", () => {
         content: `content ${i}`,
         timestamp: Date.now() - (25 - i) * 1000, // stagger timestamps
       };
-      localStorage.setItem(
-        `lazy-editor:recovery:/ws/file${i}.md`,
-        JSON.stringify(draft),
-      );
+      localStorage.setItem(`lazy-editor:recovery:/ws/file${i}.md`, JSON.stringify(draft));
     }
 
     expect(getAllDraftKeys()).toHaveLength(25);

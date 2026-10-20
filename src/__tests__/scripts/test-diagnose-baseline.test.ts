@@ -74,7 +74,9 @@ describe("test-diagnose baseline helpers", () => {
     const markdown = renderStabilityBaselineMarkdown(baseline);
     expect(markdown).toContain("最近 1/20 次已执行诊断");
     expect(markdown).toContain("| npm test | 100.0% | 1/1 |");
-    expect(markdown).toContain("| npm test -- --no-file-parallelism --maxWorkers=1 | 100.0% | 1/1 |");
+    expect(markdown).toContain(
+      "| npm test -- --no-file-parallelism --maxWorkers=1 | 100.0% | 1/1 |",
+    );
     expect(markdown).toContain("- 无失败记录");
   });
 
@@ -156,11 +158,25 @@ describe("test-diagnose baseline helpers", () => {
       passedCommands: failed ? 0 : 1,
       failedCommands: failed ? 1 : 0,
       overallPassRate: failed ? 0 : 100,
-      commands: [{ command: "npm-test", key: "npm-test", label: "npm test", status: failed ? "failed" : "passed", exitCode: failed ? 1 : 0, logFile: null, failureType: failed ? { key: "test_failure", label: "test failure" } : null }],
+      commands: [
+        {
+          command: "npm-test",
+          key: "npm-test",
+          label: "npm test",
+          status: failed ? "failed" : "passed",
+          exitCode: failed ? 1 : 0,
+          logFile: null,
+          failureType: failed ? { key: "test_failure", label: "test failure" } : null,
+        },
+      ],
       failureTypes: failed ? [{ key: "test_failure", label: "test failure", count: 1 }] : [],
     });
 
-    const warnings = buildBaselineWarnings([makeRun(1, false), makeRun(2, false), makeRun(3, true)]);
+    const warnings = buildBaselineWarnings([
+      makeRun(1, false),
+      makeRun(2, false),
+      makeRun(3, true),
+    ]);
     expect(warnings).toEqual(
       expect.arrayContaining([
         { level: "warn", message: expect.stringContaining("Recent run has 1 failure") },
@@ -182,9 +198,7 @@ describe("test-diagnose baseline helpers", () => {
 
     const warnings = buildBaselineWarnings([makeRun(1, 0, 4), makeRun(2, 1, 4), makeRun(3, 2, 4)]);
     expect(warnings).toEqual(
-      expect.arrayContaining([
-        { level: "warn", message: expect.stringContaining("trending up") },
-      ]),
+      expect.arrayContaining([{ level: "warn", message: expect.stringContaining("trending up") }]),
     );
   });
 
@@ -197,7 +211,9 @@ describe("test-diagnose baseline helpers", () => {
       key: "command_missing",
       label: "command missing",
     });
-    expect(detectFailureType("FAIL src/example.test.ts\nAssertionError: expected 1 to be 2", 1)).toEqual({
+    expect(
+      detectFailureType("FAIL src/example.test.ts\nAssertionError: expected 1 to be 2", 1),
+    ).toEqual({
       key: "test_failure",
       label: "test failure",
     });

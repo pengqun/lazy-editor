@@ -1,6 +1,5 @@
 import { KnowledgePanel } from "@/components/sidebar/KnowledgePanel";
-import { createElement } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { navigateToCitationSource } from "@/hooks/useAI";
 import {
   CITATION_LINK_SELECTOR,
   buildReferenceHtml,
@@ -8,11 +7,12 @@ import {
   parseCitationElement,
 } from "@/lib/citation-notes";
 import type { CitationSource } from "@/lib/tauri";
-import { navigateToCitationSource } from "@/hooks/useAI";
 import { useEditorStore } from "@/stores/editor";
 import { useKnowledgeStore } from "@/stores/knowledge";
 import { invoke } from "@tauri-apps/api/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -134,9 +134,7 @@ describe("parseCitationElement", () => {
 
 describe("buildReferenceHtml — deep-link attributes", () => {
   it("includes citation-link class and data attributes in compact HTML", () => {
-    const html = buildReferenceHtml([
-      makeCitation({ chunkId: 42, documentId: 7, score: 0.85 }),
-    ]);
+    const html = buildReferenceHtml([makeCitation({ chunkId: 42, documentId: 7, score: 0.85 })]);
     expect(html).toContain('class="citation-link"');
     expect(html).toContain('data-chunk-id="42"');
     expect(html).toContain('data-document-id="7"');
@@ -187,7 +185,12 @@ describe("buildReferenceHtml — deep-link attributes", () => {
   });
 
   it("escapes HTML special characters in query attribute", () => {
-    const html = buildReferenceHtml([makeCitation()], "compact", undefined, 'test "query" <script>');
+    const html = buildReferenceHtml(
+      [makeCitation()],
+      "compact",
+      undefined,
+      'test "query" <script>',
+    );
     expect(html).toContain("data-query=");
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
@@ -348,7 +351,12 @@ describe("navigateToCitationSource", () => {
   });
 
   it("stale citation deep-link still attempts navigation and stores error when missing", async () => {
-    const html = buildReferenceHtml([makeCitation({ chunkId: 321, documentId: 99 })], "compact", undefined, "old query");
+    const html = buildReferenceHtml(
+      [makeCitation({ chunkId: 321, documentId: 99 })],
+      "compact",
+      undefined,
+      "old query",
+    );
     const container = document.createElement("div");
     container.innerHTML = html;
     const link = container.querySelector("a.citation-link") as HTMLAnchorElement;
@@ -388,7 +396,9 @@ describe("ChunkViewer error UI", () => {
     render(createElement(KnowledgePanel));
 
     expect(
-      await screen.findByText("Chunk missing — this citation points to content that no longer exists."),
+      await screen.findByText(
+        "Chunk missing — this citation points to content that no longer exists.",
+      ),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Dismiss" })).toBeTruthy();
   });

@@ -1,4 +1,3 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_FIELD_OPTIONS,
   buildReferenceHtml,
@@ -11,6 +10,7 @@ import {
   saveLastTemplate,
 } from "@/lib/citation-notes";
 import type { CitationSource } from "@/lib/tauri";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const makeCitation = (overrides: Partial<CitationSource> = {}): CitationSource => ({
   documentTitle: "Test Doc",
@@ -349,19 +349,28 @@ describe("formatReferenceBlock — field options", () => {
 
   // -- compact --
   it("compact: hides relevance when showRelevance=false", () => {
-    const result = formatReferenceBlock([cite], "compact", { showRelevance: false, showChunkLabel: true });
+    const result = formatReferenceBlock([cite], "compact", {
+      showRelevance: false,
+      showChunkLabel: true,
+    });
     expect(result).toContain("chunk 3");
     expect(result).not.toContain("relevance");
   });
 
   it("compact: hides chunk label when showChunkLabel=false", () => {
-    const result = formatReferenceBlock([cite], "compact", { showRelevance: true, showChunkLabel: false });
+    const result = formatReferenceBlock([cite], "compact", {
+      showRelevance: true,
+      showChunkLabel: false,
+    });
     expect(result).not.toContain("chunk");
     expect(result).toContain("87% relevance");
   });
 
   it("compact: title only when both fields hidden", () => {
-    const result = formatReferenceBlock([cite], "compact", { showRelevance: false, showChunkLabel: false });
+    const result = formatReferenceBlock([cite], "compact", {
+      showRelevance: false,
+      showChunkLabel: false,
+    });
     expect(result).toContain("[1] My Paper");
     expect(result).not.toContain("(");
     expect(result).not.toContain("chunk");
@@ -370,19 +379,28 @@ describe("formatReferenceBlock — field options", () => {
 
   // -- academic --
   it("academic: hides relevance when showRelevance=false", () => {
-    const result = formatReferenceBlock([cite], "academic", { showRelevance: false, showChunkLabel: true });
+    const result = formatReferenceBlock([cite], "academic", {
+      showRelevance: false,
+      showChunkLabel: true,
+    });
     expect(result).toContain("Source: chunk 3");
     expect(result).not.toContain("Relevance");
   });
 
   it("academic: hides chunk label when showChunkLabel=false", () => {
-    const result = formatReferenceBlock([cite], "academic", { showRelevance: true, showChunkLabel: false });
+    const result = formatReferenceBlock([cite], "academic", {
+      showRelevance: true,
+      showChunkLabel: false,
+    });
     expect(result).not.toContain("Source:");
     expect(result).toContain("Relevance: 87%");
   });
 
   it("academic: title only when both fields hidden", () => {
-    const result = formatReferenceBlock([cite], "academic", { showRelevance: false, showChunkLabel: false });
+    const result = formatReferenceBlock([cite], "academic", {
+      showRelevance: false,
+      showChunkLabel: false,
+    });
     expect(result).toContain("[1] My Paper");
     expect(result).not.toContain("Source:");
     expect(result).not.toContain("Relevance");
@@ -399,32 +417,47 @@ describe("buildReferenceHtml — field options", () => {
   const cite = makeCitation({ documentTitle: "My Paper", chunkIndex: 2, score: 0.87 });
 
   it("compact HTML: hides relevance", () => {
-    const html = buildReferenceHtml([cite], "compact", { showRelevance: false, showChunkLabel: true });
+    const html = buildReferenceHtml([cite], "compact", {
+      showRelevance: false,
+      showChunkLabel: true,
+    });
     expect(html).toContain("chunk 3");
     expect(html).not.toContain("relevance");
   });
 
   it("compact HTML: hides chunk label", () => {
-    const html = buildReferenceHtml([cite], "compact", { showRelevance: true, showChunkLabel: false });
+    const html = buildReferenceHtml([cite], "compact", {
+      showRelevance: true,
+      showChunkLabel: false,
+    });
     // The text "chunk N" should not appear in visible content (data-chunk-id attrs are OK)
     expect(html).not.toMatch(/chunk \d/);
     expect(html).toContain("87% relevance");
   });
 
   it("compact HTML: title only when both hidden", () => {
-    const html = buildReferenceHtml([cite], "compact", { showRelevance: false, showChunkLabel: false });
+    const html = buildReferenceHtml([cite], "compact", {
+      showRelevance: false,
+      showChunkLabel: false,
+    });
     expect(html).toContain("[1] My Paper");
     expect(html).not.toContain("<em>");
   });
 
   it("academic HTML: hides relevance", () => {
-    const html = buildReferenceHtml([cite], "academic", { showRelevance: false, showChunkLabel: true });
+    const html = buildReferenceHtml([cite], "academic", {
+      showRelevance: false,
+      showChunkLabel: true,
+    });
     expect(html).toContain("Source: chunk 3");
     expect(html).not.toContain("Relevance");
   });
 
   it("academic HTML: title only when both hidden — no metadata span", () => {
-    const html = buildReferenceHtml([cite], "academic", { showRelevance: false, showChunkLabel: false });
+    const html = buildReferenceHtml([cite], "academic", {
+      showRelevance: false,
+      showChunkLabel: false,
+    });
     expect(html).toContain("<strong>My Paper</strong>");
     expect(html).not.toContain("<br/>");
     expect(html).not.toContain("opacity");

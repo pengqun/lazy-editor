@@ -195,6 +195,29 @@ npm run test:diagnose
 
 说明：该 job 仅做可观测输出，不影响常规开发通过/失败判定；release 流程逻辑不变。
 
+## CI quality gates
+
+常规 CI（`.github/workflows/ci.yml`，push 到 `main` 以及 pull request）要求下列检查全部通过。任一失败时，对应 job 会红灯，并在日志里打印 Biome、Vitest 或 `cargo test` 的失败输出。
+
+| 门禁 | 命令 | 环境 |
+| --- | --- | --- |
+| Lint | `npm run lint`（Biome `biome check src/`，含格式与 import 排序） | Node 20 |
+| Frontend tests | `npm test`（Vitest） | Node 20 |
+| Rust tests | `cd src-tauri && cargo test` | Ubuntu，安装 Tauri 的 Linux 系统依赖（WebKitGTK 4.1 等） |
+| Desktop self-test | 既有 Tauri self-test：`editor-basic`、`editor-undo-redo`、`editor-formatting` | macOS |
+
+Node 24 的构建/测试兼容检查，以及 CI stability baseline，仍然是非阻断的。手动触发的 `CI Diagnose` workflow 不变。
+
+本地复现阻断门禁：
+
+```bash
+npm run lint
+npm test
+cd src-tauri && cargo test
+```
+
+Linux 上跑 `cargo test` 前需要 Tauri 的系统依赖（WebKitGTK 4.1、GTK、OpenSSL、patchelf 等）。当前 Rust stable 在 `x86_64-unknown-linux-gnu` 上默认用 `rust-lld`，它不会搜索 GCC 私有目录里的 `libstdc++.so`，而 fastembed / ONNX Runtime 会链接 `-lstdc++`。CI 会执行 `sudo ln -sfn "$(g++ -print-file-name=libstdc++.so)" /usr/lib/x86_64-linux-gnu/libstdc++.so`。本地如果出现同样的链接错误，做同样的符号链接即可。
+
 ## Development Notes
 
 Useful commands:

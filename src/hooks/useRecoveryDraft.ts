@@ -33,8 +33,11 @@ export function useRecoveryDraft() {
 
     // Persist immediately on becoming dirty, then on interval
     const snap = () => {
-      const { activeFilePath: path, activeFileContent: content, isDirty: dirty } =
-        useFilesStore.getState();
+      const {
+        activeFilePath: path,
+        activeFileContent: content,
+        isDirty: dirty,
+      } = useFilesStore.getState();
       if (dirty) {
         persistDraft(path, content);
       }

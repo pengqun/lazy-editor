@@ -1,13 +1,13 @@
 import {
+  LARGE_DOC_THRESHOLD,
   MATCH_LIMIT,
+  VERY_LARGE_DOC_THRESHOLD,
+  YIELD_BATCH_SIZE,
   adaptiveDebounce,
   estimateDocSize,
   findMatches,
   findMatchesAsync,
   wrapIndex,
-  LARGE_DOC_THRESHOLD,
-  VERY_LARGE_DOC_THRESHOLD,
-  YIELD_BATCH_SIZE,
 } from "@/lib/find-replace";
 import { describe, expect, it, vi } from "vitest";
 
@@ -17,13 +17,14 @@ import { describe, expect, it, vi } from "vitest";
 // mock, we treat it as an early-exit signal).
 function mockDoc(textNodes: { text: string; pos: number }[]) {
   return {
-    descendants(fn: (node: { isText: boolean; text: string | null }, pos: number) => void | false) {
+    descendants(
+      fn: (node: { isText: boolean; text: string | null }, pos: number) => undefined | false,
+    ) {
       for (const tn of textNodes) {
         const result = fn({ isText: true, text: tn.text }, tn.pos);
         if (result === false) break;
       }
     },
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 }
 
@@ -188,12 +189,13 @@ describe("findMatches", () => {
 
   it("handles text nodes with null text gracefully", () => {
     const doc = {
-      descendants(fn: (node: { isText: boolean; text: string | null }, pos: number) => void | false) {
+      descendants(
+        fn: (node: { isText: boolean; text: string | null }, pos: number) => undefined | false,
+      ) {
         fn({ isText: true, text: null }, 0);
         fn({ isText: false, text: null }, 5);
         fn({ isText: true, text: "hello" }, 10);
       },
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
     } as any;
     const { matches } = findMatches(doc, "hello", false);
     expect(matches).toHaveLength(1);
@@ -221,23 +223,13 @@ describe("findMatchesAsync", () => {
       { text: "another needle", pos: 20 },
     ]);
     const sync = findMatches(doc, "needle", false);
-    const asyncResult = await findMatchesAsync(
-      doc,
-      "needle",
-      false,
-      new AbortController().signal,
-    );
+    const asyncResult = await findMatchesAsync(doc, "needle", false, new AbortController().signal);
     expect(asyncResult).toEqual({ ...sync, cancelled: false });
   });
 
   it("returns empty result for empty query", async () => {
     const doc = mockDoc([{ text: "hello world", pos: 0 }]);
-    const result = await findMatchesAsync(
-      doc,
-      "",
-      false,
-      new AbortController().signal,
-    );
+    const result = await findMatchesAsync(doc, "", false, new AbortController().signal);
     expect(result).toEqual({ matches: [], truncated: false, cancelled: false });
   });
 
@@ -252,17 +244,11 @@ describe("findMatchesAsync", () => {
   it("reports progress incrementally for large docs", async () => {
     const doc = mockLargeDoc();
     const progressCounts: number[] = [];
-    const result = await findMatchesAsync(
-      doc,
-      "needle",
-      false,
-      new AbortController().signal,
-      {
-        onProgress: ({ matches }) => {
-          progressCounts.push(matches.length);
-        },
+    const result = await findMatchesAsync(doc, "needle", false, new AbortController().signal, {
+      onProgress: ({ matches }) => {
+        progressCounts.push(matches.length);
       },
-    );
+    });
 
     expect(progressCounts.length).toBeGreaterThan(1);
     expect(progressCounts[progressCounts.length - 1]).toBe(result.matches.length);

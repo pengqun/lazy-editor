@@ -1,3 +1,4 @@
+import { TextSelection } from "@tiptap/pm/state";
 import {
   ArrowDown,
   ArrowUp,
@@ -9,15 +10,14 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { TextSelection } from "@tiptap/pm/state";
 import { cn } from "../../lib/cn";
 import {
+  type SearchMatch,
   adaptiveDebounce,
   estimateDocSize,
   findMatchesAsync,
   isAbortError,
   searchPluginKey,
-  type SearchMatch,
 } from "../../lib/find-replace";
 import { useEditorStore } from "../../stores/editor";
 
@@ -63,13 +63,7 @@ export function FindReplaceBar() {
 
   // Dispatch pre-computed matches to the ProseMirror plugin.
   const dispatchMatches = useCallback(
-    (
-      q: string,
-      cs: boolean,
-      matches: SearchMatch[],
-      isTruncated: boolean,
-      idx: number = 0,
-    ) => {
+    (q: string, cs: boolean, matches: SearchMatch[], isTruncated: boolean, idx = 0) => {
       if (!editor) return;
       const { view } = editor;
       const tr = view.state.tr.setMeta(searchPluginKey, {
@@ -130,39 +124,18 @@ export function FindReplaceBar() {
       const doc = editor.state.doc;
       dispatchMatches(nextQuery, nextCaseSensitive, [], false, 0);
 
-      void findMatchesAsync(
-        doc,
-        nextQuery,
-        nextCaseSensitive,
-        controller.signal,
-        {
-          onProgress: ({ matches, truncated: progressTruncated }) => {
-            if (
-              controller.signal.aborted ||
-              searchRequestIdRef.current !== requestId
-            ) {
-              return;
-            }
-            dispatchMatches(
-              nextQuery,
-              nextCaseSensitive,
-              matches,
-              progressTruncated,
-              0,
-            );
-          },
+      void findMatchesAsync(doc, nextQuery, nextCaseSensitive, controller.signal, {
+        onProgress: ({ matches, truncated: progressTruncated }) => {
+          if (controller.signal.aborted || searchRequestIdRef.current !== requestId) {
+            return;
+          }
+          dispatchMatches(nextQuery, nextCaseSensitive, matches, progressTruncated, 0);
         },
-      )
+      })
         .then((result) => {
           if (searchRequestIdRef.current !== requestId) return;
           if (!result.cancelled) {
-            dispatchMatches(
-              nextQuery,
-              nextCaseSensitive,
-              result.matches,
-              result.truncated,
-              0,
-            );
+            dispatchMatches(nextQuery, nextCaseSensitive, result.matches, result.truncated, 0);
           }
           setSearching(false);
         })
@@ -197,8 +170,7 @@ export function FindReplaceBar() {
   const goToMatch = useCallback(
     (direction: 1 | -1) => {
       if (!editor || matchCount === 0) return;
-      const nextIndex =
-        ((currentIndex + direction) % matchCount + matchCount) % matchCount;
+      const nextIndex = (((currentIndex + direction) % matchCount) + matchCount) % matchCount;
       dispatchSearch(query, caseSensitive, nextIndex);
       scrollToCurrentMatch(nextIndex);
     },
@@ -330,9 +302,7 @@ export function FindReplaceBar() {
           onClick={() => setCaseSensitive(!caseSensitive)}
           className={cn(
             "p-1 rounded transition-colors",
-            caseSensitive
-              ? "bg-accent/20 text-accent"
-              : "text-text-tertiary hover:bg-surface-3",
+            caseSensitive ? "bg-accent/20 text-accent" : "text-text-tertiary hover:bg-surface-3",
           )}
           title="Match case"
         >

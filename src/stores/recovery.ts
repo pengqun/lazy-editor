@@ -1,9 +1,4 @@
-import {
-  type RecoveryDraft,
-  checkRecovery,
-  cleanupDrafts,
-  clearDraft,
-} from "@/lib/recovery";
+import { type RecoveryDraft, checkRecovery, cleanupDrafts, clearDraft } from "@/lib/recovery";
 import { create } from "zustand";
 
 interface RecoveryState {

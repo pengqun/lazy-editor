@@ -1,4 +1,4 @@
-import { computeBatchExecutionMetrics, type BatchExecutionLog } from "./integrity-batch-plan";
+import { type BatchExecutionLog, computeBatchExecutionMetrics } from "./integrity-batch-plan";
 
 const STORAGE_PREFIX = "lazyeditor.integrity.batch-impact.v1:";
 
@@ -40,8 +40,10 @@ export function buildBatchImpactSummary(log: BatchExecutionLog): BatchImpactSumm
   };
 }
 
-export function shouldShowBatchImpact(summary: BatchImpactSummary | null): summary is BatchImpactSummary {
-  return Boolean(summary && summary.completedAt);
+export function shouldShowBatchImpact(
+  summary: BatchImpactSummary | null,
+): summary is BatchImpactSummary {
+  return Boolean(summary?.completedAt);
 }
 
 export function loadBatchImpactSummary(workspacePath: string | null): BatchImpactSummary | null {
@@ -66,7 +68,10 @@ export function loadBatchImpactSummary(workspacePath: string | null): BatchImpac
   }
 }
 
-export function saveBatchImpactSummary(workspacePath: string | null, summary: BatchImpactSummary): void {
+export function saveBatchImpactSummary(
+  workspacePath: string | null,
+  summary: BatchImpactSummary,
+): void {
   try {
     localStorage.setItem(getStorageKey(workspacePath), JSON.stringify(summary));
   } catch {

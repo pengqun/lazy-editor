@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  type HealthThresholdSettings,
   DEFAULT_THRESHOLD_SETTINGS,
+  type HealthThresholdSettings,
 } from "../../lib/integrity-health";
 import {
-  type ThresholdConfigPayload,
   CONFIG_KIND,
   CURRENT_SCHEMA_VERSION,
+  type ThresholdConfigPayload,
   applyThresholdConfig,
   buildThresholdExportPayload,
   formatValidationErrors,
@@ -52,8 +52,14 @@ describe("validateThresholdConfig", () => {
   });
 
   it("accepts payload with workspace overrides", () => {
-    const wsSettings: HealthThresholdSettings = { goodMinScans7d: 5, goodMaxAgeDays: 3, poorMaxAgeDays: 10 };
-    const result = validateThresholdConfig(makeValidPayload({ workspaces: { [WS_A]: wsSettings } }));
+    const wsSettings: HealthThresholdSettings = {
+      goodMinScans7d: 5,
+      goodMaxAgeDays: 3,
+      poorMaxAgeDays: 10,
+    };
+    const result = validateThresholdConfig(
+      makeValidPayload({ workspaces: { [WS_A]: wsSettings } }),
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.payload.workspaces?.[WS_A]).toEqual(wsSettings);
@@ -129,19 +135,29 @@ describe("validateThresholdConfig", () => {
 
   it("rejects NaN/Infinity threshold values", () => {
     const r1 = validateThresholdConfig(
-      makeValidPayload({ defaults: { goodMinScans7d: NaN, goodMaxAgeDays: 7, poorMaxAgeDays: 14 } }),
+      makeValidPayload({
+        defaults: { goodMinScans7d: Number.NaN, goodMaxAgeDays: 7, poorMaxAgeDays: 14 },
+      }),
     );
     expect(r1.ok).toBe(false);
 
     const r2 = validateThresholdConfig(
-      makeValidPayload({ defaults: { goodMinScans7d: 2, goodMaxAgeDays: Infinity, poorMaxAgeDays: 14 } }),
+      makeValidPayload({
+        defaults: {
+          goodMinScans7d: 2,
+          goodMaxAgeDays: Number.POSITIVE_INFINITY,
+          poorMaxAgeDays: 14,
+        },
+      }),
     );
     expect(r2.ok).toBe(false);
   });
 
   it("clamps out-of-range values silently", () => {
     const result = validateThresholdConfig(
-      makeValidPayload({ defaults: { goodMinScans7d: 99, goodMaxAgeDays: -5, poorMaxAgeDays: 200 } }),
+      makeValidPayload({
+        defaults: { goodMinScans7d: 99, goodMaxAgeDays: -5, poorMaxAgeDays: 200 },
+      }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -174,7 +190,7 @@ describe("validateThresholdConfig", () => {
 
   it("accepts payload without workspaces key", () => {
     const payload = makeValidPayload();
-    delete (payload as any).workspaces;
+    expect("workspaces" in payload).toBe(false);
     const result = validateThresholdConfig(payload);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -244,14 +260,22 @@ describe("buildThresholdExportPayload", () => {
   });
 
   it("exports custom global settings", () => {
-    const custom: HealthThresholdSettings = { goodMinScans7d: 5, goodMaxAgeDays: 3, poorMaxAgeDays: 10 };
+    const custom: HealthThresholdSettings = {
+      goodMinScans7d: 5,
+      goodMaxAgeDays: 3,
+      poorMaxAgeDays: 10,
+    };
     localStorage.setItem(GLOBAL_KEY, JSON.stringify(custom));
     const payload = buildThresholdExportPayload();
     expect(payload.defaults).toEqual(custom);
   });
 
   it("includes workspace overrides in export", () => {
-    const wsSettings: HealthThresholdSettings = { goodMinScans7d: 4, goodMaxAgeDays: 2, poorMaxAgeDays: 8 };
+    const wsSettings: HealthThresholdSettings = {
+      goodMinScans7d: 4,
+      goodMaxAgeDays: 2,
+      poorMaxAgeDays: 8,
+    };
     localStorage.setItem(WS_PREFIX + WS_A, JSON.stringify(wsSettings));
     const payload = buildThresholdExportPayload();
     expect(payload.workspaces).toBeDefined();
@@ -259,8 +283,16 @@ describe("buildThresholdExportPayload", () => {
   });
 
   it("exports multiple workspace overrides", () => {
-    const wsA: HealthThresholdSettings = { goodMinScans7d: 4, goodMaxAgeDays: 2, poorMaxAgeDays: 8 };
-    const wsB: HealthThresholdSettings = { goodMinScans7d: 1, goodMaxAgeDays: 10, poorMaxAgeDays: 20 };
+    const wsA: HealthThresholdSettings = {
+      goodMinScans7d: 4,
+      goodMaxAgeDays: 2,
+      poorMaxAgeDays: 8,
+    };
+    const wsB: HealthThresholdSettings = {
+      goodMinScans7d: 1,
+      goodMaxAgeDays: 10,
+      poorMaxAgeDays: 20,
+    };
     localStorage.setItem(WS_PREFIX + WS_A, JSON.stringify(wsA));
     localStorage.setItem(WS_PREFIX + WS_B, JSON.stringify(wsB));
     const payload = buildThresholdExportPayload();
@@ -296,32 +328,52 @@ describe("serializeThresholdConfig", () => {
 
 describe("applyThresholdConfig", () => {
   it("persists global defaults on import", () => {
-    const custom: HealthThresholdSettings = { goodMinScans7d: 5, goodMaxAgeDays: 3, poorMaxAgeDays: 10 };
+    const custom: HealthThresholdSettings = {
+      goodMinScans7d: 5,
+      goodMaxAgeDays: 3,
+      poorMaxAgeDays: 10,
+    };
     applyThresholdConfig(makeValidPayload({ defaults: custom }));
     const stored = JSON.parse(localStorage.getItem(GLOBAL_KEY)!);
     expect(stored).toEqual(custom);
   });
 
   it("persists workspace overrides on import", () => {
-    const wsSettings: HealthThresholdSettings = { goodMinScans7d: 4, goodMaxAgeDays: 2, poorMaxAgeDays: 8 };
+    const wsSettings: HealthThresholdSettings = {
+      goodMinScans7d: 4,
+      goodMaxAgeDays: 2,
+      poorMaxAgeDays: 8,
+    };
     applyThresholdConfig(makeValidPayload({ workspaces: { [WS_A]: wsSettings } }));
     const stored = JSON.parse(localStorage.getItem(WS_PREFIX + WS_A)!);
     expect(stored).toEqual(wsSettings);
   });
 
   it("returns the applied defaults", () => {
-    const custom: HealthThresholdSettings = { goodMinScans7d: 5, goodMaxAgeDays: 3, poorMaxAgeDays: 10 };
+    const custom: HealthThresholdSettings = {
+      goodMinScans7d: 5,
+      goodMaxAgeDays: 3,
+      poorMaxAgeDays: 10,
+    };
     const result = applyThresholdConfig(makeValidPayload({ defaults: custom }));
     expect(result).toEqual(custom);
   });
 
   it("does not clear existing workspace overrides not in payload", () => {
     // Pre-existing workspace override
-    const existing: HealthThresholdSettings = { goodMinScans7d: 1, goodMaxAgeDays: 10, poorMaxAgeDays: 20 };
+    const existing: HealthThresholdSettings = {
+      goodMinScans7d: 1,
+      goodMaxAgeDays: 10,
+      poorMaxAgeDays: 20,
+    };
     localStorage.setItem(WS_PREFIX + WS_B, JSON.stringify(existing));
 
     // Import with only WS_A
-    const wsA: HealthThresholdSettings = { goodMinScans7d: 4, goodMaxAgeDays: 2, poorMaxAgeDays: 8 };
+    const wsA: HealthThresholdSettings = {
+      goodMinScans7d: 4,
+      goodMaxAgeDays: 2,
+      poorMaxAgeDays: 8,
+    };
     applyThresholdConfig(makeValidPayload({ workspaces: { [WS_A]: wsA } }));
 
     // WS_B should still exist (additive merge)
@@ -330,10 +382,18 @@ describe("applyThresholdConfig", () => {
   });
 
   it("overwrites existing global settings", () => {
-    const old: HealthThresholdSettings = { goodMinScans7d: 1, goodMaxAgeDays: 1, poorMaxAgeDays: 3 };
+    const old: HealthThresholdSettings = {
+      goodMinScans7d: 1,
+      goodMaxAgeDays: 1,
+      poorMaxAgeDays: 3,
+    };
     localStorage.setItem(GLOBAL_KEY, JSON.stringify(old));
 
-    const newSettings: HealthThresholdSettings = { goodMinScans7d: 8, goodMaxAgeDays: 5, poorMaxAgeDays: 15 };
+    const newSettings: HealthThresholdSettings = {
+      goodMinScans7d: 8,
+      goodMaxAgeDays: 5,
+      poorMaxAgeDays: 15,
+    };
     applyThresholdConfig(makeValidPayload({ defaults: newSettings }));
     expect(JSON.parse(localStorage.getItem(GLOBAL_KEY)!)).toEqual(newSettings);
   });
@@ -344,8 +404,16 @@ describe("applyThresholdConfig", () => {
 describe("export → import roundtrip", () => {
   it("roundtrips global + workspace config", () => {
     // Setup: custom global + workspace override
-    const globalSettings: HealthThresholdSettings = { goodMinScans7d: 3, goodMaxAgeDays: 5, poorMaxAgeDays: 12 };
-    const wsSettings: HealthThresholdSettings = { goodMinScans7d: 7, goodMaxAgeDays: 2, poorMaxAgeDays: 9 };
+    const globalSettings: HealthThresholdSettings = {
+      goodMinScans7d: 3,
+      goodMaxAgeDays: 5,
+      poorMaxAgeDays: 12,
+    };
+    const wsSettings: HealthThresholdSettings = {
+      goodMinScans7d: 7,
+      goodMaxAgeDays: 2,
+      poorMaxAgeDays: 9,
+    };
     localStorage.setItem(GLOBAL_KEY, JSON.stringify(globalSettings));
     localStorage.setItem(WS_PREFIX + WS_A, JSON.stringify(wsSettings));
 

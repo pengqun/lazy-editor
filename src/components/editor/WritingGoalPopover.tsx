@@ -46,7 +46,11 @@ export function WritingGoalPopover({ filePath, onClose }: Props) {
           <Target size={12} />
           Writing Goal
         </div>
-        <button type="button" onClick={onClose} className="text-text-tertiary hover:text-text-primary">
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-text-tertiary hover:text-text-primary"
+        >
           <X size={12} />
         </button>
       </div>

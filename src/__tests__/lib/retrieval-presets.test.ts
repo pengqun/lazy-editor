@@ -50,7 +50,9 @@ describe("retrieval-presets", () => {
     });
 
     it("no two presets share the same topK+scope pair", () => {
-      const keys = PRESET_IDS.map((id) => `${RETRIEVAL_PRESETS[id].topK}:${RETRIEVAL_PRESETS[id].scope}`);
+      const keys = PRESET_IDS.map(
+        (id) => `${RETRIEVAL_PRESETS[id].topK}:${RETRIEVAL_PRESETS[id].scope}`,
+      );
       expect(new Set(keys).size).toBe(keys.length);
     });
   });
@@ -217,7 +219,11 @@ describe("retrieval-presets", () => {
 
     it("workspace overrides global", () => {
       savePresetToStorage("research");
-      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+      saveWorkspaceRetrievalSettings("/workspace", {
+        preset: "precision",
+        topK: 3,
+        scope: "pinned",
+      });
       const { settings, source } = resolveRetrievalSettings("/file.md", "/workspace");
       expect(source).toBe("workspace");
       expect(settings.preset).toBe("precision");
@@ -227,7 +233,11 @@ describe("retrieval-presets", () => {
 
     it("per-doc overrides workspace", () => {
       savePresetToStorage("research");
-      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+      saveWorkspaceRetrievalSettings("/workspace", {
+        preset: "precision",
+        topK: 3,
+        scope: "pinned",
+      });
       saveDocRetrievalSettings("/file.md", { preset: "writing", topK: 5, scope: "all" });
       const { settings, source } = resolveRetrievalSettings("/file.md", "/workspace");
       expect(source).toBe("doc");
@@ -245,14 +255,22 @@ describe("retrieval-presets", () => {
     });
 
     it("workspace is used when file has no per-doc settings", () => {
-      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+      saveWorkspaceRetrievalSettings("/workspace", {
+        preset: "precision",
+        topK: 3,
+        scope: "pinned",
+      });
       const { settings, source } = resolveRetrievalSettings("/new-file.md", "/workspace");
       expect(source).toBe("workspace");
       expect(settings.preset).toBe("precision");
     });
 
     it("skips workspace when workspacePath is null", () => {
-      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+      saveWorkspaceRetrievalSettings("/workspace", {
+        preset: "precision",
+        topK: 3,
+        scope: "pinned",
+      });
       savePresetToStorage("research");
       const { settings, source } = resolveRetrievalSettings("/file.md", null);
       expect(source).toBe("global");

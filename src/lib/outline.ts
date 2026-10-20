@@ -1,9 +1,5 @@
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import {
-  LARGE_DOC_THRESHOLD,
-  YIELD_BATCH_SIZE,
-  isAbortError,
-} from "./find-replace";
+import { LARGE_DOC_THRESHOLD, YIELD_BATCH_SIZE, isAbortError } from "./find-replace";
 
 export interface OutlineHeading {
   level: 1 | 2 | 3;
@@ -79,11 +75,7 @@ export function extractHeadings(
   doc.descendants((node, pos) => {
     throwIfAborted(signal);
     if (truncated) return false;
-    if (
-      node.type.name === "heading" &&
-      node.attrs.level >= 1 &&
-      node.attrs.level <= 3
-    ) {
+    if (node.type.name === "heading" && node.attrs.level >= 1 && node.attrs.level <= 3) {
       headings.push({
         level: node.attrs.level as 1 | 2 | 3,
         text: node.textContent,

@@ -1,16 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
+  buildBatchImpactSummary,
+  loadBatchImpactSummary,
+  saveBatchImpactSummary,
+} from "../../lib/integrity-batch-impact";
+import {
   type BatchExecutionCallbacks,
   buildBatchFixPlan,
   executeBatchFixPlan,
   executeBatchStep,
   mergeRetriedResult,
 } from "../../lib/integrity-batch-plan";
-import {
-  buildBatchImpactSummary,
-  loadBatchImpactSummary,
-  saveBatchImpactSummary,
-} from "../../lib/integrity-batch-impact";
 import { toast } from "../toast";
 import { extractErrorMessage } from "./integrity-utils";
 import { refreshAfterMutation } from "./refresh";
@@ -18,8 +18,9 @@ import type { IntegrityReport, KnowledgeState } from "./types";
 
 const inFlightBatchStepRetries = new Set<string>();
 
-type BatchStateSlice = Pick<KnowledgeState,
-  "batchFixPlan"
+type BatchStateSlice = Pick<
+  KnowledgeState,
+  | "batchFixPlan"
   | "batchLastPlan"
   | "batchExecuting"
   | "batchStepStatuses"
@@ -27,8 +28,9 @@ type BatchStateSlice = Pick<KnowledgeState,
   | "lastBatchImpact"
 >;
 
-type BatchActionSlice = Pick<KnowledgeState,
-  "clearHealthCheck"
+type BatchActionSlice = Pick<
+  KnowledgeState,
+  | "clearHealthCheck"
   | "buildBatchPlan"
   | "clearBatchPlan"
   | "confirmBatchPlan"
@@ -54,7 +56,8 @@ function buildBatchCallbacks(
       }
     },
     enableReminders: () => setReminderSettings({ enabled: true }),
-    adjustFrequency: (freq) => setReminderSettings({ frequency: freq as "daily" | "every3days" | "weekly" }),
+    adjustFrequency: (freq) =>
+      setReminderSettings({ frequency: freq as "daily" | "every3days" | "weekly" }),
     movedEntries,
   };
 }
@@ -71,12 +74,20 @@ export function createBatchStateSlice(): BatchStateSlice {
 }
 
 export function createBatchActionSlice(
-  set: (partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>)) => void,
+  set: (
+    partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>),
+  ) => void,
   get: () => KnowledgeState,
 ): BatchActionSlice {
   return {
     clearHealthCheck: () =>
-      set({ healthCheckReport: null, batchFixPlan: null, batchLastPlan: null, batchExecutionLog: null, batchStepStatuses: {} }),
+      set({
+        healthCheckReport: null,
+        batchFixPlan: null,
+        batchLastPlan: null,
+        batchExecutionLog: null,
+        batchStepStatuses: {},
+      }),
 
     buildBatchPlan: () => {
       const { healthCheckReport } = get();
@@ -99,7 +110,9 @@ export function createBatchActionSlice(
         const callbacks = buildBatchCallbacks(integrityReport, setReminderSettings);
         const log = await executeBatchFixPlan(batchFixPlan, callbacks, {
           onStepStatusChange: (stepId, status) => {
-            set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [stepId]: status } }));
+            set((state) => ({
+              batchStepStatuses: { ...state.batchStepStatuses, [stepId]: status },
+            }));
           },
         });
 
@@ -115,9 +128,13 @@ export function createBatchActionSlice(
 
         const { success, failed, skipped, itemChanges } = log.summary;
         if (failed > 0) {
-          toast.error(`Batch: ${success} ok, ${failed} failed, ${skipped} skipped · ${itemChanges.success} items changed`);
+          toast.error(
+            `Batch: ${success} ok, ${failed} failed, ${skipped} skipped · ${itemChanges.success} items changed`,
+          );
         } else {
-          toast.success(`Batch complete: ${success} applied, ${skipped} skipped · ${itemChanges.success} items changed`);
+          toast.success(
+            `Batch complete: ${success} applied, ${skipped} skipped · ${itemChanges.success} items changed`,
+          );
         }
 
         await refreshAfterMutation(get);
@@ -138,11 +155,16 @@ export function createBatchActionSlice(
       inFlightBatchStepRetries.add(stepId);
       try {
         const callbacks = buildBatchCallbacks(integrityReport, setReminderSettings);
-        const retried = await executeBatchStep(step, callbacks, {
-          onStepStatusChange: (id, status) => {
-            set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [id]: status } }));
+        const retried = await executeBatchStep(
+          step,
+          callbacks,
+          {
+            onStepStatusChange: (id, status) => {
+              set((state) => ({ batchStepStatuses: { ...state.batchStepStatuses, [id]: status } }));
+            },
           },
-        }, previous.attempts + 1);
+          previous.attempts + 1,
+        );
 
         const merged = mergeRetriedResult(batchExecutionLog, retried);
         const summary = buildBatchImpactSummary(merged);
