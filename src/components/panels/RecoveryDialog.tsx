@@ -21,7 +21,7 @@ export function RecoveryDialog() {
   const fileName =
     pendingDraft.filePath === "__untitled__"
       ? "Untitled document"
-      : pendingDraft.filePath.split("/").pop() ?? pendingDraft.filePath;
+      : (pendingDraft.filePath.split("/").pop() ?? pendingDraft.filePath);
 
   const handleRestore = () => {
     const content = acceptRecovery();

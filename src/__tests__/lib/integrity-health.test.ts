@@ -1,9 +1,9 @@
 import type { IntegrityScanSnapshot } from "@/stores/knowledge";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  DEFAULT_THRESHOLD_SETTINGS,
   type HealthThresholdSettings,
   type ScanCoverageMetrics,
-  DEFAULT_THRESHOLD_SETTINGS,
   clampThresholdSettings,
   computeHealthTier,
   computeScanCoverage,
@@ -252,35 +252,61 @@ describe("clampThresholdSettings", () => {
   });
 
   it("clamps goodMinScans7d to [1, 10]", () => {
-    expect(clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, goodMinScans7d: 0 }).goodMinScans7d).toBe(1);
-    expect(clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, goodMinScans7d: -5 }).goodMinScans7d).toBe(1);
-    expect(clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, goodMinScans7d: 15 }).goodMinScans7d).toBe(10);
+    expect(
+      clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, goodMinScans7d: 0 }).goodMinScans7d,
+    ).toBe(1);
+    expect(
+      clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, goodMinScans7d: -5 }).goodMinScans7d,
+    ).toBe(1);
+    expect(
+      clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, goodMinScans7d: 15 }).goodMinScans7d,
+    ).toBe(10);
   });
 
   it("clamps goodMaxAgeDays to [1, 30]", () => {
-    expect(clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, goodMaxAgeDays: 0 }).goodMaxAgeDays).toBe(1);
-    expect(clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, goodMaxAgeDays: 50 }).goodMaxAgeDays).toBe(30);
+    expect(
+      clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, goodMaxAgeDays: 0 }).goodMaxAgeDays,
+    ).toBe(1);
+    expect(
+      clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, goodMaxAgeDays: 50 }).goodMaxAgeDays,
+    ).toBe(30);
   });
 
   it("clamps poorMaxAgeDays to [goodMaxAgeDays+1, 60]", () => {
-    expect(clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, poorMaxAgeDays: 1 }).poorMaxAgeDays).toBe(8); // 7+1
-    expect(clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, poorMaxAgeDays: 100 }).poorMaxAgeDays).toBe(60);
+    expect(
+      clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, poorMaxAgeDays: 1 }).poorMaxAgeDays,
+    ).toBe(8); // 7+1
+    expect(
+      clampThresholdSettings({ ...DEFAULT_THRESHOLD_SETTINGS, poorMaxAgeDays: 100 }).poorMaxAgeDays,
+    ).toBe(60);
   });
 
   it("enforces poorMaxAgeDays > goodMaxAgeDays", () => {
-    const result = clampThresholdSettings({ goodMinScans7d: 2, goodMaxAgeDays: 10, poorMaxAgeDays: 10 });
+    const result = clampThresholdSettings({
+      goodMinScans7d: 2,
+      goodMaxAgeDays: 10,
+      poorMaxAgeDays: 10,
+    });
     expect(result.poorMaxAgeDays).toBe(11); // must be > 10
   });
 
   it("rounds fractional values", () => {
-    const result = clampThresholdSettings({ goodMinScans7d: 2.7, goodMaxAgeDays: 7.3, poorMaxAgeDays: 14.9 });
+    const result = clampThresholdSettings({
+      goodMinScans7d: 2.7,
+      goodMaxAgeDays: 7.3,
+      poorMaxAgeDays: 14.9,
+    });
     expect(result.goodMinScans7d).toBe(3);
     expect(result.goodMaxAgeDays).toBe(7);
     expect(result.poorMaxAgeDays).toBe(15);
   });
 
   it("handles NaN by clamping to min", () => {
-    const result = clampThresholdSettings({ goodMinScans7d: NaN, goodMaxAgeDays: NaN, poorMaxAgeDays: NaN });
+    const result = clampThresholdSettings({
+      goodMinScans7d: Number.NaN,
+      goodMaxAgeDays: Number.NaN,
+      poorMaxAgeDays: Number.NaN,
+    });
     expect(result.goodMinScans7d).toBe(1);
     expect(result.goodMaxAgeDays).toBe(1);
     expect(result.poorMaxAgeDays).toBe(2); // 1 + 1
@@ -330,14 +356,21 @@ describe("threshold persistence", () => {
   });
 
   it("roundtrips save + load", () => {
-    const settings: HealthThresholdSettings = { goodMinScans7d: 5, goodMaxAgeDays: 3, poorMaxAgeDays: 10 };
+    const settings: HealthThresholdSettings = {
+      goodMinScans7d: 5,
+      goodMaxAgeDays: 3,
+      poorMaxAgeDays: 10,
+    };
     saveThresholdSettings(settings);
     const loaded = loadThresholdSettings();
     expect(loaded).toEqual(settings);
   });
 
   it("clamps invalid values on load", () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ goodMinScans7d: 99, goodMaxAgeDays: -1, poorMaxAgeDays: 0 }));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ goodMinScans7d: 99, goodMaxAgeDays: -1, poorMaxAgeDays: 0 }),
+    );
     const loaded = loadThresholdSettings();
     expect(loaded.goodMinScans7d).toBe(10);
     expect(loaded.goodMaxAgeDays).toBe(1);
@@ -392,7 +425,11 @@ describe("computeHealthTier with user-facing settings", () => {
     // With defaults → warning (10d > 7d goodMax, but 10d < 14d poorMax, 1 scan >= warning7d)
     expect(computeHealthTier(metrics)).toBe("warning");
     // Relaxed: good within 20 days, poor after 30 days
-    const relaxed = toHealthThresholds({ goodMinScans7d: 1, goodMaxAgeDays: 20, poorMaxAgeDays: 30 });
+    const relaxed = toHealthThresholds({
+      goodMinScans7d: 1,
+      goodMaxAgeDays: 20,
+      poorMaxAgeDays: 30,
+    });
     expect(computeHealthTier(metrics, relaxed)).toBe("good"); // 1 >= 1, 10d <= 20d
   });
 

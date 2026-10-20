@@ -1,7 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
 import {
-  type ReferenceProfile,
   BUILTIN_PROFILES,
+  type ReferenceProfile,
   deleteCustomProfile,
   getProfileById,
   listProfiles,
@@ -16,6 +15,7 @@ import {
   saveFieldOptions,
   saveLastTemplate,
 } from "@/lib/citation-notes";
+import { afterEach, describe, expect, it } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Built-in profiles
@@ -162,10 +162,7 @@ describe("custom profile CRUD", () => {
       isBuiltin: false,
     };
     const invalid = { id: 123, name: null };
-    localStorage.setItem(
-      "lazy-editor:reference-profiles",
-      JSON.stringify([valid, invalid]),
-    );
+    localStorage.setItem("lazy-editor:reference-profiles", JSON.stringify([valid, invalid]));
     const loaded = loadCustomProfiles();
     expect(loaded).toHaveLength(1);
     expect(loaded[0].name).toBe("Valid");
@@ -179,10 +176,7 @@ describe("custom profile CRUD", () => {
       fields: { showRelevance: true, showChunkLabel: true },
       isBuiltin: true, // tampered
     };
-    localStorage.setItem(
-      "lazy-editor:reference-profiles",
-      JSON.stringify([tampered]),
-    );
+    localStorage.setItem("lazy-editor:reference-profiles", JSON.stringify([tampered]));
     const loaded = loadCustomProfiles();
     expect(loaded).toHaveLength(1);
     expect(loaded[0].isBuiltin).toBe(false);
@@ -196,10 +190,7 @@ describe("custom profile CRUD", () => {
       fields: { showRelevance: true, showChunkLabel: true },
       isBuiltin: false,
     };
-    localStorage.setItem(
-      "lazy-editor:reference-profiles",
-      JSON.stringify([bad]),
-    );
+    localStorage.setItem("lazy-editor:reference-profiles", JSON.stringify([bad]));
     expect(loadCustomProfiles()).toEqual([]);
   });
 });
@@ -346,7 +337,11 @@ describe("saveCitationSettings", () => {
   afterEach(() => localStorage.clear());
 
   it("mirrors template and fields to legacy keys", () => {
-    saveCitationSettings("academic", { showRelevance: false, showChunkLabel: true }, "builtin:academic-full");
+    saveCitationSettings(
+      "academic",
+      { showRelevance: false, showChunkLabel: true },
+      "builtin:academic-full",
+    );
     expect(loadLastTemplate()).toBe("academic");
     const fields = loadFieldOptions();
     expect(fields.showRelevance).toBe(false);
@@ -399,7 +394,11 @@ describe("backward compatibility", () => {
   });
 
   it("saveCitationSettings writes to all legacy keys for compatibility", () => {
-    saveCitationSettings("academic", { showRelevance: false, showChunkLabel: true }, "builtin:academic-full");
+    saveCitationSettings(
+      "academic",
+      { showRelevance: false, showChunkLabel: true },
+      "builtin:academic-full",
+    );
     // Check legacy keys directly
     expect(localStorage.getItem("lazy-editor:citation-template")).toBe("academic");
     const fields = JSON.parse(localStorage.getItem("lazy-editor:citation-fields")!);

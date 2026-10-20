@@ -52,10 +52,7 @@ function yieldToEventLoop(): Promise<void> {
 }
 
 export function isAbortError(error: unknown): boolean {
-  return (
-    error instanceof DOMException
-    && error.name === "AbortError"
-  );
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -276,8 +273,7 @@ export const SearchAndReplace = Extension.create({
           },
 
           apply(tr, prev, _oldState, newState): SearchPluginState {
-            const meta: SearchPluginMeta | undefined =
-              tr.getMeta(searchPluginKey);
+            const meta: SearchPluginMeta | undefined = tr.getMeta(searchPluginKey);
 
             if (meta) {
               const query = meta.query ?? prev.query;
@@ -294,19 +290,12 @@ export const SearchAndReplace = Extension.create({
                   matches: providedMatches,
                   currentIndex,
                   truncated,
-                  decorations: buildDecorations(
-                    newState.doc,
-                    providedMatches,
-                    currentIndex,
-                  ),
+                  decorations: buildDecorations(newState.doc, providedMatches, currentIndex),
                 };
               }
 
               // Query or case-sensitivity changed → recompute matches
-              if (
-                query !== prev.query ||
-                caseSensitive !== prev.caseSensitive
-              ) {
+              if (query !== prev.query || caseSensitive !== prev.caseSensitive) {
                 const { matches, truncated } = findMatches(newState.doc, query, caseSensitive);
                 currentIndex = wrapIndex(currentIndex, matches.length);
                 return {
@@ -355,10 +344,7 @@ export const SearchAndReplace = Extension.create({
 
         props: {
           decorations(state) {
-            return (
-              searchPluginKey.getState(state)?.decorations ??
-              DecorationSet.empty
-            );
+            return searchPluginKey.getState(state)?.decorations ?? DecorationSet.empty;
           },
         },
       }),

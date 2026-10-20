@@ -67,9 +67,8 @@ const academicTemplate: CitationTemplate = {
     const meta: string[] = [];
     if (fields.showChunkLabel) meta.push(`Source: chunk ${c.chunkIndex + 1}`);
     if (fields.showRelevance) meta.push(`Relevance: ${Math.round(c.score * 100)}%`);
-    const metaHtml = meta.length > 0
-      ? `<br/><span style="opacity:0.7">${meta.join(" · ")}</span>`
-      : "";
+    const metaHtml =
+      meta.length > 0 ? `<br/><span style="opacity:0.7">${meta.join(" · ")}</span>` : "";
     const attrs = citationDataAttrs(c);
     return `<li><a href="#" class="citation-link" ${attrs}>[${i + 1}] <strong>${escapeHtml(c.documentTitle)}</strong></a>${metaHtml}</li>`;
   },
@@ -184,20 +183,22 @@ export function loadCustomProfiles(): ReferenceProfile[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.filter(
-          (p: unknown): p is ReferenceProfile =>
-            typeof p === "object" &&
-            p !== null &&
-            typeof (p as ReferenceProfile).id === "string" &&
-            typeof (p as ReferenceProfile).name === "string" &&
-            typeof (p as ReferenceProfile).templateId === "string" &&
-            ((p as ReferenceProfile).templateId === "compact" ||
-              (p as ReferenceProfile).templateId === "academic") &&
-            typeof (p as ReferenceProfile).fields === "object" &&
-            (p as ReferenceProfile).fields !== null &&
-            typeof (p as ReferenceProfile).fields.showRelevance === "boolean" &&
-            typeof (p as ReferenceProfile).fields.showChunkLabel === "boolean",
-        ).map((p) => ({ ...p, isBuiltin: false }));
+        return parsed
+          .filter(
+            (p: unknown): p is ReferenceProfile =>
+              typeof p === "object" &&
+              p !== null &&
+              typeof (p as ReferenceProfile).id === "string" &&
+              typeof (p as ReferenceProfile).name === "string" &&
+              typeof (p as ReferenceProfile).templateId === "string" &&
+              ((p as ReferenceProfile).templateId === "compact" ||
+                (p as ReferenceProfile).templateId === "academic") &&
+              typeof (p as ReferenceProfile).fields === "object" &&
+              (p as ReferenceProfile).fields !== null &&
+              typeof (p as ReferenceProfile).fields.showRelevance === "boolean" &&
+              typeof (p as ReferenceProfile).fields.showChunkLabel === "boolean",
+          )
+          .map((p) => ({ ...p, isBuiltin: false }));
       }
     }
   } catch {

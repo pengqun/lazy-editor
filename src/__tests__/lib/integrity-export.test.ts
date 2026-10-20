@@ -124,7 +124,13 @@ describe("formatJSON", () => {
       entries: [
         { id: 1, title: "Doc", sourcePath: "/doc.md", status: "healthy", movedCandidate: null },
         { id: 2, title: "Gone", sourcePath: "/gone.md", status: "missing", movedCandidate: null },
-        { id: 3, title: "Moved", sourcePath: "/old.md", status: "moved", movedCandidate: "/new.md" },
+        {
+          id: 3,
+          title: "Moved",
+          sourcePath: "/old.md",
+          status: "moved",
+          movedCandidate: "/new.md",
+        },
       ],
     });
     const parsed = JSON.parse(formatJSON(payload));
@@ -168,8 +174,20 @@ describe("formatMarkdown", () => {
       makePayload({
         summary: { total: 2, healthy: 1, missing: 1, moved: 0 },
         entries: [
-          { id: 1, title: "My Doc", sourcePath: "/path/doc.md", status: "healthy", movedCandidate: null },
-          { id: 2, title: "Lost", sourcePath: "/old/lost.md", status: "missing", movedCandidate: null },
+          {
+            id: 1,
+            title: "My Doc",
+            sourcePath: "/path/doc.md",
+            status: "healthy",
+            movedCandidate: null,
+          },
+          {
+            id: 2,
+            title: "Lost",
+            sourcePath: "/old/lost.md",
+            status: "missing",
+            movedCandidate: null,
+          },
         ],
       }),
     );
@@ -183,7 +201,13 @@ describe("formatMarkdown", () => {
       makePayload({
         summary: { total: 1, healthy: 0, missing: 0, moved: 1 },
         entries: [
-          { id: 5, title: "Moved", sourcePath: "/old/f.md", status: "moved", movedCandidate: "/new/f.md" },
+          {
+            id: 5,
+            title: "Moved",
+            sourcePath: "/old/f.md",
+            status: "moved",
+            movedCandidate: "/new/f.md",
+          },
         ],
       }),
     );
@@ -205,8 +229,23 @@ describe("formatMarkdown", () => {
 
   it("includes scan history section when provided", () => {
     const history: IntegrityScanSnapshot[] = [
-      makeSnapshot({ id: 2, scannedAt: "2026-03-12T11:00:00", total: 12, healthy: 10, missing: 1, moved: 1 }),
-      makeSnapshot({ id: 1, scannedAt: "2026-03-12T10:00:00", total: 10, healthy: 8, missing: 1, moved: 1, notes: "initial" }),
+      makeSnapshot({
+        id: 2,
+        scannedAt: "2026-03-12T11:00:00",
+        total: 12,
+        healthy: 10,
+        missing: 1,
+        moved: 1,
+      }),
+      makeSnapshot({
+        id: 1,
+        scannedAt: "2026-03-12T10:00:00",
+        total: 10,
+        healthy: 8,
+        missing: 1,
+        moved: 1,
+        notes: "initial",
+      }),
     ];
     const md = formatMarkdown(makePayload({ history }));
     expect(md).toContain("## Scan History");

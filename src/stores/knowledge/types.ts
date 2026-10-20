@@ -1,11 +1,11 @@
+import type { BatchImpactSummary } from "../../lib/integrity-batch-impact";
+import type { BatchExecutionLog, BatchFixPlan, StepStatus } from "../../lib/integrity-batch-plan";
 import type { HealthThresholdSettings, ThresholdSource } from "../../lib/integrity-health";
 import { toHealthThresholds } from "../../lib/integrity-health";
-import type { IntegrityReminderSettings } from "../../lib/integrity-reminder";
 import type { HealthCheckReport } from "../../lib/integrity-healthcheck";
-import type { BatchExecutionLog, BatchFixPlan, StepStatus } from "../../lib/integrity-batch-plan";
-import type { RetrievalPresetId, RetrievalSettingsSource } from "../../lib/retrieval-presets";
+import type { IntegrityReminderSettings } from "../../lib/integrity-reminder";
 import type { IntegrityTrendPoint } from "../../lib/integrity-trend-history";
-import type { BatchImpactSummary } from "../../lib/integrity-batch-impact";
+import type { RetrievalPresetId, RetrievalSettingsSource } from "../../lib/retrieval-presets";
 
 export interface KBDocument {
   id: number;
@@ -129,7 +129,12 @@ export interface KnowledgeState {
   togglePinDocument: (id: number) => void;
 
   /** Fetch and display a specific chunk for source recall. Optional query/score for highlighting, documentId for backend source-existence check. */
-  viewChunk: (chunkId: number, query?: string, score?: number, documentId?: number) => Promise<void>;
+  viewChunk: (
+    chunkId: number,
+    query?: string,
+    score?: number,
+    documentId?: number,
+  ) => Promise<void>;
   setViewChunkError: (kind: ViewChunkErrorKind) => void;
   closeChunkViewer: () => void;
   dismissChunkError: () => void;
@@ -157,7 +162,9 @@ export interface KnowledgeState {
   /** Whether a scan reminder is currently due (derived). */
   reminderDue: boolean;
   /** Update reminder enabled/frequency and persist. */
-  setReminderSettings: (patch: Partial<Pick<IntegrityReminderSettings, "enabled" | "frequency">>) => void;
+  setReminderSettings: (
+    patch: Partial<Pick<IntegrityReminderSettings, "enabled" | "frequency">>,
+  ) => void;
   /** Snooze the current reminder for 24 hours. */
   snoozeReminder: () => void;
   /** Re-evaluate whether the reminder is due (call after scan or on mount). */

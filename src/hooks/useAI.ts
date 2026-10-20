@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import {
-  CITATION_LINK_SELECTOR,
-  parseCitationElement,
-} from "../lib/citation-notes";
+import { CITATION_LINK_SELECTOR, parseCitationElement } from "../lib/citation-notes";
 import {
   type CitationSource,
   listenToAiPhase,
@@ -28,7 +25,11 @@ export function deduplicateCitations(citations: CitationSource[]): CitationSourc
 
 /** Escape HTML special chars for safe attribute values. */
 function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 /** Build a compact HTML citation block with clickable source links. */
@@ -90,7 +91,9 @@ export function useAIStream() {
         if (chunkId) {
           const score = kbLink.dataset.score ? Number(kbLink.dataset.score) : undefined;
           const query = useAiStore.getState().lastKbQuery || undefined;
-          const documentId = kbLink.dataset.documentId ? Number(kbLink.dataset.documentId) : undefined;
+          const documentId = kbLink.dataset.documentId
+            ? Number(kbLink.dataset.documentId)
+            : undefined;
           navigateToCitationSource(chunkId, query, score, documentId);
         } else {
           useKnowledgeStore.getState().setViewChunkError("malformed-link");

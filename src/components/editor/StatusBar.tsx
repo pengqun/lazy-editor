@@ -1,10 +1,20 @@
-import { AlertCircle, CheckCircle2, ClipboardList, Copy, Loader2, Save, Target, Trash2 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AlertCircle,
+  CheckCircle2,
+  ClipboardList,
+  Copy,
+  Loader2,
+  Save,
+  Target,
+  Trash2,
+} from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import {
+  CITATION_TEMPLATES,
   type CitationFieldOptions,
   type CitationTemplateId,
   type ReferenceProfile,
-  CITATION_TEMPLATES,
   TEMPLATE_IDS,
   buildReferenceHtml,
   copyReferencesToClipboard,
@@ -12,10 +22,10 @@ import {
   getProfileById,
   listProfiles,
   loadCitationSettings,
-  saveFieldOptions,
-  saveLastTemplate,
   saveCitationSettings,
   saveCustomProfile,
+  saveFieldOptions,
+  saveLastTemplate,
 } from "../../lib/citation-notes";
 import { goalLabel, goalProgress, readingTimeMinutes } from "../../lib/writing-metrics";
 import { type AiPhase, useAiStore } from "../../stores/ai";
@@ -24,7 +34,6 @@ import { useFilesStore } from "../../stores/files";
 import { toast } from "../../stores/toast";
 import { useWritingGoalsStore } from "../../stores/writing-goals";
 import type { WritingGoal } from "../../stores/writing-goals";
-import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { WritingGoalPopover } from "./WritingGoalPopover";
 
 const PHASE_LABELS: Record<string, string> = {
@@ -92,10 +101,7 @@ const WordCountSection = memo(function WordCountSection({
           </span>
         </button>
         {showGoalPopover && (
-          <WritingGoalPopover
-            filePath={activeFilePath}
-            onClose={() => setShowGoalPopover(false)}
-          />
+          <WritingGoalPopover filePath={activeFilePath} onClose={() => setShowGoalPopover(false)} />
         )}
       </div>
 
@@ -137,7 +143,9 @@ const CitationControls = memo(function CitationControls({
   const [initialSettings] = useState(() => loadCitationSettings());
   const [templateId, setTemplateId] = useState<CitationTemplateId>(initialSettings.templateId);
   const [fieldOpts, setFieldOpts] = useState<CitationFieldOptions>(initialSettings.fields);
-  const [activeProfileId, setActiveProfileId] = useState<string | null>(initialSettings.activeProfileId);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(
+    initialSettings.activeProfileId,
+  );
   const [profiles, setProfiles] = useState<ReferenceProfile[]>(listProfiles);
   const [profileSwitchFlash, setProfileSwitchFlash] = useState(false);
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
@@ -153,50 +161,59 @@ const CitationControls = memo(function CitationControls({
     return () => window.clearTimeout(timer);
   }, [profileSwitchFlash]);
 
-  const handleProfileChange = useCallback((profileId: string) => {
-    if (profileId === "") {
-      // "Manual" mode — clear active profile, keep current template/fields
-      setActiveProfileId(null);
-      saveCitationSettings(templateId, fieldOpts, null);
-      return;
-    }
-    const profile = getProfileById(profileId);
-    if (!profile) return;
-    setActiveProfileId(profile.id);
-    setTemplateId(profile.templateId);
-    setFieldOpts({ ...profile.fields });
-    saveCitationSettings(profile.templateId, profile.fields, profile.id);
-  }, [templateId, fieldOpts]);
-
-  const handleTemplateChange = useCallback((id: CitationTemplateId) => {
-    setTemplateId(id);
-    saveLastTemplate(id);
-    // Switching template manually clears active profile
-    setActiveProfileId(null);
-    saveCitationSettings(id, fieldOpts, null);
-  }, [fieldOpts]);
-
-  const handleFieldToggle = useCallback((key: keyof CitationFieldOptions) => {
-    const activeProfile = activeProfileId ? getProfileById(activeProfileId) : null;
-    const shouldAutoSwitchToManual = activeProfile?.isBuiltin ?? false;
-
-    setFieldOpts((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      saveFieldOptions(next);
-      if (shouldAutoSwitchToManual) {
+  const handleProfileChange = useCallback(
+    (profileId: string) => {
+      if (profileId === "") {
+        // "Manual" mode — clear active profile, keep current template/fields
         setActiveProfileId(null);
-        saveCitationSettings(templateId, next, null);
-      } else {
-        saveCitationSettings(templateId, next, activeProfileId);
+        saveCitationSettings(templateId, fieldOpts, null);
+        return;
       }
-      return next;
-    });
+      const profile = getProfileById(profileId);
+      if (!profile) return;
+      setActiveProfileId(profile.id);
+      setTemplateId(profile.templateId);
+      setFieldOpts({ ...profile.fields });
+      saveCitationSettings(profile.templateId, profile.fields, profile.id);
+    },
+    [templateId, fieldOpts],
+  );
 
-    if (shouldAutoSwitchToManual) {
-      setProfileSwitchFlash(true);
-      setLiveAnnouncement("Switched to manual mode");
-    }
-  }, [templateId, activeProfileId]);
+  const handleTemplateChange = useCallback(
+    (id: CitationTemplateId) => {
+      setTemplateId(id);
+      saveLastTemplate(id);
+      // Switching template manually clears active profile
+      setActiveProfileId(null);
+      saveCitationSettings(id, fieldOpts, null);
+    },
+    [fieldOpts],
+  );
+
+  const handleFieldToggle = useCallback(
+    (key: keyof CitationFieldOptions) => {
+      const activeProfile = activeProfileId ? getProfileById(activeProfileId) : null;
+      const shouldAutoSwitchToManual = activeProfile?.isBuiltin ?? false;
+
+      setFieldOpts((prev) => {
+        const next = { ...prev, [key]: !prev[key] };
+        saveFieldOptions(next);
+        if (shouldAutoSwitchToManual) {
+          setActiveProfileId(null);
+          saveCitationSettings(templateId, next, null);
+        } else {
+          saveCitationSettings(templateId, next, activeProfileId);
+        }
+        return next;
+      });
+
+      if (shouldAutoSwitchToManual) {
+        setProfileSwitchFlash(true);
+        setLiveAnnouncement("Switched to manual mode");
+      }
+    },
+    [templateId, activeProfileId],
+  );
 
   const handleSaveProfile = useCallback(() => {
     const name = window.prompt("Profile name:");
@@ -238,14 +255,13 @@ const CitationControls = memo(function CitationControls({
     if (text) toast.success("References copied to clipboard");
   }, [citations, templateId, fieldOpts]);
 
-  const activeProfile = activeProfileId ? getProfileById(activeProfileId) ?? null : null;
+  const activeProfile = activeProfileId ? (getProfileById(activeProfileId) ?? null) : null;
   const canDeleteProfile = activeProfile !== null && !activeProfile.isBuiltin;
 
   return (
-    <div
-      role="group"
+    <fieldset
       aria-label="Citation reference controls"
-      className="flex items-center gap-1"
+      className="flex items-center gap-1 border-0 m-0 min-w-0 p-0 [min-inline-size:0]"
     >
       <span id="citation-controls-help" className="sr-only">
         Select a reference profile or style, choose which metadata to include, then insert or copy.
@@ -270,7 +286,8 @@ const CitationControls = memo(function CitationControls({
         <option value="">Manual</option>
         {profiles.map((p) => (
           <option key={p.id} value={p.id}>
-            {p.name}{p.isBuiltin ? "" : " *"}
+            {p.name}
+            {p.isBuiltin ? "" : " *"}
           </option>
         ))}
       </select>
@@ -314,7 +331,11 @@ const CitationControls = memo(function CitationControls({
         disabled={!canDeleteProfile}
         aria-label="Delete profile"
         aria-describedby="citation-controls-help"
-        title={canDeleteProfile ? `Delete profile "${activeProfile?.name}"` : "Select a custom profile to delete"}
+        title={
+          canDeleteProfile
+            ? `Delete profile "${activeProfile?.name}"`
+            : "Select a custom profile to delete"
+        }
         className="flex items-center gap-0.5 px-1 py-0.5 rounded text-text-secondary hover:text-red-400 hover:bg-surface-3 transition-colors disabled:opacity-30 disabled:pointer-events-none"
       >
         <Trash2 size={11} />
@@ -360,7 +381,7 @@ const CitationControls = memo(function CitationControls({
       >
         <Copy size={11} />
       </button>
-    </div>
+    </fieldset>
   );
 });
 
@@ -433,15 +454,11 @@ export function StatusBar() {
   const aiPhase = useAiStore((s) => s.aiPhase);
   const currentAction = useAiStore((s) => s.currentAction);
   const citations = useAiStore((s) => s.citations);
-  const goal = useWritingGoalsStore((s) =>
-    activeFilePath ? s.getGoal(activeFilePath) : null,
-  );
+  const goal = useWritingGoalsStore((s) => (activeFilePath ? s.getGoal(activeFilePath) : null));
 
   return (
     <div className="h-7 border-t border-border bg-surface-1 flex items-center px-4 text-xs text-text-tertiary gap-4">
-      {activeFilePath && (
-        <WordCountSection activeFilePath={activeFilePath} goal={goal} />
-      )}
+      {activeFilePath && <WordCountSection activeFilePath={activeFilePath} goal={goal} />}
 
       <div className="flex-1" />
 

@@ -1,12 +1,4 @@
-import {
-  Activity,
-  CheckCircle,
-  Download,
-  Loader2,
-  RefreshCw,
-  X,
-  XCircle,
-} from "lucide-react";
+import { Activity, CheckCircle, Download, Loader2, RefreshCw, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   type DiagnosticsInfo,
@@ -105,9 +97,7 @@ export function DiagnosticsPanel({ onClose }: DiagnosticsPanelProps) {
             <h2 className="text-sm font-semibold text-text-primary">Diagnostics</h2>
           </div>
           <div className="flex items-center gap-2">
-            <kbd className="text-xs text-text-tertiary bg-surface-3 px-1.5 py-0.5 rounded">
-              Esc
-            </kbd>
+            <kbd className="text-xs text-text-tertiary bg-surface-3 px-1.5 py-0.5 rounded">Esc</kbd>
             <button
               type="button"
               onClick={onClose}
@@ -168,7 +158,9 @@ export function DiagnosticsPanel({ onClose }: DiagnosticsPanelProps) {
                           <XCircle size={14} className="text-red-400 mt-0.5 flex-shrink-0" />
                         )}
                         <div className="min-w-0">
-                          <span className="text-sm text-text-primary">{formatSubsystemName(s.name)}</span>
+                          <span className="text-sm text-text-primary">
+                            {formatSubsystemName(s.name)}
+                          </span>
                           <p className="text-xs text-text-tertiary break-all">{s.detail}</p>
                         </div>
                       </div>

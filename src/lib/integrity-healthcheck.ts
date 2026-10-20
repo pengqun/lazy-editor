@@ -4,7 +4,6 @@
  */
 
 import type { IntegrityReport, IntegrityScanSnapshot } from "@/stores/knowledge";
-import type { IntegrityReminderSettings, ReminderFrequency } from "./integrity-reminder";
 import {
   type HealthThresholdSettings,
   type HealthTier,
@@ -17,6 +16,7 @@ import {
   DEFAULT_RECOMMENDATION_THRESHOLDS,
   type RecommendationThresholdSettings,
 } from "./integrity-recommendation-thresholds";
+import type { IntegrityReminderSettings, ReminderFrequency } from "./integrity-reminder";
 
 // --- Types ---
 
@@ -45,7 +45,9 @@ const PRIORITY_ORDER: RecommendationPriority[] = ["critical", "high", "medium", 
 const CONFIDENCE_ORDER: RecommendationConfidence[] = ["high", "medium", "low"];
 
 /** Sort recommendations by priority (critical first), then confidence (high first). */
-export function sortRecommendations(recs: HealthCheckRecommendation[]): HealthCheckRecommendation[] {
+export function sortRecommendations(
+  recs: HealthCheckRecommendation[],
+): HealthCheckRecommendation[] {
   return [...recs].sort((a, b) => {
     const pa = PRIORITY_ORDER.indexOf(a.priority);
     const pb = PRIORITY_ORDER.indexOf(b.priority);
@@ -72,10 +74,7 @@ export interface HealthCheckReport {
 
 const FREQUENCY_ORDER: ReminderFrequency[] = ["weekly", "every3days", "daily"];
 
-function suggestFrequency(
-  current: ReminderFrequency,
-  tier: HealthTier,
-): ReminderFrequency | null {
+function suggestFrequency(current: ReminderFrequency, tier: HealthTier): ReminderFrequency | null {
   if (tier === "good") return null;
   const idx = FREQUENCY_ORDER.indexOf(current);
   // Suggest one step more frequent if possible
@@ -112,11 +111,12 @@ export function generateRecommendations(
   // 1. Moved documents — suggest relink
   if (report.moved > 0) {
     // Single moved doc is often low-risk and can self-resolve later; avoid over-alerting.
-    const movedPriority: RecommendationPriority = report.moved > thresholds.movedCriticalCount
-      ? "critical"
-      : report.moved > thresholds.movedHighCount
-        ? "high"
-        : "medium";
+    const movedPriority: RecommendationPriority =
+      report.moved > thresholds.movedCriticalCount
+        ? "critical"
+        : report.moved > thresholds.movedHighCount
+          ? "high"
+          : "medium";
     recs.push({
       id: "relink-moved",
       priority: movedPriority,
@@ -137,12 +137,11 @@ export function generateRecommendations(
 
   // 2. Missing documents — suggest removal
   if (report.missing > 0) {
-    const missingIds = report.entries
-      .filter((e) => e.status === "missing")
-      .map((e) => e.id);
+    const missingIds = report.entries.filter((e) => e.status === "missing").map((e) => e.id);
 
     const tinyMissing =
-      report.missing <= thresholds.tinyMissingMaxCount && missingRatio <= thresholds.tinyMissingMaxRatio;
+      report.missing <= thresholds.tinyMissingMaxCount &&
+      missingRatio <= thresholds.tinyMissingMaxRatio;
 
     // Lower sensitivity on tiny missing set to reduce false positives from temporary path changes.
     const priority: RecommendationPriority = tinyMissing
@@ -184,10 +183,12 @@ export function generateRecommendations(
       id: "never-scanned",
       priority: "critical",
       confidence: "high",
-      rationale: addSignalsRationale("No scan history exists; KB health is unknown.", ["latest-scan-age=null", "tier=poor"]),
+      rationale: addSignalsRationale("No scan history exists; KB health is unknown.", [
+        "latest-scan-age=null",
+        "tier=poor",
+      ]),
       title: "Set up regular integrity scanning",
-      description:
-        "No scans have been recorded. Enable reminders to stay on top of KB health.",
+      description: "No scans have been recorded. Enable reminders to stay on top of KB health.",
       action: { type: "enable-reminders" },
     });
   } else if (tier === "poor" && metrics.latestScanAgeMs !== null) {
@@ -196,7 +197,7 @@ export function generateRecommendations(
       id: "scan-stale",
       priority: "medium",
       confidence: "high",
-      rationale: addSignalsRationale(`Last scan is stale and cadence is low.`, [
+      rationale: addSignalsRationale("Last scan is stale and cadence is low.", [
         `last-scan-age=${ageDays}d`,
         `scans-last-7d=${metrics.scansLast7d}`,
       ]),
@@ -212,7 +213,7 @@ export function generateRecommendations(
       id: "enable-reminders",
       priority: "medium",
       confidence: "medium",
-      rationale: addSignalsRationale(`Reminders are disabled while tier is degraded.`, [
+      rationale: addSignalsRationale("Reminders are disabled while tier is degraded.", [
         `tier=${tier}`,
         "reminders=disabled",
       ]),
@@ -241,7 +242,8 @@ export function generateRecommendations(
   }
 
   // 5. Health ratio warning (dedupe with missing-removal signals)
-  const hasStrongMissingSignal = report.missing > 0 && missingRatio >= thresholds.missingStrongSignalRatio;
+  const hasStrongMissingSignal =
+    report.missing > 0 && missingRatio >= thresholds.missingStrongSignalRatio;
   if (total > 0 && !hasStrongMissingSignal) {
     if (healthyRatio < 0.5) {
       recs.push({
@@ -274,7 +276,8 @@ export function generateRecommendations(
   const ids = new Set(recs.map((r) => r.id));
   const deduped = recs.filter((rec) => {
     // never-scanned is root cause: drop stale/frequency tuning noise.
-    if (ids.has("never-scanned") && (rec.id === "scan-stale" || rec.id === "adjust-frequency")) return false;
+    if (ids.has("never-scanned") && (rec.id === "scan-stale" || rec.id === "adjust-frequency"))
+      return false;
     // if reminders disabled, frequency tuning is not actionable yet.
     if (ids.has("enable-reminders") && rec.id === "adjust-frequency") return false;
     return true;
@@ -286,10 +289,10 @@ export function generateRecommendations(
       id: "all-clear",
       priority: "info",
       confidence: "high",
-      rationale: "All source references valid, scan coverage adequate, and no conflicting signals detected.",
+      rationale:
+        "All source references valid, scan coverage adequate, and no conflicting signals detected.",
       title: "KB is in great shape",
-      description:
-        "All source references are valid and scan coverage is good. No action needed.",
+      description: "All source references are valid and scan coverage is good. No action needed.",
     });
   }
 

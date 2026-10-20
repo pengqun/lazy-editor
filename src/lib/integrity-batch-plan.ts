@@ -9,7 +9,11 @@
  * - One-by-one actions remain available alongside batch plans.
  */
 
-import type { HealthCheckRecommendation, HealthCheckReport, RecommendationAction } from "./integrity-healthcheck";
+import type {
+  HealthCheckRecommendation,
+  HealthCheckReport,
+  RecommendationAction,
+} from "./integrity-healthcheck";
 
 // --- Types ---
 
@@ -138,7 +142,10 @@ function actionTypeForStep(step: BatchPlanStep): RecommendationAction["type"] | 
   return step.recommendation.action?.type ?? "none";
 }
 
-function estimateAffectedItems(step: BatchPlanStep, movedEntries: Array<{ id: number; movedCandidate: string | null }>): number {
+function estimateAffectedItems(
+  step: BatchPlanStep,
+  movedEntries: Array<{ id: number; movedCandidate: string | null }>,
+): number {
   const action = step.recommendation.action;
   if (!action) return 0;
   switch (action.type) {
@@ -237,7 +244,12 @@ export function buildBatchExecutionSummaryText(log: BatchExecutionLog): string {
   ].join("\n");
 }
 
-export type BatchFailureCategory = "manual-only" | "unsupported" | "invoke-error" | "skipped-other" | "unknown";
+export type BatchFailureCategory =
+  | "manual-only"
+  | "unsupported"
+  | "invoke-error"
+  | "skipped-other"
+  | "unknown";
 
 export interface BatchFailureAdvice {
   category: BatchFailureCategory;
@@ -256,7 +268,10 @@ export function classifyBatchFailure(result: StepExecutionResult): BatchFailureC
   return "unknown";
 }
 
-const BATCH_FAILURE_ADVICE_TEMPLATE: Record<BatchFailureCategory, Omit<BatchFailureAdvice, "stepIds">> = {
+const BATCH_FAILURE_ADVICE_TEMPLATE: Record<
+  BatchFailureCategory,
+  Omit<BatchFailureAdvice, "stepIds">
+> = {
   "manual-only": {
     category: "manual-only",
     title: "需要手动处理（manual-only）",
@@ -300,7 +315,8 @@ export function buildBatchFailureAdvices(log: BatchExecutionLog): BatchFailureAd
   }
 
   return Array.from(grouped.entries()).map(([category, items]) => {
-    const template = BATCH_FAILURE_ADVICE_TEMPLATE[category] ?? BATCH_FAILURE_ADVICE_TEMPLATE.unknown;
+    const template =
+      BATCH_FAILURE_ADVICE_TEMPLATE[category] ?? BATCH_FAILURE_ADVICE_TEMPLATE.unknown;
     return {
       ...template,
       stepIds: items.map((i) => i.stepId),
@@ -324,10 +340,7 @@ export function executionOrder(rec: HealthCheckRecommendation): number {
 
 // --- Plan generation ---
 
-export function buildBatchFixPlan(
-  report: HealthCheckReport,
-  now: Date = new Date(),
-): BatchFixPlan {
+export function buildBatchFixPlan(report: HealthCheckReport, now: Date = new Date()): BatchFixPlan {
   const actionable = report.recommendations.filter((r) => r.id !== "all-clear");
   const sorted = [...actionable].sort((a, b) => executionOrder(a) - executionOrder(b));
 
@@ -482,10 +495,7 @@ export function mergeRetriedResult(
   };
 }
 
-async function executeStep(
-  step: BatchPlanStep,
-  callbacks: BatchExecutionCallbacks,
-): Promise<void> {
+async function executeStep(step: BatchPlanStep, callbacks: BatchExecutionCallbacks): Promise<void> {
   const action = step.recommendation.action;
   if (!action) throw new Error("No action to execute");
 

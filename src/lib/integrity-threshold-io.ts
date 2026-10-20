@@ -183,7 +183,7 @@ export function buildThresholdExportPayload(): ThresholdConfigPayload {
   const workspaces: Record<string, HealthThresholdSettings> = {};
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key && key.startsWith(WORKSPACE_THRESHOLD_PREFIX)) {
+    if (key?.startsWith(WORKSPACE_THRESHOLD_PREFIX)) {
       const wsPath = key.slice(WORKSPACE_THRESHOLD_PREFIX.length);
       const wsSettings = loadWorkspaceThresholdSettings(wsPath);
       if (wsSettings) {

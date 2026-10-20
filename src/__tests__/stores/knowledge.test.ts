@@ -1,9 +1,9 @@
+import * as batchPlanLib from "@/lib/integrity-batch-plan";
 import {
   loadDocRetrievalSettings,
   loadWorkspaceRetrievalSettings,
   saveWorkspaceRetrievalSettings,
 } from "@/lib/retrieval-presets";
-import * as batchPlanLib from "@/lib/integrity-batch-plan";
 import { useKnowledgeStore } from "@/stores/knowledge";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -543,7 +543,11 @@ describe("useKnowledgeStore", () => {
 
     it("restoreForDocument uses workspace default when no per-doc settings exist", () => {
       useKnowledgeStore.getState().setWorkspacePath("/workspace");
-      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+      saveWorkspaceRetrievalSettings("/workspace", {
+        preset: "precision",
+        topK: 3,
+        scope: "pinned",
+      });
 
       useKnowledgeStore.getState().restoreForDocument("/new-file.md");
       const state = useKnowledgeStore.getState();
@@ -555,7 +559,11 @@ describe("useKnowledgeStore", () => {
 
     it("restoreForDocument prefers per-doc over workspace", () => {
       useKnowledgeStore.getState().setWorkspacePath("/workspace");
-      saveWorkspaceRetrievalSettings("/workspace", { preset: "precision", topK: 3, scope: "pinned" });
+      saveWorkspaceRetrievalSettings("/workspace", {
+        preset: "precision",
+        topK: 3,
+        scope: "pinned",
+      });
 
       // Set up per-doc settings
       useKnowledgeStore.getState().restoreForDocument("/essay.md");
@@ -662,8 +670,20 @@ describe("useKnowledgeStore", () => {
       const report = {
         entries: [
           { id: 1, title: "Doc A", sourcePath: "/a.md", status: "healthy", movedCandidate: null },
-          { id: 2, title: "Doc B", sourcePath: "/old/b.md", status: "moved", movedCandidate: "/new/b.md" },
-          { id: 3, title: "Doc C", sourcePath: "/gone.md", status: "missing", movedCandidate: null },
+          {
+            id: 2,
+            title: "Doc B",
+            sourcePath: "/old/b.md",
+            status: "moved",
+            movedCandidate: "/new/b.md",
+          },
+          {
+            id: 3,
+            title: "Doc C",
+            sourcePath: "/gone.md",
+            status: "missing",
+            movedCandidate: null,
+          },
         ],
         healthy: 1,
         missing: 1,
@@ -706,7 +726,10 @@ describe("useKnowledgeStore", () => {
 
       await useKnowledgeStore.getState().relinkDocument(2, "/new/path.md");
 
-      expect(mockedInvoke).toHaveBeenCalledWith("relink_kb_document", { id: 2, newPath: "/new/path.md" });
+      expect(mockedInvoke).toHaveBeenCalledWith("relink_kb_document", {
+        id: 2,
+        newPath: "/new/path.md",
+      });
     });
 
     it("removeStaleDocuments removes multiple docs and refreshes", async () => {
@@ -736,17 +759,19 @@ describe("useKnowledgeStore", () => {
     const failedStepLog = {
       startedAt: "2026-03-13T12:00:00.000Z",
       completedAt: "2026-03-13T12:01:00.000Z",
-      results: [{
-        stepId: "step-remove-missing",
-        recommendationId: "remove-missing",
-        actionType: "remove-stale" as const,
-        status: "failed" as const,
-        outcome: "failed" as const,
-        message: "first fail",
-        durationMs: 3,
-        attempts: 1,
-        affectedItems: 2,
-      }],
+      results: [
+        {
+          stepId: "step-remove-missing",
+          recommendationId: "remove-missing",
+          actionType: "remove-stale" as const,
+          status: "failed" as const,
+          outcome: "failed" as const,
+          message: "first fail",
+          durationMs: 3,
+          attempts: 1,
+          affectedItems: 2,
+        },
+      ],
       summary: {
         success: 0,
         failed: 1,
@@ -757,22 +782,24 @@ describe("useKnowledgeStore", () => {
 
     const lastPlan = {
       createdAt: "2026-03-13T12:00:00.000Z",
-      steps: [{
-        stepId: "step-remove-missing",
-        order: 0,
-        kind: "auto" as const,
-        rationale: "cleanup",
-        impact: "remove stale",
-        recommendation: {
-          id: "remove-missing",
-          priority: "high" as const,
-          confidence: "high" as const,
-          title: "remove missing",
-          description: "remove",
+      steps: [
+        {
+          stepId: "step-remove-missing",
+          order: 0,
+          kind: "auto" as const,
           rationale: "cleanup",
-          action: { type: "remove-stale" as const, ids: [1, 2] },
+          impact: "remove stale",
+          recommendation: {
+            id: "remove-missing",
+            priority: "high" as const,
+            confidence: "high" as const,
+            title: "remove missing",
+            description: "remove",
+            rationale: "cleanup",
+            action: { type: "remove-stale" as const, ids: [1, 2] },
+          },
         },
-      }],
+      ],
       autoCount: 1,
       manualCount: 0,
     };
@@ -854,19 +881,22 @@ describe("useKnowledgeStore", () => {
       const retrySpy = vi.spyOn(batchPlanLib, "executeBatchStep");
       const logWithNonFailed = {
         ...failedStepLog,
-        results: [{
-          ...failedStepLog.results[0],
-          outcome: "success" as const,
-          status: "success" as const,
-          message: "already done",
-        }, {
-          ...failedStepLog.results[0],
-          stepId: "step-remove-missing-2",
-          recommendationId: "remove-missing-2",
-          outcome: "skipped" as const,
-          status: "skipped" as const,
-          message: "manual-only",
-        }],
+        results: [
+          {
+            ...failedStepLog.results[0],
+            outcome: "success" as const,
+            status: "success" as const,
+            message: "already done",
+          },
+          {
+            ...failedStepLog.results[0],
+            stepId: "step-remove-missing-2",
+            recommendationId: "remove-missing-2",
+            outcome: "skipped" as const,
+            status: "skipped" as const,
+            message: "manual-only",
+          },
+        ],
       };
       const planWithTwoSteps = {
         ...lastPlan,
@@ -901,7 +931,9 @@ describe("useKnowledgeStore", () => {
       const retryPromise = new Promise<any>((resolve) => {
         resolveRetry = resolve;
       });
-      const retrySpy = vi.spyOn(batchPlanLib, "executeBatchStep").mockImplementationOnce(() => retryPromise);
+      const retrySpy = vi
+        .spyOn(batchPlanLib, "executeBatchStep")
+        .mockImplementationOnce(() => retryPromise);
 
       useKnowledgeStore.setState({
         batchLastPlan: lastPlan,

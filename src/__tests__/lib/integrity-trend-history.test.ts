@@ -1,6 +1,10 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import {
+  loadIntegrityTrendHistory,
+  syncIntegrityTrendHistory,
+  toSparkline,
+} from "@/lib/integrity-trend-history";
 import type { IntegrityScanSnapshot } from "@/stores/knowledge";
-import { loadIntegrityTrendHistory, syncIntegrityTrendHistory, toSparkline } from "@/lib/integrity-trend-history";
+import { beforeEach, describe, expect, it } from "vitest";
 
 function snap(overrides: Partial<IntegrityScanSnapshot>): IntegrityScanSnapshot {
   return {
@@ -22,7 +26,9 @@ describe("integrity-trend-history", () => {
 
   it("merges and persists trend points with dedupe", () => {
     const workspace = "/tmp/ws-a";
-    syncIntegrityTrendHistory(workspace, [snap({ id: 1, scannedAt: "2026-03-13T08:00:00", missing: 2 })]);
+    syncIntegrityTrendHistory(workspace, [
+      snap({ id: 1, scannedAt: "2026-03-13T08:00:00", missing: 2 }),
+    ]);
     const merged = syncIntegrityTrendHistory(workspace, [
       snap({ id: 2, scannedAt: "2026-03-13T09:00:00", missing: 1, moved: 2 }),
       snap({ id: 3, scannedAt: "2026-03-13T08:00:00", missing: 3, moved: 0 }),

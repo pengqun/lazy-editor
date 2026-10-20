@@ -140,8 +140,18 @@ describe("buildBatchFixPlan", () => {
 
   it("builds a plan from recommendations", () => {
     const recs = [
-      makeRec({ id: "relink-moved", action: { type: "relink-all" }, priority: "high", confidence: "high" }),
-      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [3, 4] }, priority: "critical", confidence: "high" }),
+      makeRec({
+        id: "relink-moved",
+        action: { type: "relink-all" },
+        priority: "high",
+        confidence: "high",
+      }),
+      makeRec({
+        id: "remove-missing",
+        action: { type: "remove-stale", ids: [3, 4] },
+        priority: "critical",
+        confidence: "high",
+      }),
     ];
     const plan = buildBatchFixPlan(makeReport(recs), now);
 
@@ -152,16 +162,18 @@ describe("buildBatchFixPlan", () => {
   });
 
   it("filters out all-clear recommendations", () => {
-    const recs = [
-      makeRec({ id: "all-clear", priority: "info", confidence: "high" }),
-    ];
+    const recs = [makeRec({ id: "all-clear", priority: "info", confidence: "high" })];
     const plan = buildBatchFixPlan(makeReport(recs), now);
     expect(plan.steps).toHaveLength(0);
   });
 
   it("orders steps by execution priority (relink before remove)", () => {
     const recs = [
-      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [1] }, confidence: "high" }),
+      makeRec({
+        id: "remove-missing",
+        action: { type: "remove-stale", ids: [1] },
+        confidence: "high",
+      }),
       makeRec({ id: "relink-moved", action: { type: "relink-all" } }),
     ];
     const plan = buildBatchFixPlan(makeReport(recs), now);
@@ -174,7 +186,11 @@ describe("buildBatchFixPlan", () => {
     const recs = [
       makeRec({ id: "relink-moved", action: { type: "relink-all" }, confidence: "high" }),
       makeRec({ id: "low-health-ratio", priority: "critical", confidence: "high" }),
-      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [1] }, confidence: "medium" }),
+      makeRec({
+        id: "remove-missing",
+        action: { type: "remove-stale", ids: [1] },
+        confidence: "medium",
+      }),
     ];
     const plan = buildBatchFixPlan(makeReport(recs), now);
 
@@ -213,7 +229,11 @@ describe("buildBatchFixPlan", () => {
   it("includes impact description for every step", () => {
     const recs = [
       makeRec({ id: "relink-moved", action: { type: "relink-all" } }),
-      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [1, 2, 3] }, confidence: "high" }),
+      makeRec({
+        id: "remove-missing",
+        action: { type: "remove-stale", ids: [1, 2, 3] },
+        confidence: "high",
+      }),
       makeRec({ id: "enable-reminders", action: { type: "enable-reminders" } }),
       makeRec({ id: "adjust-frequency", action: { type: "adjust-frequency", suggested: "daily" } }),
       makeRec({ id: "low-health-ratio" }),
@@ -230,7 +250,11 @@ describe("estimated impact summary", () => {
   it("summarizes relink/remove/reminders/frequency counts", () => {
     const recs = [
       makeRec({ id: "relink-moved", action: { type: "relink-all" } }),
-      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [10, 11] }, confidence: "high" }),
+      makeRec({
+        id: "remove-missing",
+        action: { type: "remove-stale", ids: [10, 11] },
+        confidence: "high",
+      }),
       makeRec({ id: "enable-reminders", action: { type: "enable-reminders" } }),
       makeRec({ id: "adjust-frequency", action: { type: "adjust-frequency", suggested: "daily" } }),
     ];
@@ -283,7 +307,11 @@ describe("executeBatchFixPlan", () => {
 
   it("calls removeStaleDocuments with correct ids", async () => {
     const recs = [
-      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [10, 20] }, confidence: "high" }),
+      makeRec({
+        id: "remove-missing",
+        action: { type: "remove-stale", ids: [10, 20] },
+        confidence: "high",
+      }),
     ];
     const plan = buildBatchFixPlan(makeReport(recs));
     const callbacks = makeCallbacks();
@@ -354,7 +382,9 @@ describe("executeBatchFixPlan", () => {
 
     expect(log.startedAt).toBeTruthy();
     expect(log.completedAt).toBeTruthy();
-    expect(new Date(log.startedAt).getTime()).toBeLessThanOrEqual(new Date(log.completedAt).getTime());
+    expect(new Date(log.startedAt).getTime()).toBeLessThanOrEqual(
+      new Date(log.completedAt).getTime(),
+    );
   });
 
   it("handles empty plan gracefully", async () => {
@@ -398,7 +428,11 @@ describe("result aggregation", () => {
   it("correctly aggregates mixed outcomes", async () => {
     const recs = [
       makeRec({ id: "relink-moved", action: { type: "relink-all" } }),
-      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [1] }, confidence: "high" }),
+      makeRec({
+        id: "remove-missing",
+        action: { type: "remove-stale", ids: [1] },
+        confidence: "high",
+      }),
       makeRec({ id: "low-health-ratio" }), // manual
       makeRec({ id: "enable-reminders", action: { type: "enable-reminders" } }),
     ];
@@ -433,11 +467,20 @@ describe("result aggregation", () => {
   });
 
   it("supports merging retried failed step result", async () => {
-    const recs = [makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [1, 2] }, confidence: "high" })];
+    const recs = [
+      makeRec({
+        id: "remove-missing",
+        action: { type: "remove-stale", ids: [1, 2] },
+        confidence: "high",
+      }),
+    ];
     const plan = buildBatchFixPlan(makeReport(recs));
-    const failedLog = await executeBatchFixPlan(plan, makeCallbacks({
-      removeStaleDocuments: vi.fn().mockRejectedValue(new Error("first fail")),
-    }));
+    const failedLog = await executeBatchFixPlan(
+      plan,
+      makeCallbacks({
+        removeStaleDocuments: vi.fn().mockRejectedValue(new Error("first fail")),
+      }),
+    );
 
     const retryResult = await executeBatchStep(plan.steps[0], makeCallbacks(), undefined, 2);
     const merged = mergeRetriedResult(failedLog, retryResult);
@@ -451,41 +494,47 @@ describe("result aggregation", () => {
 
 describe("failure classification and advice", () => {
   it("classifies manual-only skip, unsupported and invoke errors", () => {
-    expect(classifyBatchFailure({
-      stepId: "step-a",
-      recommendationId: "a",
-      actionType: "manual",
-      status: "skipped",
-      outcome: "skipped",
-      message: "Manual intervention required.",
-      durationMs: 0,
-      attempts: 1,
-      affectedItems: 0,
-    })).toBe("manual-only");
+    expect(
+      classifyBatchFailure({
+        stepId: "step-a",
+        recommendationId: "a",
+        actionType: "manual",
+        status: "skipped",
+        outcome: "skipped",
+        message: "Manual intervention required.",
+        durationMs: 0,
+        attempts: 1,
+        affectedItems: 0,
+      }),
+    ).toBe("manual-only");
 
-    expect(classifyBatchFailure({
-      stepId: "step-b",
-      recommendationId: "b",
-      actionType: "relink-all",
-      status: "failed",
-      outcome: "failed",
-      message: "Unsupported action type: foo",
-      durationMs: 3,
-      attempts: 1,
-      affectedItems: 1,
-    })).toBe("unsupported");
+    expect(
+      classifyBatchFailure({
+        stepId: "step-b",
+        recommendationId: "b",
+        actionType: "relink-all",
+        status: "failed",
+        outcome: "failed",
+        message: "Unsupported action type: foo",
+        durationMs: 3,
+        attempts: 1,
+        affectedItems: 1,
+      }),
+    ).toBe("unsupported");
 
-    expect(classifyBatchFailure({
-      stepId: "step-c",
-      recommendationId: "c",
-      actionType: "remove-stale",
-      status: "failed",
-      outcome: "failed",
-      message: "permission denied",
-      durationMs: 8,
-      attempts: 1,
-      affectedItems: 2,
-    })).toBe("invoke-error");
+    expect(
+      classifyBatchFailure({
+        stepId: "step-c",
+        recommendationId: "c",
+        actionType: "remove-stale",
+        status: "failed",
+        outcome: "failed",
+        message: "permission denied",
+        durationMs: 8,
+        attempts: 1,
+        affectedItems: 2,
+      }),
+    ).toBe("invoke-error");
   });
 
   it("builds grouped failure advice from failed/skipped results", () => {
@@ -557,14 +606,21 @@ describe("execution metrics and summary text", () => {
   it("computes repair/hit/skip rates from execution log", async () => {
     const recs = [
       makeRec({ id: "relink-moved", action: { type: "relink-all" } }),
-      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [1] }, confidence: "high" }),
+      makeRec({
+        id: "remove-missing",
+        action: { type: "remove-stale", ids: [1] },
+        confidence: "high",
+      }),
       makeRec({ id: "low-health-ratio" }),
       makeRec({ id: "enable-reminders", action: { type: "enable-reminders" } }),
     ];
     const plan = buildBatchFixPlan(makeReport(recs));
-    const log = await executeBatchFixPlan(plan, makeCallbacks({
-      removeStaleDocuments: vi.fn().mockRejectedValue(new Error("remove failed")),
-    }));
+    const log = await executeBatchFixPlan(
+      plan,
+      makeCallbacks({
+        removeStaleDocuments: vi.fn().mockRejectedValue(new Error("remove failed")),
+      }),
+    );
 
     const metrics = computeBatchExecutionMetrics(log);
 
@@ -581,13 +637,20 @@ describe("execution metrics and summary text", () => {
 
   it("builds copyable execution summary text with failed steps", async () => {
     const recs = [
-      makeRec({ id: "remove-missing", action: { type: "remove-stale", ids: [3, 4] }, confidence: "high" }),
+      makeRec({
+        id: "remove-missing",
+        action: { type: "remove-stale", ids: [3, 4] },
+        confidence: "high",
+      }),
       makeRec({ id: "enable-reminders", action: { type: "enable-reminders" } }),
     ];
     const plan = buildBatchFixPlan(makeReport(recs));
-    const log = await executeBatchFixPlan(plan, makeCallbacks({
-      removeStaleDocuments: vi.fn().mockRejectedValue(new Error("permission denied")),
-    }));
+    const log = await executeBatchFixPlan(
+      plan,
+      makeCallbacks({
+        removeStaleDocuments: vi.fn().mockRejectedValue(new Error("permission denied")),
+      }),
+    );
 
     const summary = buildBatchExecutionSummaryText(log);
 

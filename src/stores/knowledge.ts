@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { loadBatchImpactSummary } from "../lib/integrity-batch-impact";
 import { resolveThresholdSettings } from "../lib/integrity-health";
+import { loadIntegrityTrendHistory } from "../lib/integrity-trend-history";
 import {
-  type RetrievalSettingsSource,
   RETRIEVAL_PRESETS,
+  type RetrievalSettingsSource,
   detectMatchingPreset,
   loadPresetFromStorage,
   resolveRetrievalSettings,
@@ -11,21 +13,14 @@ import {
   savePresetToStorage,
   saveWorkspaceRetrievalSettings,
 } from "../lib/retrieval-presets";
-import { loadIntegrityTrendHistory } from "../lib/integrity-trend-history";
-import { loadBatchImpactSummary } from "../lib/integrity-batch-impact";
 import { createBatchActionSlice, createBatchStateSlice } from "./knowledge/batch";
 import { createIntegrityStateSlice } from "./knowledge/integrity";
+import { extractErrorMessage } from "./knowledge/integrity-utils";
 import { createViewerStateSlice } from "./knowledge/viewer";
 import { toast } from "./toast";
-import { extractErrorMessage } from "./knowledge/integrity-utils";
 
-// Re-exports: types (from ./knowledge/types)
-export type {
-  KBDocument, SearchResult, ChunkContext,
-  ViewChunkErrorKind, ViewChunkErrorState, RetrievalScope,
-  IntegrityStatus, IntegrityEntry, IntegrityReport, IntegrityScanSnapshot,
-  KnowledgeState,
-} from "./knowledge/types";
+// Re-export every type from the knowledge type module.
+export type * from "./knowledge/types";
 
 // Re-exports: slice factories
 export { createBatchActionSlice, createBatchStateSlice };
@@ -39,10 +34,19 @@ const _initialPreset = loadPresetFromStorage();
 const _initialConfig = _initialPreset ? RETRIEVAL_PRESETS[_initialPreset] : null;
 
 /** Persist current retrieval settings both globally and per-document. */
-function _persistSettings({ activePreset, retrievalTopK, retrievalScope, _activeDocPath }: Pick<KnowledgeState, "activePreset" | "retrievalTopK" | "retrievalScope" | "_activeDocPath">) {
+function _persistSettings({
+  activePreset,
+  retrievalTopK,
+  retrievalScope,
+  _activeDocPath,
+}: Pick<KnowledgeState, "activePreset" | "retrievalTopK" | "retrievalScope" | "_activeDocPath">) {
   savePresetToStorage(activePreset);
   if (_activeDocPath) {
-    saveDocRetrievalSettings(_activeDocPath, { preset: activePreset, topK: retrievalTopK, scope: retrievalScope });
+    saveDocRetrievalSettings(_activeDocPath, {
+      preset: activePreset,
+      topK: retrievalTopK,
+      scope: retrievalScope,
+    });
   }
 }
 
@@ -66,21 +70,26 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   setRetrievalTopK: (topK) => {
     const clamped = Math.max(1, Math.min(10, topK));
     const newPreset = detectMatchingPreset(clamped, get().retrievalScope);
-    const source = get()._activeDocPath ? "doc" as RetrievalSettingsSource : get().settingsSource;
+    const source = get()._activeDocPath ? ("doc" as RetrievalSettingsSource) : get().settingsSource;
     set({ retrievalTopK: clamped, activePreset: newPreset, settingsSource: source });
     _persistSettings(get());
   },
   setRetrievalScope: (scope) => {
     const newPreset = detectMatchingPreset(get().retrievalTopK, scope);
-    const source = get()._activeDocPath ? "doc" as RetrievalSettingsSource : get().settingsSource;
+    const source = get()._activeDocPath ? ("doc" as RetrievalSettingsSource) : get().settingsSource;
     set({ retrievalScope: scope, activePreset: newPreset, settingsSource: source });
     _persistSettings(get());
   },
 
   setPreset: (id) => {
     const preset = RETRIEVAL_PRESETS[id];
-    const source = get()._activeDocPath ? "doc" as RetrievalSettingsSource : get().settingsSource;
-    set({ activePreset: id, retrievalTopK: preset.topK, retrievalScope: preset.scope, settingsSource: source });
+    const source = get()._activeDocPath ? ("doc" as RetrievalSettingsSource) : get().settingsSource;
+    set({
+      activePreset: id,
+      retrievalTopK: preset.topK,
+      retrievalScope: preset.scope,
+      settingsSource: source,
+    });
     _persistSettings(get());
   },
 
@@ -111,7 +120,11 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     const { _workspacePath } = get();
     if (!_workspacePath) return;
     const { activePreset, retrievalTopK, retrievalScope } = get();
-    saveWorkspaceRetrievalSettings(_workspacePath, { preset: activePreset, topK: retrievalTopK, scope: retrievalScope });
+    saveWorkspaceRetrievalSettings(_workspacePath, {
+      preset: activePreset,
+      topK: retrievalTopK,
+      scope: retrievalScope,
+    });
   },
 
   getScopeDocIds: () => {
@@ -197,5 +210,4 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       return { pinnedDocIds: newPinned };
     });
   },
-
 }));

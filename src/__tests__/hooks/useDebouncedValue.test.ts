@@ -1,6 +1,6 @@
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 describe("useDebouncedValue", () => {
   beforeEach(() => {
@@ -17,10 +17,9 @@ describe("useDebouncedValue", () => {
   });
 
   it("does not update the returned value until the delay elapses", () => {
-    const { result, rerender } = renderHook(
-      ({ value }) => useDebouncedValue(value, 300),
-      { initialProps: { value: 0 } },
-    );
+    const { result, rerender } = renderHook(({ value }) => useDebouncedValue(value, 300), {
+      initialProps: { value: 0 },
+    });
 
     // Rapidly change the value (simulating keystrokes)
     rerender({ value: 1 });
@@ -44,10 +43,9 @@ describe("useDebouncedValue", () => {
   });
 
   it("resets the timer on each new value (true debounce behavior)", () => {
-    const { result, rerender } = renderHook(
-      ({ value }) => useDebouncedValue(value, 300),
-      { initialProps: { value: 10 } },
-    );
+    const { result, rerender } = renderHook(({ value }) => useDebouncedValue(value, 300), {
+      initialProps: { value: 10 },
+    });
 
     // Change value and advance partially
     rerender({ value: 20 });
@@ -72,10 +70,9 @@ describe("useDebouncedValue", () => {
   });
 
   it("updates immediately when delay is 0", () => {
-    const { result, rerender } = renderHook(
-      ({ value }) => useDebouncedValue(value, 0),
-      { initialProps: { value: 1 } },
-    );
+    const { result, rerender } = renderHook(({ value }) => useDebouncedValue(value, 0), {
+      initialProps: { value: 1 },
+    });
 
     rerender({ value: 2 });
     act(() => {

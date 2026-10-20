@@ -1,13 +1,7 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { toast } from "../stores/toast";
 
-export type UpdateState =
-  | "idle"
-  | "checking"
-  | "no-update"
-  | "downloading"
-  | "ready"
-  | "error";
+export type UpdateState = "idle" | "checking" | "no-update" | "downloading" | "ready" | "error";
 
 let currentState: UpdateState = "idle";
 let lastError: string | null = null;
@@ -36,8 +30,7 @@ export async function checkForAppUpdate(): Promise<void> {
     currentState = "ready";
     toast.success("Update installed — restart to apply.", 10_000);
   } catch (error) {
-    const msg =
-      error instanceof Error ? error.message : String(error);
+    const msg = error instanceof Error ? error.message : String(error);
 
     // Signing-key misconfiguration is expected in dev/staging — downgrade to console
     if (msg.includes("sign") || msg.includes("pubkey") || msg.includes("Updater")) {

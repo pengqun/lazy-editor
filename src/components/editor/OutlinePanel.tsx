@@ -1,17 +1,12 @@
 import { List } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
+import { isAbortError } from "../../lib/find-replace";
 import {
   type OutlineHeading,
   adaptiveOutlineDebounce,
   extractHeadingsAsync,
 } from "../../lib/outline";
-import { isAbortError } from "../../lib/find-replace";
 import { useEditorStore } from "../../stores/editor";
 
 /** Height (px) of each heading row — used for virtual-scroll math. */
@@ -111,7 +106,11 @@ export function OutlinePanel() {
 
   const handleJump = (pos: number) => {
     if (!editor) return;
-    editor.chain().setTextSelection(pos + 1).scrollIntoView().run();
+    editor
+      .chain()
+      .setTextSelection(pos + 1)
+      .scrollIntoView()
+      .run();
     editor.view.focus();
   };
 
@@ -119,14 +118,9 @@ export function OutlinePanel() {
 
   // Compute visible window
   const totalHeight = headings.length * ROW_HEIGHT;
-  const startIdx = useVirtual
-    ? Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
-    : 0;
+  const startIdx = useVirtual ? Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN) : 0;
   const endIdx = useVirtual
-    ? Math.min(
-        headings.length,
-        Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + OVERSCAN,
-      )
+    ? Math.min(headings.length, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + OVERSCAN)
     : headings.length;
   const visibleHeadings = headings.slice(startIdx, endIdx);
 

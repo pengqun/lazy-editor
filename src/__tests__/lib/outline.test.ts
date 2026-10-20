@@ -1,9 +1,9 @@
 import {
   HEADING_LIMIT,
+  OUTLINE_LARGE_THRESHOLD,
   adaptiveOutlineDebounce,
   extractHeadings,
   extractHeadingsAsync,
-  OUTLINE_LARGE_THRESHOLD,
 } from "@/lib/outline";
 import { describe, expect, it } from "vitest";
 
@@ -16,7 +16,7 @@ interface MockNode {
 
 function mockDoc(nodes: { type: string; attrs?: Record<string, unknown>; textContent: string }[]) {
   return {
-    descendants(fn: (node: MockNode, pos: number) => void | false) {
+    descendants(fn: (node: MockNode, pos: number) => undefined | false) {
       let pos = 0;
       for (const n of nodes) {
         const result = fn(
@@ -31,15 +31,12 @@ function mockDoc(nodes: { type: string; attrs?: Record<string, unknown>; textCon
         if (result === false) break;
       }
     },
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
   } as any;
 }
 
 describe("extractHeadings", () => {
   it("returns empty array for document with no headings", () => {
-    const doc = mockDoc([
-      { type: "paragraph", textContent: "Just a paragraph" },
-    ]);
+    const doc = mockDoc([{ type: "paragraph", textContent: "Just a paragraph" }]);
     const { headings, truncated } = extractHeadings(doc);
     expect(headings).toEqual([]);
     expect(truncated).toBe(false);
@@ -71,9 +68,7 @@ describe("extractHeadings", () => {
   });
 
   it("captures empty heading text", () => {
-    const doc = mockDoc([
-      { type: "heading", attrs: { level: 2 }, textContent: "" },
-    ]);
+    const doc = mockDoc([{ type: "heading", attrs: { level: 2 }, textContent: "" }]);
     const { headings } = extractHeadings(doc);
     expect(headings).toHaveLength(1);
     expect(headings[0].text).toBe("");
@@ -149,9 +144,7 @@ describe("extractHeadings", () => {
 
   it("handles headings with very long text", () => {
     const longText = "A".repeat(10_000);
-    const doc = mockDoc([
-      { type: "heading", attrs: { level: 1 }, textContent: longText },
-    ]);
+    const doc = mockDoc([{ type: "heading", attrs: { level: 1 }, textContent: longText }]);
     const { headings } = extractHeadings(doc);
     expect(headings).toHaveLength(1);
     expect(headings[0].text).toHaveLength(10_000);
@@ -194,10 +187,7 @@ describe("extractHeadingsAsync", () => {
       { type: "heading", attrs: { level: 2 }, textContent: "Section" },
     ]);
     const sync = extractHeadings(doc);
-    const asyncResult = await extractHeadingsAsync(
-      doc,
-      new AbortController().signal,
-    );
+    const asyncResult = await extractHeadingsAsync(doc, new AbortController().signal);
     expect(asyncResult).toEqual({ ...sync, cancelled: false });
   });
 

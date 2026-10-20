@@ -109,8 +109,7 @@ export default function App() {
     // Cmd+F — Find & Replace
     if (e.key === "f" && !e.shiftKey) {
       e.preventDefault();
-      const { showFindReplace: open, setShowFindReplace: setOpen } =
-        useEditorStore.getState();
+      const { showFindReplace: open, setShowFindReplace: setOpen } = useEditorStore.getState();
       setOpen(!open);
       return;
     }

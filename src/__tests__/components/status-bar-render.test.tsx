@@ -1,11 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { act } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StatusBar } from "@/components/editor/StatusBar";
 import { useAiStore } from "@/stores/ai";
 import { useEditorStore } from "@/stores/editor";
 import { useFilesStore } from "@/stores/files";
 import { useWritingGoalsStore } from "@/stores/writing-goals";
+import { cleanup, render, screen } from "@testing-library/react";
+import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("StatusBar render optimization", () => {
   beforeEach(() => {

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
-  type ThresholdSource,
   DEFAULT_THRESHOLD_SETTINGS,
+  type ThresholdSource,
   clampThresholdSettings,
   loadThresholdSettings,
   removeWorkspaceThresholdSettings,
@@ -10,12 +10,7 @@ import {
   saveWorkspaceThresholdSettings,
   toHealthThresholds,
 } from "../../lib/integrity-health";
-import {
-  applyThresholdConfig,
-  buildThresholdExportPayload,
-  parseThresholdConfig,
-  serializeThresholdConfig,
-} from "../../lib/integrity-threshold-io";
+import { buildHealthCheckReport } from "../../lib/integrity-healthcheck";
 import {
   type IntegrityReminderSettings,
   computeSnoozeUntil,
@@ -23,15 +18,24 @@ import {
   loadReminderSettings,
   saveReminderSettings,
 } from "../../lib/integrity-reminder";
-import { buildHealthCheckReport } from "../../lib/integrity-healthcheck";
-import { loadIntegrityTrendHistory, syncIntegrityTrendHistory } from "../../lib/integrity-trend-history";
+import {
+  applyThresholdConfig,
+  buildThresholdExportPayload,
+  parseThresholdConfig,
+  serializeThresholdConfig,
+} from "../../lib/integrity-threshold-io";
+import {
+  loadIntegrityTrendHistory,
+  syncIntegrityTrendHistory,
+} from "../../lib/integrity-trend-history";
 import { toast } from "../toast";
 import { ensureHistoryArray, extractErrorMessage, lastScanAt } from "./integrity-utils";
 import { refreshAfterMutation } from "./refresh";
 import type { IntegrityReport, IntegrityScanSnapshot, KnowledgeState } from "./types";
 
-export type IntegrityStateSlice = Pick<KnowledgeState,
-  "integrityReport"
+export type IntegrityStateSlice = Pick<
+  KnowledgeState,
+  | "integrityReport"
   | "integrityLoading"
   | "integrityHistory"
   | "integrityTrendHistory"
@@ -60,7 +64,9 @@ export type IntegrityStateSlice = Pick<KnowledgeState,
 >;
 
 export function createIntegrityStateSlice(
-  set: (partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>)) => void,
+  set: (
+    partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>),
+  ) => void,
   get: () => KnowledgeState,
 ): IntegrityStateSlice {
   return {

@@ -1,25 +1,32 @@
-import { invoke } from "@tauri-apps/api/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createBatchActionSlice, createBatchStateSlice, createIntegrityStateSlice, createViewerStateSlice, useKnowledgeStore } from "@/stores/knowledge";
+import * as batchPlanModule from "@/lib/integrity-batch-plan";
+import {
+  createBatchActionSlice,
+  createBatchStateSlice,
+  createIntegrityStateSlice,
+  createViewerStateSlice,
+  useKnowledgeStore,
+} from "@/stores/knowledge";
+import {
+  createBatchActionSlice as createBatchActionSliceDirect,
+  createBatchStateSlice as createBatchStateSliceDirect,
+} from "@/stores/knowledge/batch";
+import { createIntegrityStateSlice as createIntegrityStateSliceDirect } from "@/stores/knowledge/integrity";
 import {
   buildViewChunkError,
   classifyViewChunkError,
   createViewerStateSlice as createViewerStateSliceDirect,
 } from "@/stores/knowledge/viewer";
-import {
-  createIntegrityStateSlice as createIntegrityStateSliceDirect,
-} from "@/stores/knowledge/integrity";
-import { createBatchActionSlice as createBatchActionSliceDirect, createBatchStateSlice as createBatchStateSliceDirect } from "@/stores/knowledge/batch";
-import * as batchPlanModule from "@/lib/integrity-batch-plan";
+import { invoke } from "@tauri-apps/api/core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import aggregationRaw from "@/stores/knowledge.ts?raw";
+import batchRaw from "@/stores/knowledge/batch.ts?raw";
+import integrityUtilsRaw from "@/stores/knowledge/integrity-utils.ts?raw";
+import integrityRaw from "@/stores/knowledge/integrity.ts?raw";
+import refreshRaw from "@/stores/knowledge/refresh.ts?raw";
+import typesRaw from "@/stores/knowledge/types.ts?raw";
 // Raw source imports for guardian tests
 import viewerRaw from "@/stores/knowledge/viewer.ts?raw";
-import integrityRaw from "@/stores/knowledge/integrity.ts?raw";
-import batchRaw from "@/stores/knowledge/batch.ts?raw";
-import typesRaw from "@/stores/knowledge/types.ts?raw";
-import integrityUtilsRaw from "@/stores/knowledge/integrity-utils.ts?raw";
-import refreshRaw from "@/stores/knowledge/refresh.ts?raw";
-import aggregationRaw from "@/stores/knowledge.ts?raw";
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -93,9 +100,7 @@ describe("knowledge store slices", () => {
     Object.assign(state, slice);
 
     const report = { entries: [], healthy: 1, missing: 0, moved: 0 };
-    mockedInvoke
-      .mockResolvedValueOnce(report)
-      .mockResolvedValueOnce([]);
+    mockedInvoke.mockResolvedValueOnce(report).mockResolvedValueOnce([]);
 
     await slice.checkIntegrity();
 
@@ -123,7 +128,17 @@ describe("knowledge store slices", () => {
 
     mockedInvoke
       .mockResolvedValueOnce({ entries: [], healthy: 2, missing: 0, moved: 0 })
-      .mockResolvedValueOnce([{ id: 1, scannedAt: "2026-03-13T10:00:00.000Z", total: 2, healthy: 2, missing: 0, moved: 0, notes: null }]);
+      .mockResolvedValueOnce([
+        {
+          id: 1,
+          scannedAt: "2026-03-13T10:00:00.000Z",
+          total: 2,
+          healthy: 2,
+          missing: 0,
+          moved: 0,
+          notes: null,
+        },
+      ]);
 
     await slice.runHealthCheck();
 
@@ -157,7 +172,10 @@ describe("knowledge store slices", () => {
 
     await slice.relinkDocument(7, "/new/doc.md");
 
-    expect(mockedInvoke).toHaveBeenNthCalledWith(1, "relink_kb_document", { id: 7, newPath: "/new/doc.md" });
+    expect(mockedInvoke).toHaveBeenNthCalledWith(1, "relink_kb_document", {
+      id: 7,
+      newPath: "/new/doc.md",
+    });
     expect(mockedInvoke).toHaveBeenNthCalledWith(2, "check_kb_integrity");
     expect(mockedInvoke).toHaveBeenNthCalledWith(3, "get_integrity_history");
     expect(state.loadDocuments).toHaveBeenCalledTimes(1);
@@ -209,15 +227,17 @@ describe("knowledge store slices", () => {
         generatedAt: "2026-03-13T10:00:00.000Z",
         metrics: { total: 3, healthy: 2, missing: 1, moved: 0, invalid: 0 },
         trend: { scans7d: 1, latestStatus: "warning" },
-        recommendations: [{
-          id: "enable-reminders",
-          priority: "medium",
-          confidence: "high",
-          title: "Enable reminders",
-          description: "enable",
-          rationale: "keep scanning",
-          action: { type: "enable-reminders" },
-        }],
+        recommendations: [
+          {
+            id: "enable-reminders",
+            priority: "medium",
+            confidence: "high",
+            title: "Enable reminders",
+            description: "enable",
+            rationale: "keep scanning",
+            action: { type: "enable-reminders" },
+          },
+        ],
       },
     };
     const set = vi.fn((partial: any) => {
@@ -254,7 +274,13 @@ describe("knowledge store slices", () => {
     expect(state.batchExecutionLog).toBeNull();
     expect(state.batchStepStatuses).toEqual({});
 
-    Object.assign(state, { healthCheckReport: { foo: 1 }, batchFixPlan: { foo: 1 }, batchLastPlan: { foo: 1 }, batchExecutionLog: { foo: 1 }, batchStepStatuses: { x: "pending" } });
+    Object.assign(state, {
+      healthCheckReport: { foo: 1 },
+      batchFixPlan: { foo: 1 },
+      batchLastPlan: { foo: 1 },
+      batchExecutionLog: { foo: 1 },
+      batchStepStatuses: { x: "pending" },
+    });
     slice.clearHealthCheck();
     expect(state.healthCheckReport).toBeNull();
     expect(state.batchFixPlan).toBeNull();
@@ -312,7 +338,10 @@ describe("knowledge store slices", () => {
     // Extract declared error kinds from type source
     const match = typesRaw.match(/type\s+ViewChunkErrorKind\s*=\s*([^;]+)/);
     const declaredKinds = new Set(
-      match![1].split("|").map((s) => s.trim().replace(/^"|"$/g, "")).filter(Boolean),
+      match![1]
+        .split("|")
+        .map((s) => s.trim().replace(/^"|"$/g, ""))
+        .filter(Boolean),
     );
 
     // Every backend prefix pattern in classifyViewChunkError must map to a declared kind
@@ -343,7 +372,10 @@ describe("knowledge store slices", () => {
     expect(set).toHaveBeenNthCalledWith(2, {
       viewedChunk: null,
       viewChunkLoading: false,
-      viewChunkError: { kind: "chunk-missing", message: expect.stringContaining("no longer exists") },
+      viewChunkError: {
+        kind: "chunk-missing",
+        message: expect.stringContaining("no longer exists"),
+      },
     });
   });
 
@@ -375,8 +407,14 @@ describe("knowledge store slices", () => {
     const set = vi.fn();
     const slice = createViewerStateSlice(set);
     const chunk = {
-      chunkContent: "c", documentTitle: "D", documentId: 1, chunkId: 5,
-      chunkIndex: 0, totalChunks: 1, prevChunk: null, nextChunk: null,
+      chunkContent: "c",
+      documentTitle: "D",
+      documentId: 1,
+      chunkId: 5,
+      chunkIndex: 0,
+      totalChunks: 1,
+      prevChunk: null,
+      nextChunk: null,
     };
     mockedInvoke.mockResolvedValueOnce(chunk);
 
@@ -444,7 +482,15 @@ describe("knowledge store slices", () => {
       checkIntegrity,
       batchFixPlan: {
         generatedAt: "2026-03-14T00:00:00Z",
-        steps: [{ stepId: "step-1", type: "enable-reminders", title: "Enable", description: "d", actionPayload: {} }],
+        steps: [
+          {
+            stepId: "step-1",
+            type: "enable-reminders",
+            title: "Enable",
+            description: "d",
+            actionPayload: {},
+          },
+        ],
       },
     };
     const set = vi.fn((partial: any) => {
@@ -459,8 +505,25 @@ describe("knowledge store slices", () => {
     const executeSpy = vi.spyOn(batchPlanModule, "executeBatchFixPlan").mockResolvedValueOnce({
       startedAt: "2026-03-14T00:00:00Z",
       completedAt: "2026-03-14T00:00:01Z",
-      results: [{ stepId: "step-1", recommendationId: "enable-reminders", actionType: "enable-reminders", status: "success" as const, outcome: "success", message: "ok", durationMs: 1, attempts: 1, affectedItems: 0 }],
-      summary: { success: 1, failed: 0, skipped: 0, itemChanges: { success: 0, failed: 0, skipped: 0, total: 0 } },
+      results: [
+        {
+          stepId: "step-1",
+          recommendationId: "enable-reminders",
+          actionType: "enable-reminders",
+          status: "success" as const,
+          outcome: "success",
+          message: "ok",
+          durationMs: 1,
+          attempts: 1,
+          affectedItems: 0,
+        },
+      ],
+      summary: {
+        success: 1,
+        failed: 0,
+        skipped: 0,
+        itemChanges: { success: 0, failed: 0, skipped: 0, total: 0 },
+      },
     });
 
     await slice.confirmBatchPlan();
@@ -489,12 +552,22 @@ describe("knowledge store slices", () => {
       checkIntegrity,
       batchLastPlan: {
         generatedAt: "2026-03-14T00:00:00Z",
-        steps: [{ stepId: "step-1", type: "enable-reminders", title: "Enable", description: "d", actionPayload: {} }],
+        steps: [
+          {
+            stepId: "step-1",
+            type: "enable-reminders",
+            title: "Enable",
+            description: "d",
+            actionPayload: {},
+          },
+        ],
       },
       batchExecutionLog: {
         startedAt: "2026-03-14T00:00:00Z",
         completedAt: "2026-03-14T00:00:01Z",
-        results: [{ stepId: "step-1", outcome: "failed", message: "err", attempts: 1, itemsChanged: 0 }],
+        results: [
+          { stepId: "step-1", outcome: "failed", message: "err", attempts: 1, itemsChanged: 0 },
+        ],
         summary: { success: 0, failed: 1, skipped: 0, itemChanges: { success: 0, failed: 0 } },
       },
       batchStepStatuses: { "step-1": "failed" },
@@ -508,7 +581,15 @@ describe("knowledge store slices", () => {
     Object.assign(state, slice);
 
     const retrySpy = vi.spyOn(batchPlanModule, "executeBatchStep").mockResolvedValueOnce({
-      stepId: "step-1", recommendationId: "enable-reminders", actionType: "enable-reminders", status: "success" as const, outcome: "success", message: "ok", durationMs: 1, attempts: 2, affectedItems: 1,
+      stepId: "step-1",
+      recommendationId: "enable-reminders",
+      actionType: "enable-reminders",
+      status: "success" as const,
+      outcome: "success",
+      message: "ok",
+      durationMs: 1,
+      attempts: 2,
+      affectedItems: 1,
     });
 
     await slice.retryBatchStep("step-1");
@@ -533,12 +614,22 @@ describe("knowledge store slices", () => {
       checkIntegrity,
       batchLastPlan: {
         generatedAt: "2026-03-14T00:00:00Z",
-        steps: [{ stepId: "step-2", type: "enable-reminders", title: "Enable", description: "d", actionPayload: {} }],
+        steps: [
+          {
+            stepId: "step-2",
+            type: "enable-reminders",
+            title: "Enable",
+            description: "d",
+            actionPayload: {},
+          },
+        ],
       },
       batchExecutionLog: {
         startedAt: "2026-03-14T00:00:00Z",
         completedAt: "2026-03-14T00:00:01Z",
-        results: [{ stepId: "step-2", outcome: "failed", message: "err", attempts: 1, itemsChanged: 0 }],
+        results: [
+          { stepId: "step-2", outcome: "failed", message: "err", attempts: 1, itemsChanged: 0 },
+        ],
         summary: { success: 0, failed: 1, skipped: 0, itemChanges: { success: 0, failed: 0 } },
       },
       batchStepStatuses: { "step-2": "failed" },
@@ -552,7 +643,15 @@ describe("knowledge store slices", () => {
     Object.assign(state, slice);
 
     const retrySpy = vi.spyOn(batchPlanModule, "executeBatchStep").mockResolvedValueOnce({
-      stepId: "step-2", recommendationId: "enable-reminders", actionType: "enable-reminders", status: "failed" as const, outcome: "failed", message: "still broken", durationMs: 1, attempts: 2, affectedItems: 0,
+      stepId: "step-2",
+      recommendationId: "enable-reminders",
+      actionType: "enable-reminders",
+      status: "failed" as const,
+      outcome: "failed",
+      message: "still broken",
+      durationMs: 1,
+      attempts: 2,
+      affectedItems: 0,
     });
 
     await slice.retryBatchStep("step-2");
@@ -623,10 +722,19 @@ describe("knowledge store slices", () => {
   });
 
   it("guardian: slice modules do not import from aggregation layer '../knowledge'", () => {
-    const sliceSources = { viewerRaw, integrityRaw, batchRaw, typesRaw, integrityUtilsRaw, refreshRaw };
+    const sliceSources = {
+      viewerRaw,
+      integrityRaw,
+      batchRaw,
+      typesRaw,
+      integrityUtilsRaw,
+      refreshRaw,
+    };
     for (const [name, source] of Object.entries(sliceSources)) {
       // Must not import from "../knowledge" (the aggregation layer)
-      expect(source, `${name} imports from ../knowledge`).not.toMatch(/from\s+["']\.\.\/knowledge["']/);
+      expect(source, `${name} imports from ../knowledge`).not.toMatch(
+        /from\s+["']\.\.\/knowledge["']/,
+      );
       // Must not import useKnowledgeStore
       expect(source, `${name} references useKnowledgeStore`).not.toMatch(/useKnowledgeStore/);
     }
@@ -644,35 +752,59 @@ describe("knowledge store slices", () => {
     // viewer must include all state + action fields
     const viewerKeys = Object.keys(createViewerStateSlice(set)).sort();
     const requiredViewerKeys = [
-      "viewedChunk", "lastRequestedChunkId", "viewChunkLoading", "viewChunkError",
-      "viewedChunkQuery", "viewedChunkScore",
-      "viewChunk", "setViewChunkError", "closeChunkViewer", "dismissChunkError",
+      "viewedChunk",
+      "lastRequestedChunkId",
+      "viewChunkLoading",
+      "viewChunkError",
+      "viewedChunkQuery",
+      "viewedChunkScore",
+      "viewChunk",
+      "setViewChunkError",
+      "closeChunkViewer",
+      "dismissChunkError",
     ].sort();
     expect(viewerKeys).toEqual(requiredViewerKeys);
 
     // batch state must include all state fields
     const batchStateKeys = Object.keys(createBatchStateSlice()).sort();
     const requiredBatchStateKeys = [
-      "batchFixPlan", "batchLastPlan", "batchExecuting",
-      "batchStepStatuses", "batchExecutionLog", "lastBatchImpact",
+      "batchFixPlan",
+      "batchLastPlan",
+      "batchExecuting",
+      "batchStepStatuses",
+      "batchExecutionLog",
+      "lastBatchImpact",
     ].sort();
     expect(batchStateKeys).toEqual(requiredBatchStateKeys);
 
     // batch action must include all action fields
     const batchActionKeys = Object.keys(createBatchActionSlice(set, get)).sort();
     const requiredBatchActionKeys = [
-      "clearHealthCheck", "buildBatchPlan", "clearBatchPlan",
-      "confirmBatchPlan", "retryBatchStep", "clearBatchLog",
+      "clearHealthCheck",
+      "buildBatchPlan",
+      "clearBatchPlan",
+      "confirmBatchPlan",
+      "retryBatchStep",
+      "clearBatchLog",
     ].sort();
     expect(batchActionKeys).toEqual(requiredBatchActionKeys);
 
     // integrity must include all required keys (superset check — new keys are allowed)
     const integrityKeys = Object.keys(createIntegrityStateSlice(set, get));
     const requiredIntegrityKeys = [
-      "integrityReport", "integrityLoading", "integrityHistory",
-      "checkIntegrity", "relinkDocument", "removeStaleDocuments", "clearIntegrity",
-      "loadIntegrityHistory", "reminderSettings", "reminderDue",
-      "healthCheckReport", "healthCheckLoading", "runHealthCheck",
+      "integrityReport",
+      "integrityLoading",
+      "integrityHistory",
+      "checkIntegrity",
+      "relinkDocument",
+      "removeStaleDocuments",
+      "clearIntegrity",
+      "loadIntegrityHistory",
+      "reminderSettings",
+      "reminderDue",
+      "healthCheckReport",
+      "healthCheckLoading",
+      "runHealthCheck",
     ];
     for (const key of requiredIntegrityKeys) {
       expect(integrityKeys, `integrity slice missing: ${key}`).toContain(key);
@@ -691,29 +823,82 @@ describe("knowledge store slices", () => {
     const state = useKnowledgeStore.getState();
     const expectedKeys = [
       // core
-      "documents", "isIngesting", "ingestProgress", "searchResults", "pinnedDocIds",
-      "retrievalTopK", "setRetrievalTopK", "retrievalScope", "setRetrievalScope",
-      "activePreset", "setPreset", "_activeDocPath", "_workspacePath", "settingsSource",
-      "setWorkspacePath", "restoreForDocument", "saveAsWorkspaceDefault", "getScopeDocIds",
-      "setIngestProgress", "loadDocuments", "ingestFile", "ingestText", "searchKB",
-      "removeDocument", "togglePinDocument",
+      "documents",
+      "isIngesting",
+      "ingestProgress",
+      "searchResults",
+      "pinnedDocIds",
+      "retrievalTopK",
+      "setRetrievalTopK",
+      "retrievalScope",
+      "setRetrievalScope",
+      "activePreset",
+      "setPreset",
+      "_activeDocPath",
+      "_workspacePath",
+      "settingsSource",
+      "setWorkspacePath",
+      "restoreForDocument",
+      "saveAsWorkspaceDefault",
+      "getScopeDocIds",
+      "setIngestProgress",
+      "loadDocuments",
+      "ingestFile",
+      "ingestText",
+      "searchKB",
+      "removeDocument",
+      "togglePinDocument",
       // viewer
-      "viewedChunk", "lastRequestedChunkId", "viewChunkLoading", "viewChunkError",
-      "viewedChunkQuery", "viewedChunkScore", "viewChunk", "setViewChunkError",
-      "closeChunkViewer", "dismissChunkError",
+      "viewedChunk",
+      "lastRequestedChunkId",
+      "viewChunkLoading",
+      "viewChunkError",
+      "viewedChunkQuery",
+      "viewedChunkScore",
+      "viewChunk",
+      "setViewChunkError",
+      "closeChunkViewer",
+      "dismissChunkError",
       // integrity
-      "integrityReport", "integrityLoading", "integrityHistory", "integrityTrendHistory",
-      "checkIntegrity", "relinkDocument", "removeStaleDocuments", "clearIntegrity",
-      "loadIntegrityHistory", "reminderSettings", "reminderDue", "setReminderSettings",
-      "snoozeReminder", "refreshReminderDue", "healthThresholds", "healthThresholdSource",
-      "setHealthThresholds", "resetHealthThresholds", "getHealthThresholds",
-      "saveThresholdsForWorkspace", "resetWorkspaceThresholds",
-      "exportThresholdConfig", "importThresholdConfig",
-      "healthCheckReport", "healthCheckLoading", "runHealthCheck",
+      "integrityReport",
+      "integrityLoading",
+      "integrityHistory",
+      "integrityTrendHistory",
+      "checkIntegrity",
+      "relinkDocument",
+      "removeStaleDocuments",
+      "clearIntegrity",
+      "loadIntegrityHistory",
+      "reminderSettings",
+      "reminderDue",
+      "setReminderSettings",
+      "snoozeReminder",
+      "refreshReminderDue",
+      "healthThresholds",
+      "healthThresholdSource",
+      "setHealthThresholds",
+      "resetHealthThresholds",
+      "getHealthThresholds",
+      "saveThresholdsForWorkspace",
+      "resetWorkspaceThresholds",
+      "exportThresholdConfig",
+      "importThresholdConfig",
+      "healthCheckReport",
+      "healthCheckLoading",
+      "runHealthCheck",
       // batch
-      "batchFixPlan", "batchLastPlan", "batchExecuting", "batchStepStatuses",
-      "batchExecutionLog", "lastBatchImpact", "clearHealthCheck",
-      "buildBatchPlan", "clearBatchPlan", "confirmBatchPlan", "retryBatchStep", "clearBatchLog",
+      "batchFixPlan",
+      "batchLastPlan",
+      "batchExecuting",
+      "batchStepStatuses",
+      "batchExecutionLog",
+      "lastBatchImpact",
+      "clearHealthCheck",
+      "buildBatchPlan",
+      "clearBatchPlan",
+      "confirmBatchPlan",
+      "retryBatchStep",
+      "clearBatchLog",
     ];
     const stateKeys = Object.keys(state);
     for (const key of expectedKeys) {

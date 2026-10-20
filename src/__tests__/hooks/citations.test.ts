@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
 import { buildCitationHtml, deduplicateCitations } from "@/hooks/useAI";
 import type { CitationSource } from "@/lib/tauri";
+import { describe, expect, it } from "vitest";
 
 const makeCitation = (overrides: Partial<CitationSource> = {}): CitationSource => ({
   documentTitle: "Test Doc",

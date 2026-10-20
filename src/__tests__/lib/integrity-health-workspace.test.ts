@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  type HealthThresholdSettings,
   DEFAULT_THRESHOLD_SETTINGS,
+  type HealthThresholdSettings,
   loadWorkspaceThresholdSettings,
   removeWorkspaceThresholdSettings,
   resolveThresholdSettings,
@@ -44,7 +44,11 @@ describe("workspace threshold storage", () => {
   });
 
   it("stores settings independently per workspace", () => {
-    const settingsB: HealthThresholdSettings = { goodMinScans7d: 1, goodMaxAgeDays: 10, poorMaxAgeDays: 20 };
+    const settingsB: HealthThresholdSettings = {
+      goodMinScans7d: 1,
+      goodMaxAgeDays: 10,
+      poorMaxAgeDays: 20,
+    };
     saveWorkspaceThresholdSettings(WS_A, customSettings);
     saveWorkspaceThresholdSettings(WS_B, settingsB);
 
@@ -53,7 +57,10 @@ describe("workspace threshold storage", () => {
   });
 
   it("clamps invalid values on load", () => {
-    localStorage.setItem(PREFIX + WS_A, JSON.stringify({ goodMinScans7d: 99, goodMaxAgeDays: -1, poorMaxAgeDays: 0 }));
+    localStorage.setItem(
+      PREFIX + WS_A,
+      JSON.stringify({ goodMinScans7d: 99, goodMaxAgeDays: -1, poorMaxAgeDays: 0 }),
+    );
     const loaded = loadWorkspaceThresholdSettings(WS_A);
     expect(loaded).not.toBeNull();
     expect(loaded!.goodMinScans7d).toBe(10);
@@ -107,7 +114,11 @@ describe("resolveThresholdSettings", () => {
   });
 
   it("returns global settings (non-default) when workspace has no override", () => {
-    const globalCustom: HealthThresholdSettings = { goodMinScans7d: 3, goodMaxAgeDays: 5, poorMaxAgeDays: 12 };
+    const globalCustom: HealthThresholdSettings = {
+      goodMinScans7d: 3,
+      goodMaxAgeDays: 5,
+      poorMaxAgeDays: 12,
+    };
     localStorage.setItem(GLOBAL_KEY, JSON.stringify(globalCustom));
     const { settings, source } = resolveThresholdSettings(WS_A);
     expect(source).toBe("global");
@@ -115,7 +126,11 @@ describe("resolveThresholdSettings", () => {
   });
 
   it("workspace override takes precedence over custom global", () => {
-    const globalCustom: HealthThresholdSettings = { goodMinScans7d: 3, goodMaxAgeDays: 5, poorMaxAgeDays: 12 };
+    const globalCustom: HealthThresholdSettings = {
+      goodMinScans7d: 3,
+      goodMaxAgeDays: 5,
+      poorMaxAgeDays: 12,
+    };
     localStorage.setItem(GLOBAL_KEY, JSON.stringify(globalCustom));
     saveWorkspaceThresholdSettings(WS_A, customSettings);
 
@@ -129,7 +144,11 @@ describe("resolveThresholdSettings", () => {
 
 describe("workspace switching resolution", () => {
   it("resolves differently for different workspaces", () => {
-    const settingsB: HealthThresholdSettings = { goodMinScans7d: 1, goodMaxAgeDays: 10, poorMaxAgeDays: 20 };
+    const settingsB: HealthThresholdSettings = {
+      goodMinScans7d: 1,
+      goodMaxAgeDays: 10,
+      poorMaxAgeDays: 20,
+    };
     saveWorkspaceThresholdSettings(WS_A, customSettings);
     saveWorkspaceThresholdSettings(WS_B, settingsB);
 

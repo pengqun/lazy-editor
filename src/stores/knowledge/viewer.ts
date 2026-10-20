@@ -1,8 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ChunkContext, KnowledgeState, ViewChunkErrorKind, ViewChunkErrorState } from "./types";
+import type {
+  ChunkContext,
+  KnowledgeState,
+  ViewChunkErrorKind,
+  ViewChunkErrorState,
+} from "./types";
 
-export type ViewerStateSlice = Pick<KnowledgeState,
-  "viewedChunk"
+export type ViewerStateSlice = Pick<
+  KnowledgeState,
+  | "viewedChunk"
   | "lastRequestedChunkId"
   | "viewChunkLoading"
   | "viewChunkError"
@@ -26,7 +32,6 @@ export function buildViewChunkError(kind: ViewChunkErrorKind): ViewChunkErrorSta
         kind,
         message: "Malformed citation link — this reference is invalid.",
       };
-    case "chunk-missing":
     default:
       return {
         kind: "chunk-missing",
@@ -47,7 +52,9 @@ export function classifyViewChunkError(err: unknown): ViewChunkErrorKind {
 }
 
 export function createViewerStateSlice(
-  set: (partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>)) => void,
+  set: (
+    partial: Partial<KnowledgeState> | ((state: KnowledgeState) => Partial<KnowledgeState>),
+  ) => void,
 ): ViewerStateSlice {
   return {
     viewedChunk: null,

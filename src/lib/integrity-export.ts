@@ -1,11 +1,11 @@
 import type { IntegrityEntry, IntegrityReport, IntegrityScanSnapshot } from "@/stores/knowledge";
 import {
+  type BatchExecutionLog,
   buildBatchFixPlan,
   computeBatchExecutionMetrics,
   formatEstimatedImpact,
   formatRate,
   summarizeEstimatedImpact,
-  type BatchExecutionLog,
 } from "./integrity-batch-plan";
 import type { HealthCheckRecommendation, HealthCheckReport } from "./integrity-healthcheck";
 
@@ -94,10 +94,10 @@ function firstKeyRisk(recommendations: HealthCheckRecommendation[]): string {
   return actionable ? actionable.title : "No critical risk detected";
 }
 
-function topRecommendations(recommendations: HealthCheckRecommendation[]): HealthCheckRecommendation[] {
-  return recommendations
-    .filter((rec) => rec.id !== "all-clear")
-    .slice(0, 3);
+function topRecommendations(
+  recommendations: HealthCheckRecommendation[],
+): HealthCheckRecommendation[] {
+  return recommendations.filter((rec) => rec.id !== "all-clear").slice(0, 3);
 }
 
 export function formatMarkdown(payload: IntegrityExportPayload): string {
@@ -111,8 +111,8 @@ export function formatMarkdown(payload: IntegrityExportPayload): string {
 
   lines.push("## Summary");
   lines.push("");
-  lines.push(`| Status | Count |`);
-  lines.push(`|--------|-------|`);
+  lines.push("| Status | Count |");
+  lines.push("|--------|-------|");
   lines.push(`| Healthy | ${summary.healthy} |`);
   lines.push(`| Moved | ${summary.moved} |`);
   lines.push(`| Missing | ${summary.missing} |`);
@@ -179,7 +179,9 @@ export function formatMarkdown(payload: IntegrityExportPayload): string {
     for (let i = 0; i < history.length; i++) {
       const h = history[i];
       const notes = h.notes ? h.notes.replace(/\|/g, "\\|") : "";
-      lines.push(`| ${i + 1} | ${h.scannedAt} | ${h.total} | ${h.healthy} | ${h.missing} | ${h.moved} | ${notes} |`);
+      lines.push(
+        `| ${i + 1} | ${h.scannedAt} | ${h.total} | ${h.healthy} | ${h.missing} | ${h.moved} | ${notes} |`,
+      );
     }
   }
 
@@ -189,8 +191,12 @@ export function formatMarkdown(payload: IntegrityExportPayload): string {
     lines.push("## Health Check");
     lines.push("");
     lines.push(`**Status:** ${TIER_LABEL_MAP[healthCheck.tier] ?? healthCheck.tier}`);
-    lines.push(`**Last scan:** ${healthCheck.metrics.latestScanAgeMs !== null ? `${Math.round(healthCheck.metrics.latestScanAgeMs / 3600000)}h ago` : "never"}`);
-    lines.push(`**7-day scans:** ${healthCheck.metrics.scansLast7d} | **30-day scans:** ${healthCheck.metrics.scansLast30d} | **Streak:** ${healthCheck.metrics.streak}d`);
+    lines.push(
+      `**Last scan:** ${healthCheck.metrics.latestScanAgeMs !== null ? `${Math.round(healthCheck.metrics.latestScanAgeMs / 3600000)}h ago` : "never"}`,
+    );
+    lines.push(
+      `**7-day scans:** ${healthCheck.metrics.scansLast7d} | **30-day scans:** ${healthCheck.metrics.scansLast30d} | **Streak:** ${healthCheck.metrics.streak}d`,
+    );
     const batchPlan = buildBatchFixPlan(healthCheck);
     const estimatedImpact = formatEstimatedImpact(
       summarizeEstimatedImpact(batchPlan, healthCheck.counts.moved),
@@ -201,7 +207,9 @@ export function formatMarkdown(payload: IntegrityExportPayload): string {
     lines.push("");
     for (const rec of healthCheck.recommendations) {
       const pLabel = PRIORITY_LABEL_MAP[rec.priority] ?? rec.priority;
-      const cLabel = rec.confidence ? ` (confidence: ${CONFIDENCE_LABEL_MAP[rec.confidence] ?? rec.confidence})` : "";
+      const cLabel = rec.confidence
+        ? ` (confidence: ${CONFIDENCE_LABEL_MAP[rec.confidence] ?? rec.confidence})`
+        : "";
       lines.push(`- **[${pLabel}]**${cLabel} ${rec.title} — ${rec.description}`);
       if (rec.rationale) {
         lines.push(`  - _Rationale:_ ${rec.rationale}`);

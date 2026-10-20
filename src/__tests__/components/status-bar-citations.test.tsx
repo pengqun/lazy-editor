@@ -1,10 +1,10 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StatusBar } from "@/components/editor/StatusBar";
 import { useAiStore } from "@/stores/ai";
 import { useEditorStore } from "@/stores/editor";
 import { useFilesStore } from "@/stores/files";
 import { useWritingGoalsStore } from "@/stores/writing-goals";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const makeCitation = () => ({
   documentTitle: "Doc A",
@@ -88,7 +88,9 @@ describe("StatusBar citation controls", () => {
 
     const controls = screen.getByRole("group", { name: "Citation reference controls" });
     const scoped = within(controls);
-    const profileSelect = scoped.getByRole("combobox", { name: "Citation reference profile" }) as HTMLSelectElement;
+    const profileSelect = scoped.getByRole("combobox", {
+      name: "Citation reference profile",
+    }) as HTMLSelectElement;
     const chunkToggle = scoped.getByRole("button", { name: "Chunk" });
 
     fireEvent.change(profileSelect, { target: { value: "builtin:compact-default" } });
@@ -106,7 +108,9 @@ describe("StatusBar citation controls", () => {
 
     const controls = screen.getByRole("group", { name: "Citation reference controls" });
     const scoped = within(controls);
-    const profileSelect = scoped.getByRole("combobox", { name: "Citation reference profile" }) as HTMLSelectElement;
+    const profileSelect = scoped.getByRole("combobox", {
+      name: "Citation reference profile",
+    }) as HTMLSelectElement;
     const relevanceToggle = scoped.getByRole("button", { name: "Relevance" });
 
     fireEvent.change(profileSelect, { target: { value: "builtin:academic-full" } });
@@ -139,7 +143,9 @@ describe("StatusBar citation controls", () => {
 
     const controls = screen.getByRole("group", { name: "Citation reference controls" });
     const scoped = within(controls);
-    const profileSelect = scoped.getByRole("combobox", { name: "Citation reference profile" }) as HTMLSelectElement;
+    const profileSelect = scoped.getByRole("combobox", {
+      name: "Citation reference profile",
+    }) as HTMLSelectElement;
     const chunkToggle = scoped.getByRole("button", { name: "Chunk" });
 
     fireEvent.change(profileSelect, { target: { value: "custom:test-profile" } });

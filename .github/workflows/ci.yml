@@ -140,3 +140,87 @@ jobs:
           name: ci-stability-baseline-${{ github.run_id }}
           path: .artifacts/test-diagnose/ci-baseline/*
           if-no-files-found: warn
+
+  lint:
+    name: Lint (Biome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Biome lint
+        run: npm run lint
+
+  frontend-test:
+    name: Frontend tests (Node 20)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Vitest
+        run: npm test
+
+  rust-test:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            pkg-config
+          # Rust's default Linux linker (rust-lld) does not search GCC's
+          # private library directory, where the unversioned libstdc++.so
+          # symlink lives. fastembed/ONNX Runtime links -lstdc++.
+          libstdcpp="$(g++ -print-file-name=libstdc++.so)"
+          sudo ln -sfn "$libstdcpp" /usr/lib/x86_64-linux-gnu/libstdc++.so
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-
+            ${{ runner.os }}-cargo-
+
+      - name: cargo test
+        working-directory: src-tauri
+        env:
+          RUST_BACKTRACE: "1"
+        run: cargo test

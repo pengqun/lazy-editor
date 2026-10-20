@@ -8,8 +8,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
-  Copy,
   Clock,
+  Copy,
   Download,
   FilePlus2,
   HeartPulse,
@@ -29,18 +29,58 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
-import { buildExportPayload, computeTrend, formatDelta, formatJSON, formatMarkdown } from "../../lib/integrity-export";
-import { type HealthThresholdSettings, type ThresholdSource, DEFAULT_THRESHOLD_SETTINGS, TIER_BG_COLORS, TIER_COLORS, TIER_LABELS, computeHealthTier, computeScanCoverage, formatAge, toHealthThresholds } from "../../lib/integrity-health";
-import { FREQUENCY_IDS, FREQUENCY_LABELS, type ReminderFrequency } from "../../lib/integrity-reminder";
-import type { HealthCheckReport, RecommendationAction } from "../../lib/integrity-healthcheck";
-import { buildBatchExecutionSummaryText, buildBatchFailureAdvices, computeBatchExecutionMetrics, formatEstimatedImpact, formatRate, type BatchExecutionLog, type BatchFixPlan, summarizeEstimatedImpact } from "../../lib/integrity-batch-plan";
 import { type BatchImpactSummary, shouldShowBatchImpact } from "../../lib/integrity-batch-impact";
-import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
+import {
+  type BatchExecutionLog,
+  type BatchFixPlan,
+  buildBatchExecutionSummaryText,
+  buildBatchFailureAdvices,
+  computeBatchExecutionMetrics,
+  formatEstimatedImpact,
+  formatRate,
+  summarizeEstimatedImpact,
+} from "../../lib/integrity-batch-plan";
+import {
+  buildExportPayload,
+  computeTrend,
+  formatDelta,
+  formatJSON,
+  formatMarkdown,
+} from "../../lib/integrity-export";
+import {
+  DEFAULT_THRESHOLD_SETTINGS,
+  type HealthThresholdSettings,
+  TIER_BG_COLORS,
+  TIER_COLORS,
+  TIER_LABELS,
+  type ThresholdSource,
+  computeHealthTier,
+  computeScanCoverage,
+  formatAge,
+  toHealthThresholds,
+} from "../../lib/integrity-health";
+import type { HealthCheckReport, RecommendationAction } from "../../lib/integrity-healthcheck";
+import {
+  FREQUENCY_IDS,
+  FREQUENCY_LABELS,
+  type ReminderFrequency,
+} from "../../lib/integrity-reminder";
 import { toSparkline } from "../../lib/integrity-trend-history";
-import { PRESET_IDS, RETRIEVAL_PRESETS, type RetrievalSettingsSource } from "../../lib/retrieval-presets";
+import { type HighlightSegment, findMatchedTerms, highlightText } from "../../lib/kb-highlight";
+import {
+  PRESET_IDS,
+  RETRIEVAL_PRESETS,
+  type RetrievalSettingsSource,
+} from "../../lib/retrieval-presets";
 import { listenToIngestProgress, openFileDialog } from "../../lib/tauri";
 import { useFilesStore } from "../../stores/files";
-import { type IntegrityEntry, type IntegrityReport, type IntegrityScanSnapshot, type RetrievalScope, useKnowledgeStore } from "../../stores/knowledge";
+import {
+  type IntegrityEntry,
+  type IntegrityReport,
+  type IntegrityScanSnapshot,
+  type RetrievalScope,
+  useKnowledgeStore,
+} from "../../stores/knowledge";
 
 export function KnowledgePanel() {
   const {
@@ -245,7 +285,10 @@ export function KnowledgePanel() {
               </span>
               <SettingsSourceBadge source={settingsSource} />
               {activeFilePath && (
-                <span className="text-[10px] text-text-tertiary truncate max-w-[100px]" title={activeFilePath}>
+                <span
+                  className="text-[10px] text-text-tertiary truncate max-w-[100px]"
+                  title={activeFilePath}
+                >
                   — {activeFilePath.split("/").pop()}
                 </span>
               )}
@@ -701,12 +744,8 @@ function ChunkViewer() {
     viewedChunk;
 
   // Compute highlighted segments if a query led to this chunk
-  const contentSegments = viewedChunkQuery
-    ? highlightText(chunkContent, viewedChunkQuery)
-    : null;
-  const matchedTerms = viewedChunkQuery
-    ? findMatchedTerms(viewedChunkQuery, chunkContent)
-    : [];
+  const contentSegments = viewedChunkQuery ? highlightText(chunkContent, viewedChunkQuery) : null;
+  const matchedTerms = viewedChunkQuery ? findMatchedTerms(viewedChunkQuery, chunkContent) : [];
 
   // Navigate to an adjacent chunk by computing its expected chunk_id offset
   // This is a heuristic; we use the current chunk_id +/- 1 as adjacent chunks
@@ -772,11 +811,7 @@ function ChunkViewer() {
         {/* Current chunk (highlighted) */}
         <div className="px-3 py-3 bg-accent/5 border-l-2 border-accent">
           <p className="text-xs text-text-primary whitespace-pre-wrap leading-relaxed">
-            {contentSegments ? (
-              <HighlightedText segments={contentSegments} />
-            ) : (
-              chunkContent
-            )}
+            {contentSegments ? <HighlightedText segments={contentSegments} /> : chunkContent}
           </p>
         </div>
 
@@ -839,10 +874,7 @@ const SOURCE_BADGE_TITLES: Record<RetrievalSettingsSource, string> = {
 function SettingsSourceBadge({ source }: { source: RetrievalSettingsSource }) {
   return (
     <span
-      className={cn(
-        "text-[10px] px-1.5 py-0.5 rounded font-medium",
-        SOURCE_BADGE_STYLES[source],
-      )}
+      className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", SOURCE_BADGE_STYLES[source])}
       title={SOURCE_BADGE_TITLES[source]}
     >
       {SOURCE_BADGE_LABELS[source]}
@@ -928,7 +960,12 @@ function HealthCheckCard({
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
 
     const ir = integrityReport ?? { entries: [], healthy: 0, missing: 0, moved: 0 };
-    const payload = buildExportPayload(ir, integrityHistory, hcReport, batchExecutionLog ?? undefined);
+    const payload = buildExportPayload(
+      ir,
+      integrityHistory,
+      hcReport,
+      batchExecutionLog ?? undefined,
+    );
     const content = format === "json" ? formatJSON(payload) : formatMarkdown(payload);
     const ext = format === "json" ? "json" : "md";
 
@@ -965,7 +1002,9 @@ function HealthCheckCard({
   const estimatedImpact = batchFixPlan
     ? formatEstimatedImpact(summarizeEstimatedImpact(batchFixPlan, integrityReport?.moved ?? 0))
     : "none";
-  const executionMetrics = batchExecutionLog ? computeBatchExecutionMetrics(batchExecutionLog) : null;
+  const executionMetrics = batchExecutionLog
+    ? computeBatchExecutionMetrics(batchExecutionLog)
+    : null;
   const failureAdvices = batchExecutionLog ? buildBatchFailureAdvices(batchExecutionLog) : [];
 
   const handleCopyExecutionSummary = async () => {
@@ -1021,19 +1060,27 @@ function HealthCheckCard({
         <div className={cn("rounded px-2 py-1.5", TIER_BG_COLORS[hcReport.tier])}>
           <div className="grid grid-cols-4 gap-1 text-center">
             <div>
-              <div className="text-sm font-medium text-text-primary tabular-nums">{hcReport.counts.total}</div>
+              <div className="text-sm font-medium text-text-primary tabular-nums">
+                {hcReport.counts.total}
+              </div>
               <div className="text-[9px] text-text-tertiary uppercase">Total</div>
             </div>
             <div>
-              <div className="text-sm font-medium text-emerald-400 tabular-nums">{hcReport.counts.healthy}</div>
+              <div className="text-sm font-medium text-emerald-400 tabular-nums">
+                {hcReport.counts.healthy}
+              </div>
               <div className="text-[9px] text-text-tertiary uppercase">Healthy</div>
             </div>
             <div>
-              <div className="text-sm font-medium text-amber-400 tabular-nums">{hcReport.counts.moved}</div>
+              <div className="text-sm font-medium text-amber-400 tabular-nums">
+                {hcReport.counts.moved}
+              </div>
               <div className="text-[9px] text-text-tertiary uppercase">Moved</div>
             </div>
             <div>
-              <div className="text-sm font-medium text-red-400 tabular-nums">{hcReport.counts.missing}</div>
+              <div className="text-sm font-medium text-red-400 tabular-nums">
+                {hcReport.counts.missing}
+              </div>
               <div className="text-[9px] text-text-tertiary uppercase">Missing</div>
             </div>
           </div>
@@ -1045,21 +1092,38 @@ function HealthCheckCard({
             Recommendations
           </span>
           {hcReport.recommendations.map((rec) => (
-            <div
-              key={rec.id}
-              className="flex items-start gap-1.5 py-1 px-1.5 rounded bg-surface-2"
-            >
-              <span className={cn("text-[10px] font-medium shrink-0 mt-px", PRIORITY_COLORS[rec.priority])}>
-                {rec.priority === "info" ? <CheckCircle2 size={10} className="inline" /> : <Zap size={10} className="inline" />}
+            <div key={rec.id} className="flex items-start gap-1.5 py-1 px-1.5 rounded bg-surface-2">
+              <span
+                className={cn(
+                  "text-[10px] font-medium shrink-0 mt-px",
+                  PRIORITY_COLORS[rec.priority],
+                )}
+              >
+                {rec.priority === "info" ? (
+                  <CheckCircle2 size={10} className="inline" />
+                ) : (
+                  <Zap size={10} className="inline" />
+                )}
               </span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
                   <p className="text-[11px] text-text-primary">{rec.title}</p>
-                  <span className={cn("text-[8px] font-medium uppercase leading-none px-1 py-px border rounded", PRIORITY_COLORS[rec.priority])}>
+                  <span
+                    className={cn(
+                      "text-[8px] font-medium uppercase leading-none px-1 py-px border rounded",
+                      PRIORITY_COLORS[rec.priority],
+                    )}
+                  >
                     {rec.priority}
                   </span>
                   {rec.confidence && rec.priority !== "info" && (
-                    <span className={cn("text-[8px] leading-none px-1 py-px border rounded", CONFIDENCE_COLORS[rec.confidence])} title={`Confidence: ${rec.confidence}`}>
+                    <span
+                      className={cn(
+                        "text-[8px] leading-none px-1 py-px border rounded",
+                        CONFIDENCE_COLORS[rec.confidence],
+                      )}
+                      title={`Confidence: ${rec.confidence}`}
+                    >
                       {CONFIDENCE_LABELS[rec.confidence]}
                     </span>
                   )}
@@ -1115,37 +1179,41 @@ function HealthCheckCard({
               {batchFixPlan.steps.map((step) => {
                 const runtimeStatus = batchStepStatuses[step.stepId] ?? "pending";
                 return (
-                <div
-                  key={step.stepId}
-                  className={cn(
-                    "flex items-start gap-1.5 py-1 px-1.5 rounded text-[10px]",
-                    step.kind === "auto" ? "bg-surface-2" : "bg-surface-1 opacity-60",
-                  )}
-                >
-                  <span className="shrink-0 tabular-nums text-text-tertiary mt-px">
-                    {step.order + 1}.
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="text-text-primary">{step.recommendation.title}</span>
-                      <span className={cn(
-                        "text-[8px] uppercase leading-none px-1 py-px border rounded",
-                        step.kind === "auto"
-                          ? "text-emerald-400 border-emerald-400/30"
-                          : "text-text-tertiary border-border",
-                      )}>
-                        {step.kind === "auto" ? "auto" : "manual"}
-                      </span>
-                      <span className={cn("text-[8px] uppercase", STEP_STATUS_COLORS[runtimeStatus])}>
-                        {runtimeStatus}
-                      </span>
-                    </div>
-                    <p className="text-text-tertiary leading-snug">{step.impact}</p>
-                    {step.manualReason && (
-                      <p className="text-amber-400/70 leading-snug italic">{step.manualReason}</p>
+                  <div
+                    key={step.stepId}
+                    className={cn(
+                      "flex items-start gap-1.5 py-1 px-1.5 rounded text-[10px]",
+                      step.kind === "auto" ? "bg-surface-2" : "bg-surface-1 opacity-60",
                     )}
+                  >
+                    <span className="shrink-0 tabular-nums text-text-tertiary mt-px">
+                      {step.order + 1}.
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <span className="text-text-primary">{step.recommendation.title}</span>
+                        <span
+                          className={cn(
+                            "text-[8px] uppercase leading-none px-1 py-px border rounded",
+                            step.kind === "auto"
+                              ? "text-emerald-400 border-emerald-400/30"
+                              : "text-text-tertiary border-border",
+                          )}
+                        >
+                          {step.kind === "auto" ? "auto" : "manual"}
+                        </span>
+                        <span
+                          className={cn("text-[8px] uppercase", STEP_STATUS_COLORS[runtimeStatus])}
+                        >
+                          {runtimeStatus}
+                        </span>
+                      </div>
+                      <p className="text-text-tertiary leading-snug">{step.impact}</p>
+                      {step.manualReason && (
+                        <p className="text-amber-400/70 leading-snug italic">{step.manualReason}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
                 );
               })}
             </div>
@@ -1164,7 +1232,8 @@ function HealthCheckCard({
                 ) : (
                   <>
                     <ShieldCheck size={11} />
-                    Confirm & Execute {batchFixPlan.autoCount} step{batchFixPlan.autoCount > 1 ? "s" : ""}
+                    Confirm & Execute {batchFixPlan.autoCount} step
+                    {batchFixPlan.autoCount > 1 ? "s" : ""}
                   </>
                 )}
               </button>
@@ -1207,7 +1276,11 @@ function HealthCheckCard({
                 {batchExecutionLog.summary.skipped > 0 && (
                   <span> · {batchExecutionLog.summary.skipped} skipped</span>
                 )}
-                <span> · items {batchExecutionLog.summary.itemChanges.success}/{batchExecutionLog.summary.itemChanges.total}</span>
+                <span>
+                  {" "}
+                  · items {batchExecutionLog.summary.itemChanges.success}/
+                  {batchExecutionLog.summary.itemChanges.total}
+                </span>
               </div>
               {executionMetrics && (
                 <div>
@@ -1219,7 +1292,9 @@ function HealthCheckCard({
             </div>
             {failureAdvices.length > 0 && (
               <div className="rounded border border-amber-500/20 bg-amber-500/5 p-1.5 space-y-1">
-                <div className="text-[10px] text-amber-300 uppercase tracking-wider">失败处置建议</div>
+                <div className="text-[10px] text-amber-300 uppercase tracking-wider">
+                  失败处置建议
+                </div>
                 <div className="space-y-1">
                   {failureAdvices.map((advice) => (
                     <div key={advice.category} className="text-[10px] leading-snug">
@@ -1237,8 +1312,12 @@ function HealthCheckCard({
 
             <div className="rounded border border-border/60 bg-surface-1 p-1.5 text-[10px] leading-snug text-text-tertiary">
               <div className="text-text-primary">回滚提示（手动）</div>
-              <div>可逆向恢复：relink-all（可改回原路径）、remove-stale（若文件仍在可重新导入）、提醒设置（可随时关闭/改频率）。</div>
-              <div>不可自动回滚：批处理不会执行自动高风险回滚；manual-only 步骤仍需人工确认与执行。</div>
+              <div>
+                可逆向恢复：relink-all（可改回原路径）、remove-stale（若文件仍在可重新导入）、提醒设置（可随时关闭/改频率）。
+              </div>
+              <div>
+                不可自动回滚：批处理不会执行自动高风险回滚；manual-only 步骤仍需人工确认与执行。
+              </div>
             </div>
 
             <div className="space-y-0.5 max-h-32 overflow-y-auto">
@@ -1256,7 +1335,9 @@ function HealthCheckCard({
                     {result.durationMs > 0 && (
                       <span className="text-text-tertiary"> ({result.durationMs}ms)</span>
                     )}
-                    {result.attempts > 1 && <span className="text-amber-400"> · retry x{result.attempts - 1}</span>}
+                    {result.attempts > 1 && (
+                      <span className="text-amber-400"> · retry x{result.attempts - 1}</span>
+                    )}
                   </div>
                   {result.outcome === "failed" && (
                     <button
@@ -1380,7 +1461,9 @@ function IntegritySection({
                 onClick={() => setShowHistory(!showHistory)}
                 className={cn(
                   "p-0.5 rounded text-[10px] px-1",
-                  showHistory ? "bg-accent/20 text-accent" : "hover:bg-surface-3 text-text-tertiary",
+                  showHistory
+                    ? "bg-accent/20 text-accent"
+                    : "hover:bg-surface-3 text-text-tertiary",
                 )}
                 title="Toggle scan history"
               >
@@ -1415,7 +1498,8 @@ function IntegritySection({
             {report.healthy} healthy
             {trend && trend.healthyDelta !== 0 && (
               <span className={trend.healthyDelta > 0 ? "text-emerald-500" : "text-red-400"}>
-                {" "}{formatDelta(trend.healthyDelta)}
+                {" "}
+                {formatDelta(trend.healthyDelta)}
               </span>
             )}
           </span>
@@ -1424,7 +1508,8 @@ function IntegritySection({
               {report.moved} moved
               {trend && trend.movedDelta !== 0 && (
                 <span className={trend.movedDelta < 0 ? "text-emerald-500" : "text-red-400"}>
-                  {" "}{formatDelta(trend.movedDelta)}
+                  {" "}
+                  {formatDelta(trend.movedDelta)}
                 </span>
               )}
             </span>
@@ -1434,7 +1519,8 @@ function IntegritySection({
               {report.missing} missing
               {trend && trend.missingDelta !== 0 && (
                 <span className={trend.missingDelta < 0 ? "text-emerald-500" : "text-red-400"}>
-                  {" "}{formatDelta(trend.missingDelta)}
+                  {" "}
+                  {formatDelta(trend.missingDelta)}
                 </span>
               )}
             </span>
@@ -1443,29 +1529,46 @@ function IntegritySection({
 
         {recentTrend.length > 1 && (
           <div className="rounded border border-border/60 bg-surface-2 px-2 py-1.5 space-y-1">
-            <div className="text-[10px] text-text-tertiary uppercase tracking-wider">Trend (recent {recentTrend.length})</div>
+            <div className="text-[10px] text-text-tertiary uppercase tracking-wider">
+              Trend (recent {recentTrend.length})
+            </div>
             <div className="grid grid-cols-3 gap-2 text-[10px]">
               <div>
-                <div className="text-red-400 tabular-nums">missing {recentTrend[recentTrend.length - 1]?.missing ?? 0}</div>
-                <div className="font-mono text-[11px] leading-none text-red-300/90">{toSparkline(recentTrend.map((p) => p.missing))}</div>
+                <div className="text-red-400 tabular-nums">
+                  missing {recentTrend[recentTrend.length - 1]?.missing ?? 0}
+                </div>
+                <div className="font-mono text-[11px] leading-none text-red-300/90">
+                  {toSparkline(recentTrend.map((p) => p.missing))}
+                </div>
               </div>
               <div>
-                <div className="text-amber-400 tabular-nums">moved {recentTrend[recentTrend.length - 1]?.moved ?? 0}</div>
-                <div className="font-mono text-[11px] leading-none text-amber-300/90">{toSparkline(recentTrend.map((p) => p.moved))}</div>
+                <div className="text-amber-400 tabular-nums">
+                  moved {recentTrend[recentTrend.length - 1]?.moved ?? 0}
+                </div>
+                <div className="font-mono text-[11px] leading-none text-amber-300/90">
+                  {toSparkline(recentTrend.map((p) => p.moved))}
+                </div>
               </div>
               <div>
-                <div className="text-violet-400 tabular-nums">invalid {recentTrend[recentTrend.length - 1]?.invalid ?? 0}</div>
-                <div className="font-mono text-[11px] leading-none text-violet-300/90">{toSparkline(recentTrend.map((p) => p.invalid))}</div>
+                <div className="text-violet-400 tabular-nums">
+                  invalid {recentTrend[recentTrend.length - 1]?.invalid ?? 0}
+                </div>
+                <div className="font-mono text-[11px] leading-none text-violet-300/90">
+                  {toSparkline(recentTrend.map((p) => p.invalid))}
+                </div>
               </div>
             </div>
             {shouldShowBatchImpact(lastBatchImpact) && (
               <div className="pt-0.5 text-[10px] text-text-secondary/90 border-t border-border/50">
                 <span className="text-text-tertiary">Last batch impact</span>
                 <span className="ml-1 tabular-nums">
-                  {formatRate(lastBatchImpact.repairRate)} repair · {formatRate(lastBatchImpact.hitRate)} hit · {formatRate(lastBatchImpact.skipRate)} skip
+                  {formatRate(lastBatchImpact.repairRate)} repair ·{" "}
+                  {formatRate(lastBatchImpact.hitRate)} hit · {formatRate(lastBatchImpact.skipRate)}{" "}
+                  skip
                 </span>
                 <span className="ml-1 text-text-tertiary">
-                  (ok {lastBatchImpact.successSteps} · fail {lastBatchImpact.failedSteps} · skip {lastBatchImpact.skippedSteps})
+                  (ok {lastBatchImpact.successSteps} · fail {lastBatchImpact.failedSteps} · skip{" "}
+                  {lastBatchImpact.skippedSteps})
                 </span>
               </div>
             )}
@@ -1516,7 +1619,10 @@ function IntegritySection({
                   </span>
                 )}
                 <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1 text-[10px] items-center">
-                  <label className="text-text-tertiary" title="Minimum scans in the last 7 days for 'Good' tier">
+                  <label
+                    className="text-text-tertiary"
+                    title="Minimum scans in the last 7 days for 'Good' tier"
+                  >
                     Good: min scans/7d
                   </label>
                   <input
@@ -1527,7 +1633,10 @@ function IntegritySection({
                     onChange={(e) => onThresholdsChange({ goodMinScans7d: Number(e.target.value) })}
                     className="w-12 text-[10px] bg-surface-2 border border-border rounded px-1 py-0.5 text-text-secondary text-right tabular-nums focus:outline-none focus:border-accent"
                   />
-                  <label className="text-text-tertiary" title="Maximum scan age in days for 'Good' tier">
+                  <label
+                    className="text-text-tertiary"
+                    title="Maximum scan age in days for 'Good' tier"
+                  >
                     Good: max age (days)
                   </label>
                   <input
@@ -1538,7 +1647,10 @@ function IntegritySection({
                     onChange={(e) => onThresholdsChange({ goodMaxAgeDays: Number(e.target.value) })}
                     className="w-12 text-[10px] bg-surface-2 border border-border rounded px-1 py-0.5 text-text-secondary text-right tabular-nums focus:outline-none focus:border-accent"
                   />
-                  <label className="text-text-tertiary" title="Maximum scan age in days before 'Poor' tier">
+                  <label
+                    className="text-text-tertiary"
+                    title="Maximum scan age in days before 'Poor' tier"
+                  >
                     Poor: max age (days)
                   </label>
                   <input
@@ -1626,7 +1738,9 @@ function IntegritySection({
                         }
                       } catch (err) {
                         const { toast } = await import("../../stores/toast");
-                        toast.error(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+                        toast.error(
+                          `Import failed: ${err instanceof Error ? err.message : String(err)}`,
+                        );
                       }
                     }}
                     className="flex items-center gap-0.5 text-[10px] text-text-tertiary hover:text-accent transition-colors"
@@ -1664,7 +1778,7 @@ function IntegritySection({
                   )}
                 >
                   <span className="text-text-tertiary shrink-0 tabular-nums">
-                    {new Date(snap.scannedAt + "Z").toLocaleDateString(undefined, {
+                    {new Date(`${snap.scannedAt}Z`).toLocaleDateString(undefined, {
                       month: "short",
                       day: "numeric",
                       hour: "2-digit",
@@ -1672,9 +1786,15 @@ function IntegritySection({
                     })}
                   </span>
                   <span className="text-emerald-400 tabular-nums">{snap.healthy}h</span>
-                  {snap.missing > 0 && <span className="text-red-400 tabular-nums">{snap.missing}m</span>}
-                  {snap.moved > 0 && <span className="text-amber-400 tabular-nums">{snap.moved}mv</span>}
-                  {(snap.invalid ?? 0) > 0 && <span className="text-violet-400 tabular-nums">{snap.invalid}iv</span>}
+                  {snap.missing > 0 && (
+                    <span className="text-red-400 tabular-nums">{snap.missing}m</span>
+                  )}
+                  {snap.moved > 0 && (
+                    <span className="text-amber-400 tabular-nums">{snap.moved}mv</span>
+                  )}
+                  {(snap.invalid ?? 0) > 0 && (
+                    <span className="text-violet-400 tabular-nums">{snap.invalid}iv</span>
+                  )}
                   {snap.notes && (
                     <span className="text-text-tertiary truncate" title={snap.notes}>
                       {snap.notes}
@@ -1693,7 +1813,12 @@ function IntegritySection({
               Moved ({movedEntries.length})
             </span>
             {movedEntries.map((entry) => (
-              <IntegrityEntryRow key={entry.id} entry={entry} onRelink={onRelink} onRemove={onRemove} />
+              <IntegrityEntryRow
+                key={entry.id}
+                entry={entry}
+                onRelink={onRelink}
+                onRemove={onRemove}
+              />
             ))}
             {movedEntries.length > 1 && (
               <button
@@ -1718,7 +1843,12 @@ function IntegritySection({
               Missing ({missingEntries.length})
             </span>
             {missingEntries.map((entry) => (
-              <IntegrityEntryRow key={entry.id} entry={entry} onRelink={onRelink} onRemove={onRemove} />
+              <IntegrityEntryRow
+                key={entry.id}
+                entry={entry}
+                onRelink={onRelink}
+                onRemove={onRemove}
+              />
             ))}
             {missingEntries.length > 1 && (
               <button
@@ -1755,7 +1885,9 @@ function IntegritySection({
               className="text-[11px] bg-surface-2 border border-border rounded px-1 py-0.5 text-text-secondary focus:outline-none focus:border-accent"
             >
               {FREQUENCY_IDS.map((id) => (
-                <option key={id} value={id}>{FREQUENCY_LABELS[id]}</option>
+                <option key={id} value={id}>
+                  {FREQUENCY_LABELS[id]}
+                </option>
               ))}
             </select>
           )}
