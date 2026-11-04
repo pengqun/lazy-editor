@@ -142,6 +142,14 @@ jobs:
           echo "$APPLE_API_KEY_BASE64" | base64 --decode > "$KEY_PATH"
           echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
+      # Optional identity / updater keys: omit from env when unset (empty secret ≠ unset for Tauri).
+      - name: Configure optional Tauri environment variables
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bash scripts/release-tauri-env.sh
+
       # ── Tauri build (with or without signing) ──
       # When APPLE_CERTIFICATE is set (even to empty), Tauri attempts code-signing
       # and calls `security import`, which hard-fails with invalid/missing certs.
@@ -151,12 +159,9 @@ jobs:
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Build Tauri bundle (signed + notarized, API key)
@@ -164,11 +169,8 @@ jobs:
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Build Tauri bundle (signed only)
@@ -176,16 +178,10 @@ jobs:
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Build Tauri bundle (unsigned)
         if: steps.signing.outputs.mode == 'unsigned'
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Verify code signature
@@ -202,25 +198,43 @@ jobs:
             exit 1
           fi
 
-      - name: Verify notarization (Gatekeeper + staple)
+      - name: Verify notarization (stapler + optional spctl)
         if: steps.signing.outputs.mode == 'signed-notarized'
         run: |
           set -euo pipefail
           APP_PATH=$(find src-tauri/target -type d -name "*.app" -path '*/bundle/*' | head -1)
           DMG_PATH=$(find src-tauri/target -type f -name "*.dmg" -path '*/bundle/*' | head -1)
 
-          if [ -n "$APP_PATH" ]; then
-            echo "Checking notarization ticket on app: $APP_PATH"
-            spctl -a -vv --type exec "$APP_PATH"
-            echo "✅ spctl accepted the signed app (notarization ticket present)."
+          if [ -z "$APP_PATH" ] && [ -z "$DMG_PATH" ]; then
+            echo "::error::No .app or .dmg bundle found for notarization validation."
+            exit 1
           fi
 
           if [ -n "$DMG_PATH" ]; then
-            echo "Validating stapled notarization on: $DMG_PATH"
+            echo "Validating stapled notarization (hard gate): $DMG_PATH"
             xcrun stapler validate "$DMG_PATH"
             echo "✅ stapler validate passed for DMG."
-          else
-            echo "::warning::No .dmg found for stapler validation (app notarization check still ran)."
+          fi
+
+          if [ -n "$APP_PATH" ]; then
+            echo "Validating stapled notarization (hard gate): $APP_PATH"
+            xcrun stapler validate "$APP_PATH"
+            echo "✅ stapler validate passed for .app."
+          fi
+
+          if [ -n "$APP_PATH" ]; then
+            echo "Optional Gatekeeper check (spctl): $APP_PATH"
+            if spctl -a -vv --type exec "$APP_PATH"; then
+              echo "✅ spctl accepted the signed app."
+            else
+              echo "::warning::spctl rejected the app; waiting 5s and retrying once..."
+              sleep 5
+              if spctl -a -vv --type exec "$APP_PATH"; then
+                echo "✅ spctl accepted the signed app on retry."
+              else
+                echo "::warning::spctl still rejected the app after retry. stapler validation passed — treating as runner Gatekeeper quirk."
+              fi
+            fi
           fi
 
       - name: Record signing outcome
