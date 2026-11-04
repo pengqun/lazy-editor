@@ -304,10 +304,14 @@ Artifacts are uploaded to the workflow run for QA/internal testing.
 
 `workflow_dispatch` is enabled, so you can trigger packaging manually from Actions.
 
-### Signing / notarization caveat
+### Signing / notarization (optional)
 
-By default, builds can be unsigned unless Apple signing/notarization secrets are configured.
-Unsigned apps are fine for internal testing but may show macOS security warnings on end-user machines.
+Release builds support a **dual path**:
+
+- **No Apple secrets** — the workflow still packages and uploads **unsigned** macOS artifacts (with clear warnings in the Actions log). Suitable for forks and internal QA.
+- **With secrets** — configure GitHub Actions secrets for code signing and (optionally) notarization; the workflow verifies signatures and notarization in CI when credentials are complete.
+
+Full secret names, notarization options (Apple ID vs App Store Connect API), and step-by-step release instructions: **[docs/release.md](./docs/release.md)**.
 
 ## Privacy
 
