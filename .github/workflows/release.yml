@@ -184,6 +184,24 @@ jobs:
         if: steps.signing.outputs.mode == 'unsigned'
         run: npm run tauri build -- --target aarch64-apple-darwin
 
+      - name: Notarize and staple DMG (Apple ID)
+        if: steps.signing.outputs.mode == 'signed-notarized' && steps.signing.outputs.notary_method == 'apple-id'
+        env:
+          NOTARY_METHOD: apple-id
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/release-notarize-dmg.sh
+
+      - name: Notarize and staple DMG (API key)
+        if: steps.signing.outputs.mode == 'signed-notarized' && steps.signing.outputs.notary_method == 'api-key'
+        env:
+          NOTARY_METHOD: api-key
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+        run: bash scripts/release-notarize-dmg.sh
+
       - name: Verify code signature
         if: steps.signing.outputs.mode != 'unsigned'
         run: |
