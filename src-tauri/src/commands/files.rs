@@ -100,9 +100,13 @@ pub async fn set_workspace_path(path: String, state: State<'_, AppState>) -> Res
 }
 
 fn file_path_to_string(path: FilePath) -> Result<String, String> {
-    path.into_path()
-        .map(|p| p.to_string_lossy().into_owned())
-        .map_err(|e| format!("Invalid path from dialog: {e}"))
+    let path = path
+        .into_path()
+        .map_err(|e| format!("Invalid path from dialog: {e}"))?;
+    if path.as_os_str().is_empty() {
+        return Err("Invalid path from dialog: empty path".to_string());
+    }
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// Maps a native picker result to an IPC path string. `None` means the user cancelled.
@@ -211,6 +215,6 @@ mod tests {
 
     #[test]
     fn file_path_to_string_rejects_empty_path() {
-        assert!(file_path_to_string(FilePath::Path(PathBuf::new())).is_ok());
+        assert!(file_path_to_string(FilePath::Path(PathBuf::new())).is_err());
     }
 }
