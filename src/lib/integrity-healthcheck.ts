@@ -28,7 +28,8 @@ export type RecommendationAction =
   | { type: "relink-all" }
   | { type: "remove-stale"; ids: number[] }
   | { type: "enable-reminders" }
-  | { type: "adjust-frequency"; suggested: ReminderFrequency };
+  | { type: "adjust-frequency"; suggested: ReminderFrequency }
+  | { type: "add-document" };
 
 export interface HealthCheckRecommendation {
   id: string;
@@ -101,6 +102,24 @@ export function generateRecommendations(
 ): HealthCheckRecommendation[] {
   const recs: HealthCheckRecommendation[] = [];
   const total = report.entries.length;
+
+  // Empty KB: scan cadence alone is not a health score — guide user to add content.
+  if (total === 0) {
+    return sortRecommendations([
+      {
+        id: "kb-empty",
+        priority: "high",
+        confidence: "high",
+        rationale:
+          "No KB documents to score; integrity ratios and entry health are not applicable yet.",
+        title: "Add your first document",
+        description:
+          "Your knowledge base has no documents yet. Import or paste a document so integrity checks can score source references.",
+        action: { type: "add-document" },
+      },
+    ]);
+  }
+
   const healthyRatio = total > 0 ? report.healthy / total : 1;
   const missingRatio = total > 0 ? report.missing / total : 0;
   const thresholds: RecommendationThresholdSettings = {
@@ -283,8 +302,8 @@ export function generateRecommendations(
     return true;
   });
 
-  // 7. All clear
-  if (deduped.length === 0) {
+  // 7. All clear (non-empty KB only)
+  if (deduped.length === 0 && total > 0) {
     deduped.push({
       id: "all-clear",
       priority: "info",
@@ -314,7 +333,8 @@ export function buildHealthCheckReport(
 ): HealthCheckReport {
   const metrics = computeScanCoverage(history, now);
   const internalThresholds = toHealthThresholds(thresholdSettings);
-  const tier = computeHealthTier(metrics, internalThresholds);
+  const documentTotal = report.entries.length;
+  const tier = documentTotal === 0 ? "empty" : computeHealthTier(metrics, internalThresholds);
   const recommendations = generateRecommendations(report, metrics, tier, reminderSettings);
 
   return {
