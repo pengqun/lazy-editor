@@ -22,7 +22,20 @@ export interface DiagnosticsInfo {
   db_document_count: number | null;
   db_path: string;
   embedder_loaded: boolean;
+  embedder_last_error: string | null;
   health: HealthReport;
+}
+
+/** True when embedder failure text invents a network/download cause without backend error evidence. */
+export function embedderDetailImpliesNetworkWithoutError(
+  detail: string,
+  lastError: string | null,
+): boolean {
+  if (lastError && lastError.trim().length > 0) {
+    return false;
+  }
+  const lower = detail.toLowerCase();
+  return lower.includes("network") || lower.includes("download");
 }
 
 export async function runHealthCheck(): Promise<HealthReport> {
@@ -55,6 +68,9 @@ export function formatDiagnosticsReport(info: DiagnosticsInfo): string {
     `- Documents: ${info.db_document_count !== null ? info.db_document_count : "unknown"}`,
   );
   lines.push(`- Embedder loaded: ${info.embedder_loaded ? "yes" : "no"}`);
+  if (info.embedder_last_error) {
+    lines.push(`- Embedder last error: ${info.embedder_last_error}`);
+  }
   lines.push("");
   lines.push("## Health Check");
   lines.push(`- Overall: ${info.health.ok ? "PASS" : "FAIL"}`);

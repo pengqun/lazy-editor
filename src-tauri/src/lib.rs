@@ -14,6 +14,8 @@ use tauri::Manager;
 pub struct AppState {
     pub db: Arc<Mutex<Database>>,
     pub embedder: Arc<Mutex<Option<Embedder>>>,
+    /// Last embedder initialization failure (cleared on success).
+    pub embedder_init_error: Arc<Mutex<Option<String>>>,
     pub workspace_path: Arc<Mutex<Option<String>>>,
     pub cancel_stream: Arc<AtomicBool>,
     pub self_test: Arc<Mutex<Option<String>>>,
@@ -111,20 +113,23 @@ pub fn run_with_context(context: tauri::Context) {
             })?;
             eprintln!("[selftest] setup: database ready");
 
-            let embedder = if is_self_test.is_some() {
+            let (embedder, embedder_init_error) = if is_self_test.is_some() {
                 eprintln!("[selftest] setup: skipping embedder (selftest mode)");
-                None
+                (None, None)
             } else {
                 eprintln!("[selftest] setup: initializing embedder...");
-                match Embedder::new() {
+                match Embedder::initialize() {
                     Ok(e) => {
                         eprintln!("[selftest] setup: embedder ready");
-                        Some(e)
+                        (Some(e), None)
                     }
-                    Err(e) => {
-                        log::error!("Failed to initialize embedder: {}. Knowledge base features will be unavailable.", e);
-                        eprintln!("Warning: embedder init failed ({}), KB features disabled", e);
-                        None
+                    Err(msg) => {
+                        log::error!(
+                            "Failed to initialize embedder: {}. Knowledge base features will be unavailable.",
+                            msg
+                        );
+                        eprintln!("Warning: embedder init failed ({}), KB features disabled", msg);
+                        (None, Some(msg))
                     }
                 }
             };
@@ -132,6 +137,7 @@ pub fn run_with_context(context: tauri::Context) {
             let state = AppState {
                 db: Arc::new(Mutex::new(db)),
                 embedder: Arc::new(Mutex::new(embedder)),
+                embedder_init_error: Arc::new(Mutex::new(embedder_init_error)),
                 workspace_path: Arc::new(Mutex::new(None)),
                 cancel_stream: Arc::new(AtomicBool::new(false)),
                 self_test: Arc::new(Mutex::new(is_self_test.clone())),
