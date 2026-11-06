@@ -5,8 +5,11 @@ mod web;
 
 use knowledge::db::Database;
 use knowledge::embedder::Embedder;
+use knowledge::embedder_init::{
+    default_embedder_loader, initialize_embedder_at_startup, EmbedderInitFlight,
+};
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::path::PathBuf;
 use tokio::sync::Mutex;
 use tauri::Manager;
@@ -14,6 +17,11 @@ use tauri::Manager;
 pub struct AppState {
     pub db: Arc<Mutex<Database>>,
     pub embedder: Arc<Mutex<Option<Embedder>>>,
+    /// Last embedder initialization failure (cleared on success).
+    pub embedder_init_error: Arc<Mutex<Option<String>>>,
+    pub embedder_loader: knowledge::embedder_init::EmbedderLoader,
+    /// Coalesces concurrent lazy-init attempts (see `embedder_init::ensure_embedder_loaded`).
+    pub embedder_init_flight: Arc<StdMutex<Option<EmbedderInitFlight>>>,
     pub workspace_path: Arc<Mutex<Option<String>>>,
     pub cancel_stream: Arc<AtomicBool>,
     pub self_test: Arc<Mutex<Option<String>>>,
@@ -111,27 +119,32 @@ pub fn run_with_context(context: tauri::Context) {
             })?;
             eprintln!("[selftest] setup: database ready");
 
-            let embedder = if is_self_test.is_some() {
+            let embedder_loader = default_embedder_loader();
+
+            let (embedder, embedder_init_error) = if is_self_test.is_some() {
                 eprintln!("[selftest] setup: skipping embedder (selftest mode)");
-                None
+                (None, None)
             } else {
                 eprintln!("[selftest] setup: initializing embedder...");
-                match Embedder::new() {
-                    Ok(e) => {
-                        eprintln!("[selftest] setup: embedder ready");
-                        Some(e)
-                    }
-                    Err(e) => {
-                        log::error!("Failed to initialize embedder: {}. Knowledge base features will be unavailable.", e);
-                        eprintln!("Warning: embedder init failed ({}), KB features disabled", e);
-                        None
-                    }
+                let (emb, err) = initialize_embedder_at_startup(&embedder_loader);
+                if emb.is_some() {
+                    eprintln!("[selftest] setup: embedder ready");
+                } else if let Some(ref msg) = err {
+                    log::error!(
+                        "Failed to initialize embedder: {}. Knowledge base features will be unavailable.",
+                        msg
+                    );
+                    eprintln!("Warning: embedder init failed ({}), KB features disabled", msg);
                 }
+                (emb, err)
             };
 
             let state = AppState {
                 db: Arc::new(Mutex::new(db)),
                 embedder: Arc::new(Mutex::new(embedder)),
+                embedder_init_error: Arc::new(Mutex::new(embedder_init_error)),
+                embedder_loader,
+                embedder_init_flight: Arc::new(StdMutex::new(None)),
                 workspace_path: Arc::new(Mutex::new(None)),
                 cancel_stream: Arc::new(AtomicBool::new(false)),
                 self_test: Arc::new(Mutex::new(is_self_test.clone())),

@@ -1,4 +1,8 @@
-import { buildExportFilename, formatDiagnosticsReport } from "@/lib/diagnostics";
+import {
+  buildExportFilename,
+  embedderDetailImpliesNetworkWithoutError,
+  formatDiagnosticsReport,
+} from "@/lib/diagnostics";
 import type { DiagnosticsInfo } from "@/lib/diagnostics";
 import { describe, expect, it } from "vitest";
 
@@ -12,6 +16,7 @@ function makeDiagnostics(overrides?: Partial<DiagnosticsInfo>): DiagnosticsInfo 
     db_document_count: 12,
     db_path: "/Users/test/Library/lazy-editor/knowledge.db",
     embedder_loaded: true,
+    embedder_last_error: null,
     health: {
       ok: true,
       subsystems: [
@@ -61,6 +66,16 @@ describe("formatDiagnosticsReport", () => {
     expect(report).toContain("Embedder loaded: no");
   });
 
+  it("includes embedder last error when present", () => {
+    const report = formatDiagnosticsReport(
+      makeDiagnostics({
+        embedder_loaded: false,
+        embedder_last_error: "model cache unreadable",
+      }),
+    );
+    expect(report).toContain("Embedder last error: model cache unreadable");
+  });
+
   it("includes health check results", () => {
     const report = formatDiagnosticsReport(makeDiagnostics());
     expect(report).toContain("Overall: PASS");
@@ -89,6 +104,35 @@ describe("formatDiagnosticsReport", () => {
     expect(report).not.toContain("sk-");
     expect(report).not.toContain("apiKey");
     expect(report).not.toContain("api_key");
+  });
+});
+
+describe("embedderDetailImpliesNetworkWithoutError", () => {
+  it("flags invented network causes when there is no stored error", () => {
+    expect(
+      embedderDetailImpliesNetworkWithoutError(
+        "Check your network connection to download the model",
+        null,
+      ),
+    ).toBe(true);
+  });
+
+  it("allows network hints when backend recorded a download-related error", () => {
+    expect(
+      embedderDetailImpliesNetworkWithoutError(
+        "Initialization failed — check network",
+        "HTTP download timed out",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not treat Re-run guidance as a fake network error", () => {
+    expect(
+      embedderDetailImpliesNetworkWithoutError(
+        "Not loaded yet — press Re-run in Diagnostics to initialize",
+        null,
+      ),
+    ).toBe(false);
   });
 });
 

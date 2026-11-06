@@ -17,6 +17,11 @@ impl Embedder {
         Ok(Embedder { model })
     }
 
+    /// Initialize the embedder, returning a user-facing error string on failure.
+    pub fn initialize() -> Result<Self, String> {
+        Self::new().map_err(|e| e.to_string())
+    }
+
     /// Embed a single text string. Returns a 384-dimensional vector.
     pub fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
         let embeddings = self.model.embed(vec![text.to_string()], None)?;
