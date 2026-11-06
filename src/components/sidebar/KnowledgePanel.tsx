@@ -174,6 +174,18 @@ export function KnowledgePanel() {
     setShowTextInput(false);
   };
 
+  const pasteTextHasBody = Boolean(textContent.trim());
+  const pasteTextHasTitle = Boolean(textTitle.trim());
+  const pasteTextCanSubmit = pasteTextHasTitle && pasteTextHasBody;
+  const pasteTextTitleRequired = pasteTextHasBody && !pasteTextHasTitle;
+  const pasteTextBodyRequired = pasteTextHasTitle && !pasteTextHasBody;
+  const pasteTextSubmitHint = pasteTextTitleRequired
+    ? "Enter a title to add this text to the knowledge base."
+    : pasteTextBodyRequired
+      ? "Enter text to index before adding to the knowledge base."
+      : null;
+  const pasteTextTitleDescribedBy = pasteTextTitleRequired ? "kb-paste-title-error" : undefined;
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     await searchKB(searchQuery);
@@ -405,24 +417,68 @@ export function KnowledgePanel() {
               <X size={12} className="text-text-tertiary" />
             </button>
           </div>
-          <input
-            type="text"
-            value={textTitle}
-            onChange={(e) => setTextTitle(e.target.value)}
-            placeholder="Title..."
-            className="w-full bg-surface-2 border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent"
-          />
-          <textarea
-            value={textContent}
-            onChange={(e) => setTextContent(e.target.value)}
-            placeholder="Paste text content here..."
-            rows={4}
-            className="w-full bg-surface-2 border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent resize-none"
-          />
+          <div>
+            <label htmlFor="kb-paste-title" className="text-xs text-text-secondary mb-1 block">
+              Title{" "}
+              <span className="text-red-400" aria-hidden="true">
+                *
+              </span>
+              <span className="sr-only">(required)</span>
+            </label>
+            <input
+              id="kb-paste-title"
+              type="text"
+              value={textTitle}
+              onChange={(e) => setTextTitle(e.target.value)}
+              placeholder="Title..."
+              required
+              aria-required="true"
+              aria-invalid={pasteTextTitleRequired || undefined}
+              aria-describedby={pasteTextTitleDescribedBy}
+              className={cn(
+                "w-full bg-surface-2 border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent",
+                pasteTextTitleRequired ? "border-red-400/60 focus:border-red-400" : "border-border",
+              )}
+            />
+            {pasteTextTitleRequired && (
+              <p id="kb-paste-title-error" className="mt-1 text-[11px] text-red-400">
+                Title is required.
+              </p>
+            )}
+          </div>
+          <div>
+            <label htmlFor="kb-paste-body" className="text-xs text-text-secondary mb-1 block">
+              Text to index
+            </label>
+            <textarea
+              id="kb-paste-body"
+              value={textContent}
+              onChange={(e) => setTextContent(e.target.value)}
+              placeholder="Paste text content here..."
+              rows={4}
+              aria-invalid={pasteTextBodyRequired || undefined}
+              aria-describedby={pasteTextBodyRequired ? "kb-paste-body-error" : undefined}
+              className={cn(
+                "w-full bg-surface-2 border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent resize-none",
+                pasteTextBodyRequired ? "border-red-400/60 focus:border-red-400" : "border-border",
+              )}
+            />
+            {pasteTextBodyRequired && (
+              <p id="kb-paste-body-error" className="mt-1 text-[11px] text-red-400">
+                Text to index is required.
+              </p>
+            )}
+          </div>
+          {pasteTextSubmitHint && (
+            <p id="kb-paste-submit-hint" className="text-[11px] text-text-tertiary">
+              {pasteTextSubmitHint}
+            </p>
+          )}
           <button
             type="button"
             onClick={handleIngestText}
-            disabled={!textTitle.trim() || !textContent.trim()}
+            disabled={!pasteTextCanSubmit}
+            aria-describedby={pasteTextSubmitHint ? "kb-paste-submit-hint" : undefined}
             className="w-full text-xs px-2 py-1 rounded bg-accent text-white hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Add to Knowledge Base
