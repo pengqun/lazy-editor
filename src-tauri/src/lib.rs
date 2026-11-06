@@ -7,7 +7,8 @@ use knowledge::db::Database;
 use knowledge::embedder::Embedder;
 use knowledge::embedder_init::{default_embedder_loader, initialize_embedder_at_startup};
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
+use tokio::sync::Notify;
 use std::path::PathBuf;
 use tokio::sync::Mutex;
 use tauri::Manager;
@@ -19,7 +20,7 @@ pub struct AppState {
     pub embedder_init_error: Arc<Mutex<Option<String>>>,
     pub embedder_loader: knowledge::embedder_init::EmbedderLoader,
     /// Coalesces concurrent lazy-init attempts (see `embedder_init::ensure_embedder_loaded`).
-    pub embedder_init_flight: Arc<Mutex<Option<knowledge::embedder_init::EmbedderInitFlight>>>,
+    pub embedder_init_flight: Arc<StdMutex<Option<Arc<Notify>>>>,
     pub workspace_path: Arc<Mutex<Option<String>>>,
     pub cancel_stream: Arc<AtomicBool>,
     pub self_test: Arc<Mutex<Option<String>>>,
@@ -142,7 +143,7 @@ pub fn run_with_context(context: tauri::Context) {
                 embedder: Arc::new(Mutex::new(embedder)),
                 embedder_init_error: Arc::new(Mutex::new(embedder_init_error)),
                 embedder_loader,
-                embedder_init_flight: Arc::new(Mutex::new(None)),
+                embedder_init_flight: Arc::new(StdMutex::new(None)),
                 workspace_path: Arc::new(Mutex::new(None)),
                 cancel_stream: Arc::new(AtomicBool::new(false)),
                 self_test: Arc::new(Mutex::new(is_self_test.clone())),

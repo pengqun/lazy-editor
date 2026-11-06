@@ -564,7 +564,7 @@ mod tests {
             embedder: Arc::new(Mutex::new(None)),
             embedder_init_error: Arc::new(Mutex::new(None)),
             embedder_loader: loader,
-            embedder_init_flight: Arc::new(Mutex::new(None)),
+            embedder_init_flight: Arc::new(std::sync::Mutex::new(None)),
             workspace_path: Arc::new(Mutex::new(None)),
             cancel_stream: Arc::new(AtomicBool::new(false)),
             self_test: Arc::new(Mutex::new(None)),
