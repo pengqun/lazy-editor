@@ -116,6 +116,9 @@ function manualReason(rec: HealthCheckRecommendation): string | undefined {
   if (rec.action.type === "remove-stale" && rec.confidence !== "high") {
     return "Confidence is not high — files may reappear. Review manually before removing.";
   }
+  if (rec.action.type === "add-document") {
+    return "Use Import document in the Knowledge panel to add your first entry.";
+  }
   return undefined;
 }
 
@@ -132,6 +135,8 @@ function estimateImpact(rec: HealthCheckRecommendation): string {
       return "Enables periodic scan reminders (easily reversible in settings).";
     case "adjust-frequency":
       return `Changes scan frequency to "${rec.action.suggested}" for better coverage.`;
+    case "add-document":
+      return "Adds the first KB document so integrity scoring can begin.";
     default:
       return "No changes.";
   }

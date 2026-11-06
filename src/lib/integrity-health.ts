@@ -4,7 +4,7 @@ import type { IntegrityScanSnapshot } from "@/stores/knowledge";
 
 // --- Types ---
 
-export type HealthTier = "good" | "warning" | "poor";
+export type HealthTier = "good" | "warning" | "poor" | "empty";
 
 export interface ScanCoverageMetrics {
   /** Number of scans in the last 7 days. */
@@ -317,16 +317,19 @@ export const TIER_LABELS: Record<HealthTier, string> = {
   good: "Good",
   warning: "Fair",
   poor: "Poor",
+  empty: "Empty",
 };
 
 export const TIER_COLORS: Record<HealthTier, string> = {
   good: "text-emerald-400",
   warning: "text-amber-400",
   poor: "text-red-400",
+  empty: "text-text-secondary",
 };
 
 export const TIER_BG_COLORS: Record<HealthTier, string> = {
   good: "bg-emerald-500/10",
   warning: "bg-amber-500/10",
   poor: "bg-red-500/10",
+  empty: "bg-surface-2/80",
 };

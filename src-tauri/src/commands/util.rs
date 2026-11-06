@@ -1,3 +1,4 @@
+use crate::knowledge::embedder_init::ensure_embedder_loaded;
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -54,7 +55,7 @@ pub async fn health_check(
     state: State<'_, AppState>,
 ) -> Result<HealthReport, String> {
     let app_data_dir = app.path().app_data_dir().ok();
-    Ok(health_check_inner(&state, app_data_dir.as_deref()).await)
+    Ok(health_check_inner(&state, app_data_dir.as_deref(), true).await)
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +72,7 @@ pub struct DiagnosticsInfo {
     pub db_document_count: Option<i64>,
     pub db_path: String,
     pub embedder_loaded: bool,
+    pub embedder_last_error: Option<String>,
     pub health: HealthReport,
 }
 
@@ -99,21 +101,71 @@ pub async fn collect_diagnostics(
         .map(|p| p.join("knowledge.db").to_string_lossy().into_owned())
         .unwrap_or_else(|_| "unknown".into());
 
-    let embedder_loaded = state.embedder.lock().await.is_some();
     let app_data_dir = app.path().app_data_dir().ok();
-    let health = health_check_inner(&state, app_data_dir.as_deref()).await;
+    Ok(build_diagnostics_info(
+        &state,
+        app_data_dir.as_deref(),
+        DiagnosticsStaticInfo {
+            app_version,
+            tauri_version,
+            workspace_path,
+            db_document_count,
+            db_path,
+        },
+    )
+    .await)
+}
 
-    Ok(DiagnosticsInfo {
-        app_version,
+struct DiagnosticsStaticInfo {
+    app_version: String,
+    tauri_version: String,
+    workspace_path: Option<String>,
+    db_document_count: Option<i64>,
+    db_path: String,
+}
+
+/// Shared diagnostics assembly (health check + embedder snapshot fields).
+pub(crate) async fn build_diagnostics_info(
+    state: &AppState,
+    app_data_dir: Option<&Path>,
+    static_info: DiagnosticsStaticInfo,
+) -> DiagnosticsInfo {
+    let health = health_check_inner(state, app_data_dir, true).await;
+    let (embedder_loaded, embedder_last_error) = embedder_snapshot_fields(state).await;
+    debug_assert!(embedder_fields_consistent_with_health(
+        &health,
+        embedder_loaded
+    ));
+
+    DiagnosticsInfo {
+        app_version: static_info.app_version,
         os: std::env::consts::OS.into(),
         arch: std::env::consts::ARCH.into(),
-        tauri_version,
-        workspace_path,
-        db_document_count,
-        db_path,
+        tauri_version: static_info.tauri_version,
+        workspace_path: static_info.workspace_path,
+        db_document_count: static_info.db_document_count,
+        db_path: static_info.db_path,
         embedder_loaded,
+        embedder_last_error,
         health,
-    })
+    }
+}
+
+async fn embedder_snapshot_fields(state: &AppState) -> (bool, Option<String>) {
+    let embedder_loaded = state.embedder.lock().await.is_some();
+    let embedder_last_error = state.embedder_init_error.lock().await.clone();
+    (embedder_loaded, embedder_last_error)
+}
+
+pub(crate) fn embedder_fields_consistent_with_health(
+    health: &HealthReport,
+    embedder_loaded: bool,
+) -> bool {
+    health
+        .subsystems
+        .iter()
+        .find(|s| s.name == "embedder")
+        .is_some_and(|s| s.ok == embedder_loaded)
 }
 
 // ---------------------------------------------------------------------------
@@ -284,11 +336,117 @@ fn check_settings_store(app_data_dir: &Path) -> SubsystemStatus {
     }
 }
 
+/// User-facing detail when the embedder is unavailable.
+pub(crate) fn format_embedder_unavailable_detail(
+    self_test_active: bool,
+    last_error: Option<&str>,
+    retry_attempted: bool,
+) -> String {
+    if self_test_active {
+        return "Disabled in --self-test mode — run the app normally to load the embedding model"
+            .into();
+    }
+
+    let mut parts = Vec::new();
+
+    match last_error {
+        Some(err) if !err.trim().is_empty() => {
+            parts.push(format!("Initialization failed: {}", err.trim()));
+            parts.push(embedder_failure_hint(err));
+        }
+        _ if retry_attempted => {
+            parts.push(
+                "Initialization failed — the embedding model could not be loaded (no error detail captured)"
+                    .into(),
+            );
+            parts.push(
+                "Check disk space and app permissions, then press Re-run in Diagnostics to retry"
+                    .into(),
+            );
+        }
+        _ => {
+            parts.push(
+                "Not loaded yet — press Re-run in Diagnostics to initialize the embedding model (no workspace required)"
+                    .into(),
+            );
+        }
+    }
+
+    parts.join(" — ")
+}
+
+fn embedder_failure_hint(error: &str) -> String {
+    let lower = error.to_lowercase();
+    if lower.contains("download")
+        || lower.contains("network")
+        || lower.contains("connection")
+        || lower.contains("timed out")
+        || lower.contains("timeout")
+        || lower.contains("http")
+    {
+        "The model may need to download on first use — check your network connection and press Re-run in Diagnostics to retry"
+            .into()
+    } else if lower.contains("permission")
+        || lower.contains("denied")
+        || lower.contains("read-only")
+        || lower.contains("no space")
+        || lower.contains("disk")
+    {
+        "Check that the app data folder is writable and you have free disk space, then press Re-run in Diagnostics"
+            .into()
+    } else {
+        "Press Re-run in Diagnostics to retry initialization; if this persists, export this report and check application logs"
+            .into()
+    }
+}
+
+async fn embedder_subsystem_status(state: &AppState, retry: bool) -> SubsystemStatus {
+    let self_test_active = state.self_test.lock().await.is_some();
+    let mut retry_attempted = false;
+
+    if retry && !self_test_active {
+        let loaded_before = state.embedder.lock().await.is_some();
+        if !loaded_before {
+            retry_attempted = true;
+            *state
+                .embedder_init_flight
+                .lock()
+                .expect("embedder_init_flight lock") = None;
+            let _ = ensure_embedder_loaded(state, true).await;
+        }
+    }
+
+    let loaded = state.embedder.lock().await.is_some();
+    if loaded {
+        return SubsystemStatus {
+            name: "embedder".into(),
+            ok: true,
+            detail: "Loaded (AllMiniLML6V2)".into(),
+        };
+    }
+
+    let last_error = state.embedder_init_error.lock().await.clone();
+    SubsystemStatus {
+        name: "embedder".into(),
+        ok: false,
+        detail: format_embedder_unavailable_detail(
+            self_test_active,
+            last_error.as_deref(),
+            retry_attempted,
+        ),
+    }
+}
+
 /// Shared health-check logic (avoids State extraction issues when called internally).
 ///
 /// `app_data_dir` is used for settings store and AI provider checks. When `None`
 /// (e.g. in unit tests), those checks report a graceful degradation message.
-async fn health_check_inner(state: &AppState, app_data_dir: Option<&Path>) -> HealthReport {
+/// When `retry_embedder` is true, attempts to initialize the embedder if missing.
+async fn health_check_inner(
+    state: &AppState,
+    app_data_dir: Option<&Path>,
+    retry_embedder: bool,
+) -> HealthReport {
     let mut subsystems = Vec::new();
 
     // 1. Workspace access
@@ -350,24 +508,8 @@ async fn health_check_inner(state: &AppState, app_data_dir: Option<&Path>) -> He
         }
     });
 
-    // 3. Embedder
-    subsystems.push({
-        let emb = state.embedder.lock().await;
-        if emb.is_some() {
-            SubsystemStatus {
-                name: "embedder".into(),
-                ok: true,
-                detail: "Loaded (AllMiniLML6V2)".into(),
-            }
-        } else {
-            SubsystemStatus {
-                name: "embedder".into(),
-                ok: false,
-                detail: "Not initialized — Restart the app to enable knowledge base features"
-                    .into(),
-            }
-        }
-    });
+    // 3. Embedder (optionally retry init — e.g. Diagnostics Re-run)
+    subsystems.push(embedder_subsystem_status(state, retry_embedder).await);
 
     // 4. Settings store (validates app data directory and settings file integrity)
     subsystems.push(match app_data_dir {
@@ -404,21 +546,75 @@ async fn health_check_inner(state: &AppState, app_data_dir: Option<&Path>) -> He
 mod tests {
     use super::*;
     use crate::knowledge::db::Database;
+    use crate::knowledge::embedder_init::EmbedderLoader;
     use std::path::PathBuf;
-    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
+    fn failing_loader(message: &'static str) -> EmbedderLoader {
+        Arc::new(move || Err(message.into()))
+    }
+
     /// Create a minimal AppState for testing (in-memory DB, no embedder).
     fn test_app_state() -> AppState {
+        test_app_state_with_loader(failing_loader("test embedder unavailable"))
+    }
+
+    fn test_app_state_with_loader(loader: EmbedderLoader) -> AppState {
         let db = Database::new(&PathBuf::from(":memory:")).unwrap();
         AppState {
             db: Arc::new(Mutex::new(db)),
             embedder: Arc::new(Mutex::new(None)),
+            embedder_init_error: Arc::new(Mutex::new(None)),
+            embedder_loader: loader,
+            embedder_init_flight: Arc::new(std::sync::Mutex::new(None)),
             workspace_path: Arc::new(Mutex::new(None)),
             cancel_stream: Arc::new(AtomicBool::new(false)),
             self_test: Arc::new(Mutex::new(None)),
         }
+    }
+
+    // -- Embedder status formatting ------------------------------------------
+
+    #[test]
+    fn embedder_unavailable_without_error_does_not_claim_network() {
+        let detail = format_embedder_unavailable_detail(false, None, false);
+        assert!(detail.contains("Re-run"));
+        assert!(!detail.to_lowercase().contains("network"));
+        assert!(!detail.to_lowercase().contains("download"));
+        assert!(!detail.to_lowercase().contains("restart"));
+    }
+
+    #[test]
+    fn embedder_unavailable_after_retry_without_error_is_honest() {
+        let detail = format_embedder_unavailable_detail(false, None, true);
+        assert!(detail.contains("could not be loaded"));
+        assert!(!detail.to_lowercase().contains("network"));
+        assert!(!detail.to_lowercase().contains("download"));
+    }
+
+    #[test]
+    fn embedder_unavailable_shows_stored_error() {
+        let detail = format_embedder_unavailable_detail(false, Some("cache corrupt"), true);
+        assert!(detail.contains("Initialization failed: cache corrupt"));
+        assert!(detail.contains("Re-run"));
+    }
+
+    #[test]
+    fn embedder_unavailable_network_hint_only_when_error_suggests_it() {
+        let detail = format_embedder_unavailable_detail(false, Some("HTTP download failed"), true);
+        assert!(detail.to_lowercase().contains("network"));
+        let detail2 = format_embedder_unavailable_detail(false, Some("permission denied"), true);
+        assert!(!detail2.to_lowercase().contains("network"));
+        assert!(detail2.to_lowercase().contains("writable"));
+    }
+
+    #[test]
+    fn embedder_unavailable_self_test_message() {
+        let detail = format_embedder_unavailable_detail(true, None, false);
+        assert!(detail.contains("--self-test"));
+        assert!(!detail.contains("Restart"));
     }
 
     // -- AI provider check ---------------------------------------------------
@@ -584,7 +780,7 @@ mod tests {
     async fn health_check_inner_returns_five_subsystems() {
         let state = test_app_state();
         let dir = tempfile::tempdir().unwrap();
-        let report = health_check_inner(&state, Some(dir.path())).await;
+        let report = health_check_inner(&state, Some(dir.path()), false).await;
         assert_eq!(report.subsystems.len(), 5);
 
         let names: Vec<&str> = report.subsystems.iter().map(|s| s.name.as_str()).collect();
@@ -598,7 +794,7 @@ mod tests {
     #[tokio::test]
     async fn health_check_inner_without_app_data_dir() {
         let state = test_app_state();
-        let report = health_check_inner(&state, None).await;
+        let report = health_check_inner(&state, None, false).await;
         assert_eq!(report.subsystems.len(), 5);
 
         // Settings and AI provider should still return graceful results
@@ -617,7 +813,7 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         *state.workspace_path.lock().await = Some(tmp.path().to_string_lossy().into_owned());
 
-        let report = health_check_inner(&state, None).await;
+        let report = health_check_inner(&state, None, false).await;
         let ws = report.subsystems.iter().find(|s| s.name == "workspace").unwrap();
         assert!(!ws.ok);
         assert!(ws.detail.contains("not a directory"));
@@ -633,10 +829,70 @@ mod tests {
         std::fs::write(&settings_path, r#"{"provider":"claude","claudeApiKey":"sk-test"}"#)
             .unwrap();
 
-        let report = health_check_inner(&state, Some(dir.path())).await;
+        let report = health_check_inner(&state, Some(dir.path()), false).await;
         // Embedder is None in test state, so overall should NOT be ok
         assert!(!report.ok);
         let emb = report.subsystems.iter().find(|s| s.name == "embedder").unwrap();
         assert!(!emb.ok);
+        assert!(emb.detail.contains("Re-run"));
+        assert!(!emb.detail.to_lowercase().contains("restart"));
+    }
+
+    #[tokio::test]
+    async fn health_check_embedder_reports_stored_startup_error() {
+        let state = test_app_state();
+        *state.embedder_init_error.lock().await =
+            Some("model files missing".to_string());
+
+        let report = health_check_inner(&state, None, false).await;
+        let emb = report.subsystems.iter().find(|s| s.name == "embedder").unwrap();
+        assert!(!emb.ok);
+        assert!(emb.detail.contains("model files missing"));
+    }
+
+    #[tokio::test]
+    async fn build_diagnostics_info_embedder_fields_match_health_after_retry() {
+        let state = test_app_state_with_loader(failing_loader("injected boom"));
+        let dir = tempfile::tempdir().unwrap();
+
+        let info = build_diagnostics_info(
+            &state,
+            Some(dir.path()),
+            DiagnosticsStaticInfo {
+                app_version: "0.0-test".into(),
+                tauri_version: "test".into(),
+                workspace_path: None,
+                db_document_count: Some(0),
+                db_path: "/tmp/knowledge.db".into(),
+            },
+        )
+        .await;
+
+        assert!(
+            embedder_fields_consistent_with_health(&info.health, info.embedder_loaded),
+            "embedder_loaded={} health_ok={}",
+            info.embedder_loaded,
+            info.health.subsystems.iter().find(|s| s.name == "embedder").unwrap().ok
+        );
+        assert!(!info.embedder_loaded);
+        assert_eq!(info.embedder_last_error.as_deref(), Some("injected boom"));
+    }
+
+    #[tokio::test]
+    async fn health_check_self_test_skips_loader() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_in_loader = Arc::clone(&calls);
+        let loader: EmbedderLoader = Arc::new(move || {
+            calls_in_loader.fetch_add(1, Ordering::SeqCst);
+            Err("must not run".into())
+        });
+        let state = test_app_state_with_loader(loader);
+        *state.self_test.lock().await = Some("editor-basic".into());
+
+        let report = health_check_inner(&state, None, true).await;
+        let emb = report.subsystems.iter().find(|s| s.name == "embedder").unwrap();
+        assert!(!emb.ok);
+        assert!(emb.detail.contains("--self-test"));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 }

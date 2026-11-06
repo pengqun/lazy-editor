@@ -73,6 +73,7 @@ const TIER_LABEL_MAP: Record<string, string> = {
   good: "Good",
   warning: "Fair",
   poor: "Poor",
+  empty: "Empty (unscored)",
 };
 
 const PRIORITY_LABEL_MAP: Record<string, string> = {

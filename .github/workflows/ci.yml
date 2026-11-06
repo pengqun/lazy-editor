@@ -44,7 +44,7 @@ jobs:
   smoke-desktop-editor:
     name: Desktop smoke test (Tauri self-test)
     needs: version-gate
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 20
 
     steps:
