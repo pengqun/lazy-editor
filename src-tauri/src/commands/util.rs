@@ -408,6 +408,10 @@ async fn embedder_subsystem_status(state: &AppState, retry: bool) -> SubsystemSt
         let loaded_before = state.embedder.lock().await.is_some();
         if !loaded_before {
             retry_attempted = true;
+            *state
+                .embedder_init_flight
+                .lock()
+                .expect("embedder_init_flight lock") = None;
             let _ = ensure_embedder_loaded(state, true).await;
         }
     }

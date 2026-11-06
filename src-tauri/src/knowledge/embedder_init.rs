@@ -50,16 +50,28 @@ async fn run_embedder_loader(state: &AppState) -> bool {
     }
 }
 
-/// Clears in-flight state and wakes waiters when the leader task is cancelled/dropped.
+/// Marks init finished or clears in-flight state when the leader task is cancelled/dropped.
 struct FlightCompletionGuard {
-    flight: Arc<StdMutex<Option<Arc<Notify>>>>,
+    flight: Arc<StdMutex<Option<EmbedderInitFlight>>>,
     notify: Arc<Notify>,
+    finished: std::cell::Cell<bool>,
+}
+
+impl FlightCompletionGuard {
+    fn complete(&self) {
+        *self.flight.lock().expect("embedder_init_flight lock") =
+            Some(EmbedderInitFlight::Completed);
+        self.notify.notify_waiters();
+        self.finished.set(true);
+    }
 }
 
 impl Drop for FlightCompletionGuard {
     fn drop(&mut self) {
-        *self.flight.lock().expect("embedder_init_flight lock") = None;
-        self.notify.notify_waiters();
+        if !self.finished.get() {
+            *self.flight.lock().expect("embedder_init_flight lock") = None;
+            self.notify.notify_waiters();
+        }
     }
 }
 
@@ -71,6 +83,14 @@ enum FlightRole {
 enum FollowOrLead {
     Follow(Arc<Notify>),
     Lead(Arc<Notify>),
+    Completed,
+}
+
+/// In-flight or last-completed lazy init (not cleared on failure so stragglers do not re-run the loader).
+#[derive(Clone)]
+pub enum EmbedderInitFlight {
+    InProgress(Arc<Notify>),
+    Completed,
 }
 
 fn embedder_is_loaded_fast(state: &AppState) -> bool {
@@ -95,12 +115,14 @@ async fn join_embedder_init_flight(state: &AppState) -> FlightRole {
             .lock()
             .expect("embedder_init_flight lock");
 
-        if let Some(existing) = flight.as_ref().cloned() {
-            FollowOrLead::Follow(existing)
-        } else {
-            let notify = Arc::new(Notify::new());
-            *flight = Some(notify.clone());
-            FollowOrLead::Lead(notify)
+        match flight.as_ref() {
+            Some(EmbedderInitFlight::InProgress(notify)) => FollowOrLead::Follow(Arc::clone(notify)),
+            Some(EmbedderInitFlight::Completed) => FollowOrLead::Completed,
+            None => {
+                let notify = Arc::new(Notify::new());
+                *flight = Some(EmbedderInitFlight::InProgress(notify.clone()));
+                FollowOrLead::Lead(notify)
+            }
         }
     };
 
@@ -109,6 +131,7 @@ async fn join_embedder_init_flight(state: &AppState) -> FlightRole {
             wait_for_embedder_init_follower(notify).await;
             FlightRole::Follower
         }
+        FollowOrLead::Completed => FlightRole::Follower,
         FollowOrLead::Lead(notify) => FlightRole::Leader(notify),
     }
 }
@@ -133,16 +156,20 @@ pub async fn ensure_embedder_loaded(state: &AppState, attempt_init: bool) -> boo
     match join_embedder_init_flight(state).await {
         FlightRole::Follower => state.embedder.lock().await.is_some(),
         FlightRole::Leader(notify) => {
-            let _completion = FlightCompletionGuard {
+            let completion = FlightCompletionGuard {
                 flight: Arc::clone(&state.embedder_init_flight),
                 notify: notify.clone(),
+                finished: std::cell::Cell::new(false),
             };
 
             if state.embedder.lock().await.is_some() {
+                completion.complete();
                 return true;
             }
 
-            run_embedder_loader(state).await
+            let loaded = run_embedder_loader(state).await;
+            completion.complete();
+            loaded
         }
     }
 }
@@ -340,8 +367,11 @@ mod tests {
 
         assert!(!second);
         assert!(
-            state.embedder_init_flight.lock().unwrap().is_none(),
-            "flight slot must be cleared"
+            matches!(
+                state.embedder_init_flight.lock().unwrap().as_ref(),
+                Some(EmbedderInitFlight::Completed)
+            ),
+            "second init should finish and mark the flight completed"
         );
     }
 }
