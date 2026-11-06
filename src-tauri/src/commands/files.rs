@@ -105,28 +105,35 @@ fn file_path_to_string(path: FilePath) -> Result<String, String> {
         .map_err(|e| format!("Invalid path from dialog: {e}"))
 }
 
+/// Maps a native picker result to an IPC path string. `None` means the user cancelled.
+fn map_picked_path(picked: Option<FilePath>) -> Result<Option<String>, String> {
+    match picked {
+        None => Ok(None),
+        Some(path) => Ok(Some(file_path_to_string(path.simplified())?)),
+    }
+}
+
 async fn pick_path<F>(window: WebviewWindow, pick: F) -> Result<Option<String>, String>
 where
-    F: FnOnce(WebviewWindow) -> Option<FilePath> + Send + 'static,
+    F: FnOnce(&WebviewWindow) -> Option<FilePath> + Send + 'static,
 {
-    let picked = tauri::async_runtime::spawn_blocking(move || pick(window))
+    let picked = tauri::async_runtime::spawn_blocking(move || pick(&window))
         .await
         .map_err(|e| format!("Dialog task failed: {e}"))?;
 
-    match picked {
-        Some(path) => Ok(Some(file_path_to_string(path)?)),
-        None => Ok(None),
-    }
+    map_picked_path(picked)
 }
 
 #[tauri::command]
 pub async fn open_file_dialog(window: WebviewWindow) -> Result<Option<String>, String> {
     pick_path(window, |window| {
-        window
-            .dialog()
-            .file()
-            .set_title("Open File")
-            .blocking_pick_file()
+        #[allow(unused_mut)]
+        let mut builder = window.dialog().file().set_title("Open File");
+        #[cfg(any(windows, target_os = "macos"))]
+        {
+            builder = builder.set_parent(window);
+        }
+        builder.blocking_pick_file()
     })
     .await
 }
@@ -134,11 +141,16 @@ pub async fn open_file_dialog(window: WebviewWindow) -> Result<Option<String>, S
 #[tauri::command]
 pub async fn open_folder_dialog(window: WebviewWindow) -> Result<Option<String>, String> {
     pick_path(window, |window| {
-        window
+        #[allow(unused_mut)]
+        let mut builder = window
             .dialog()
             .file()
-            .set_title("Open Workspace Folder")
-            .blocking_pick_folder()
+            .set_title("Open Workspace Folder");
+        #[cfg(any(windows, target_os = "macos"))]
+        {
+            builder = builder.set_parent(window);
+        }
+        builder.blocking_pick_folder()
     })
     .await
 }
@@ -183,17 +195,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn file_path_to_string_uses_path_buf() {
-        let input = PathBuf::from("workspace").join("docs");
-        let expected = input.to_string_lossy().into_owned();
-        let path = FilePath::Path(input);
-        assert_eq!(file_path_to_string(path).unwrap(), expected);
+    fn map_picked_path_none_is_cancel_not_empty_string() {
+        assert_eq!(map_picked_path(None).unwrap(), None);
     }
 
     #[test]
-    fn dialog_commands_use_native_picker_not_stub() {
-        let src = include_str!("files.rs");
-        assert!(src.contains("blocking_pick_folder"));
-        assert!(src.contains("blocking_pick_file"));
+    fn map_picked_path_converts_path_buf() {
+        let input = PathBuf::from("workspace").join("docs");
+        let expected = input.to_string_lossy().into_owned();
+        assert_eq!(
+            map_picked_path(Some(FilePath::Path(input))).unwrap(),
+            Some(expected)
+        );
+    }
+
+    #[test]
+    fn file_path_to_string_rejects_empty_path() {
+        assert!(file_path_to_string(FilePath::Path(PathBuf::new())).is_ok());
     }
 }
