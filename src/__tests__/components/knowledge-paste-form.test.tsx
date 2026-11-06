@@ -44,6 +44,19 @@ describe("KnowledgePanel paste-to-KB form", () => {
     cleanup();
   });
 
+  it("opens paste form with an empty title and no blocking hints", async () => {
+    await openPasteForm();
+
+    const titleInput = screen.getByLabelText(/Title/i) as HTMLInputElement;
+    const submit = screen.getByRole("button", { name: "Add to Knowledge Base" });
+
+    expect(titleInput.value).toBe("");
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText("Title is required.")).toBeNull();
+    expect(screen.queryByText("Enter a title to add this text to the knowledge base.")).toBeNull();
+    expect(titleInput.getAttribute("aria-invalid")).toBeNull();
+  });
+
   it("shows title requirement when body is filled but title is blank", async () => {
     await openPasteForm();
 
@@ -81,12 +94,29 @@ describe("KnowledgePanel paste-to-KB form", () => {
     fireEvent.change(screen.getByLabelText(/Text to index/i), {
       target: { value: "Note body for KB" },
     });
-    fireEvent.change(screen.getByLabelText(/Title/i), { target: { value: "QA label only" } });
+    fireEvent.change(screen.getByLabelText(/Title/i), { target: { value: "Note title" } });
 
     const submit = screen.getByRole("button", { name: "Add to Knowledge Base" });
     expect((submit as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByText("Title is required.")).toBeNull();
     expect(submit.getAttribute("aria-describedby")).toBeNull();
+  });
+
+  it("uses the same empty-title behavior when opened from empty-state quick paste", async () => {
+    render(createElement(KnowledgePanel));
+    fireEvent.click(screen.getByRole("button", { name: "Paste quick notes" }));
+
+    const titleInput = screen.getByLabelText(/Title/i) as HTMLInputElement;
+    expect(titleInput.value).toBe("");
+
+    fireEvent.change(screen.getByLabelText(/Text to index/i), {
+      target: { value: "Quick note body" },
+    });
+
+    expect(
+      (screen.getByRole("button", { name: "Add to Knowledge Base" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.getByText("Title is required.")).toBeTruthy();
   });
 
   it("submits title and body through ingest when the form is complete", async () => {
