@@ -13,13 +13,43 @@ import type { IntegrityReminderSettings } from "../../lib/integrity-reminder";
 // --- Helpers ---
 
 function makeReport(overrides?: Partial<IntegrityReport>): IntegrityReport {
-  return {
-    entries: [],
+  const base = {
     healthy: 10,
     missing: 0,
     moved: 0,
     ...overrides,
   };
+  const entries =
+    overrides?.entries ??
+    Array.from({ length: base.healthy + base.missing + base.moved }, (_, i) => {
+      if (i < base.healthy) {
+        return {
+          id: i + 1,
+          title: `doc-${i + 1}`,
+          sourcePath: `/doc-${i + 1}`,
+          status: "healthy" as const,
+          movedCandidate: null,
+        };
+      }
+      if (i < base.healthy + base.missing) {
+        return {
+          id: i + 1,
+          title: `doc-${i + 1}`,
+          sourcePath: `/doc-${i + 1}`,
+          status: "missing" as const,
+          movedCandidate: null,
+        };
+      }
+      return {
+        id: i + 1,
+        title: `doc-${i + 1}`,
+        sourcePath: `/doc-${i + 1}`,
+        status: "moved" as const,
+        movedCandidate: `/new/doc-${i + 1}`,
+      };
+    });
+
+  return { ...base, entries };
 }
 
 function makeMetrics(overrides?: Partial<ScanCoverageMetrics>): ScanCoverageMetrics {
@@ -229,6 +259,15 @@ describe("generateRecommendations", () => {
     const report = makeReport({ healthy: 6, moved: 4, missing: 0, entries });
     const recs = generateRecommendations(report, makeMetrics(), "good", DEFAULT_REMINDER);
     expect(findRec(recs, "moderate-health-ratio")).toBeDefined();
+  });
+
+  it("recommends adding a document when KB is empty (not all-clear)", () => {
+    const report = makeReport({ healthy: 0, missing: 0, moved: 0, entries: [] });
+    const recs = generateRecommendations(report, makeMetrics(), "good", DEFAULT_REMINDER);
+    expect(recs).toHaveLength(1);
+    expect(recs[0].id).toBe("kb-empty");
+    expect(recs.some((r) => r.id === "all-clear")).toBe(false);
+    expect(recs[0].action).toEqual({ type: "add-document" });
   });
 
   it("returns all-clear when everything is good", () => {
@@ -655,5 +694,49 @@ describe("buildHealthCheckReport", () => {
       now,
     );
     expect(hcReport.timestamp).toBe("2026-03-12T12:00:00.000Z");
+  });
+
+  it("uses empty tier and add-document guidance for zero-entry KB after scan", () => {
+    const report = makeReport({ healthy: 0, missing: 0, moved: 0, entries: [] });
+    const history = [makeSnapshot({ total: 0, healthy: 0, missing: 0, moved: 0 })];
+
+    const hcReport = buildHealthCheckReport(
+      report,
+      history,
+      DEFAULT_THRESHOLDS,
+      DEFAULT_REMINDER,
+      now,
+    );
+
+    expect(hcReport.tier).toBe("empty");
+    expect(hcReport.counts).toEqual({ total: 0, healthy: 0, missing: 0, moved: 0 });
+    expect(hcReport.recommendations.map((r) => r.id)).toEqual(["kb-empty"]);
+  });
+
+  it("still reports good tier for non-empty healthy KB with strong scan cadence", () => {
+    const entries = Array.from({ length: 3 }, (_, i) => ({
+      id: i,
+      title: `doc-${i}`,
+      sourcePath: `/doc-${i}`,
+      status: "healthy" as const,
+      movedCandidate: null,
+    }));
+    const report = makeReport({ healthy: 3, entries });
+    const history = [
+      makeSnapshot({ scannedAt: "2026-03-12T10:00:00" }),
+      makeSnapshot({ id: 2, scannedAt: "2026-03-11T10:00:00" }),
+    ];
+
+    const hcReport = buildHealthCheckReport(
+      report,
+      history,
+      DEFAULT_THRESHOLDS,
+      DEFAULT_REMINDER,
+      now,
+    );
+
+    expect(hcReport.tier).toBe("good");
+    expect(hcReport.recommendations.some((r) => r.id === "all-clear")).toBe(true);
+    expect(hcReport.recommendations.some((r) => r.id === "kb-empty")).toBe(false);
   });
 });
