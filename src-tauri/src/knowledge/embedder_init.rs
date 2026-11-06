@@ -63,59 +63,80 @@ impl Drop for FlightCompletionGuard {
     }
 }
 
+enum FlightRole {
+    Follower,
+    Leader(Arc<Notify>),
+}
+
+enum FollowOrLead {
+    Follow(Arc<Notify>),
+    Lead(Arc<Notify>),
+}
+
+async fn wait_for_embedder_init_follower(notify: Arc<Notify>) {
+    let mut notified = std::pin::pin!(notify.notified());
+    notified.as_mut().enable();
+    notified.as_mut().await;
+}
+
+/// Register for the current init flight.
+async fn join_embedder_init_flight(state: &AppState) -> FlightRole {
+    let role = {
+        let mut flight = state
+            .embedder_init_flight
+            .lock()
+            .expect("embedder_init_flight lock");
+
+        if let Some(existing) = flight.as_ref().cloned() {
+            FollowOrLead::Follow(existing)
+        } else {
+            let notify = Arc::new(Notify::new());
+            *flight = Some(notify.clone());
+            FollowOrLead::Lead(notify)
+        }
+    };
+
+    match role {
+        FollowOrLead::Follow(notify) => {
+            wait_for_embedder_init_follower(notify).await;
+            FlightRole::Follower
+        }
+        FollowOrLead::Lead(notify) => FlightRole::Leader(notify),
+    }
+}
+
 /// Ensure the embedder is loaded when `attempt_init` is true.
 ///
 /// One loader call per in-flight group; concurrent callers wait on the same Notify.
 /// Self-test mode never calls the loader.
 pub async fn ensure_embedder_loaded(state: &AppState, attempt_init: bool) -> bool {
-    if state.embedder.lock().await.is_some() {
-        return true;
-    }
-
     if !attempt_init {
-        return false;
+        return state.embedder.lock().await.is_some();
     }
 
     if state.self_test.lock().await.is_some() {
         return false;
     }
 
-    let waiter = {
-        let mut flight = state
-            .embedder_init_flight
-            .lock()
-            .expect("embedder_init_flight lock");
-        if let Some(notify) = flight.as_ref() {
-            Some(notify.clone())
-        } else {
-            let notify = Arc::new(Notify::new());
-            *flight = Some(notify.clone());
-            None
-        }
-    };
-
-    if let Some(notify) = waiter {
-        notify.notified().await;
-        return state.embedder.lock().await.is_some();
-    }
-
-    let notify = state
-        .embedder_init_flight
-        .lock()
-        .expect("embedder_init_flight lock")
-        .clone()
-        .expect("leader flight notify");
-
-    let _completion = FlightCompletionGuard {
-        flight: Arc::clone(&state.embedder_init_flight),
-        notify: notify.clone(),
-    };
-
     if state.embedder.lock().await.is_some() {
         return true;
     }
 
-    run_embedder_loader(state).await
+    match join_embedder_init_flight(state).await {
+        FlightRole::Follower => state.embedder.lock().await.is_some(),
+        FlightRole::Leader(notify) => {
+            let _completion = FlightCompletionGuard {
+                flight: Arc::clone(&state.embedder_init_flight),
+                notify: notify.clone(),
+            };
+
+            if state.embedder.lock().await.is_some() {
+                return true;
+            }
+
+            run_embedder_loader(state).await
+        }
+    }
 }
 
 #[cfg(test)]
@@ -139,6 +160,90 @@ mod tests {
             cancel_stream: Arc::new(AtomicBool::new(false)),
             self_test: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// Reproduces the pre-fix follower bug: `notify_waiters()` before `Notified` registration.
+    #[tokio::test]
+    async fn missed_notify_without_enable_times_out() {
+        let notify = Arc::new(Notify::new());
+        let notify_for_follower = Arc::clone(&notify);
+        let notify_for_leader = Arc::clone(&notify);
+
+        let follower = tokio::spawn(async move {
+            tokio::task::yield_now().await;
+            notify_for_follower.notified().await;
+        });
+
+        tokio::task::yield_now().await;
+        notify_for_leader.notify_waiters();
+
+        let result = tokio::time::timeout(Duration::from_millis(200), follower).await;
+        assert!(
+            result.is_err(),
+            "awaiting notified() without enable() first must not complete after notify_waiters()"
+        );
+    }
+
+    #[tokio::test]
+    async fn notified_enable_before_notify_waiters_wakes() {
+        let notify = Arc::new(Notify::new());
+        let notify_for_follower = Arc::clone(&notify);
+        let notify_for_leader = Arc::clone(&notify);
+
+        let follower = tokio::spawn(async move {
+            let mut notified = std::pin::pin!(notify_for_follower.notified());
+            notified.as_mut().enable();
+            tokio::task::yield_now().await;
+            notified.as_mut().await;
+        });
+
+        tokio::task::yield_now().await;
+        notify_for_leader.notify_waiters();
+
+        tokio::time::timeout(Duration::from_secs(1), follower)
+            .await
+            .expect("enabled follower should not miss notify_waiters")
+            .expect("follower panicked");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_instant_loader_single_call_no_hang() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_in_loader = Arc::clone(&calls);
+        let loader: EmbedderLoader = Arc::new(move || {
+            calls_in_loader.fetch_add(1, Ordering::SeqCst);
+            Err("instant injected failure".into())
+        });
+
+        let state = Arc::new(test_state(loader));
+        let ready = Arc::new(AtomicUsize::new(0));
+        let mut tasks = Vec::new();
+
+        for _ in 0..8 {
+            let state = Arc::clone(&state);
+            let ready = Arc::clone(&ready);
+            tasks.push(tokio::spawn(async move {
+                ready.fetch_add(1, Ordering::SeqCst);
+                while ready.load(Ordering::SeqCst) < 8 {
+                    tokio::task::yield_now().await;
+                }
+                tokio::time::timeout(
+                    Duration::from_secs(2),
+                    ensure_embedder_loaded(&state, true),
+                )
+                .await
+                .expect("ensure should not hang when notify registration races")
+            }));
+        }
+
+        for task in tasks {
+            assert!(!task.await.unwrap());
+        }
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "instant failure must still single-flight all concurrent callers"
+        );
     }
 
     #[tokio::test]
@@ -185,7 +290,6 @@ mod tests {
         let loader: EmbedderLoader = Arc::new(|| Err("loader failed".into()));
         let state = test_state(loader);
         *state.embedder_init_error.lock().await = Some("stale error".into());
-        // Simulate inconsistent prior state: loaded handle without cleared error.
         *state.embedder.lock().await = None;
 
         assert!(!ensure_embedder_loaded(&state, true).await);
