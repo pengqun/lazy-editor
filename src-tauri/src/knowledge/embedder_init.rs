@@ -73,6 +73,14 @@ enum FollowOrLead {
     Lead(Arc<Notify>),
 }
 
+fn embedder_is_loaded_fast(state: &AppState) -> bool {
+    match state.embedder.try_lock() {
+        Ok(guard) => guard.is_some(),
+        // Contention: do not block here — join the in-flight init instead.
+        Err(_) => false,
+    }
+}
+
 async fn wait_for_embedder_init_follower(notify: Arc<Notify>) {
     let mut notified = std::pin::pin!(notify.notified());
     notified.as_mut().enable();
@@ -118,7 +126,7 @@ pub async fn ensure_embedder_loaded(state: &AppState, attempt_init: bool) -> boo
         return false;
     }
 
-    if state.embedder.lock().await.is_some() {
+    if embedder_is_loaded_fast(state) {
         return true;
     }
 
