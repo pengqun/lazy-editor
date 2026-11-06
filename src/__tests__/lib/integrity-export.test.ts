@@ -389,6 +389,30 @@ describe("export includes priority/confidence/rationale", () => {
     expect(md).toContain("(confidence: med)");
   });
 
+  it("markdown export labels empty KB health as unscored", () => {
+    const emptyHealthCheck = {
+      ...healthCheck,
+      tier: "empty" as const,
+      counts: { total: 0, healthy: 0, missing: 0, moved: 0 },
+      recommendations: [
+        {
+          id: "kb-empty",
+          priority: "high" as const,
+          confidence: "high" as const,
+          rationale: "No KB documents to score.",
+          title: "Add your first document",
+          description: "Import or paste a document to begin integrity scoring.",
+          action: { type: "add-document" as const },
+        },
+      ],
+    };
+    const md = formatMarkdown(
+      makePayload({ healthCheck: emptyHealthCheck, summary: emptyHealthCheck.counts, entries: [] }),
+    );
+    expect(md).toContain("**Current health:** Empty (unscored)");
+    expect(md).toContain("**Key risk:** Add your first document");
+  });
+
   it("markdown export includes management summary with top priorities", () => {
     const payload = makePayload({ healthCheck });
     const md = formatMarkdown(payload);

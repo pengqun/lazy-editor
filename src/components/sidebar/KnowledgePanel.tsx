@@ -535,6 +535,7 @@ export function KnowledgePanel() {
           onConfirmBatchPlan={confirmBatchPlan}
           onRetryBatchStep={retryBatchStep}
           onClearBatchLog={clearBatchLog}
+          onAddDocument={handleIngestFile}
         />
       )}
 
@@ -992,6 +993,7 @@ function HealthCheckCard({
   onConfirmBatchPlan,
   onRetryBatchStep,
   onClearBatchLog,
+  onAddDocument,
 }: {
   report: HealthCheckReport;
   integrityReport: IntegrityReport | null;
@@ -1010,6 +1012,7 @@ function HealthCheckCard({
   onConfirmBatchPlan: () => Promise<void>;
   onRetryBatchStep: (stepId: string) => Promise<void>;
   onClearBatchLog: () => void;
+  onAddDocument: () => void | Promise<void>;
 }) {
   const handleExport = async (format: "json" | "md") => {
     const { save } = await import("@tauri-apps/plugin-dialog");
@@ -1051,7 +1054,15 @@ function HealthCheckCard({
       case "adjust-frequency":
         onAdjustFrequency(action.suggested);
         break;
+      case "add-document":
+        void onAddDocument();
+        break;
     }
+  };
+
+  const quickActionLabel = (action: RecommendationAction): string => {
+    if (action.type === "add-document") return "Import document";
+    return "Apply fix";
   };
 
   const hasActionableRecs = hcReport.recommendations.some((r) => r.id !== "all-clear");
@@ -1191,7 +1202,7 @@ function HealthCheckCard({
                     onClick={() => handleQuickAction(rec.action!)}
                     className="mt-0.5 text-[10px] text-accent hover:text-accent/80 transition-colors"
                   >
-                    Apply fix
+                    {quickActionLabel(rec.action!)}
                   </button>
                 )}
               </div>
