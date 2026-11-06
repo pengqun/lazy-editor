@@ -2,7 +2,8 @@ use crate::AppState;
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
-use tauri::State;
+use tauri::{State, WebviewWindow};
+use tauri_plugin_dialog::{DialogExt, FilePath};
 
 #[derive(Serialize)]
 pub struct FileEntry {
@@ -98,17 +99,64 @@ pub async fn set_workspace_path(path: String, state: State<'_, AppState>) -> Res
     Ok(())
 }
 
-#[tauri::command]
-pub async fn open_file_dialog() -> Result<Option<String>, String> {
-    
-    // For now, return None — the frontend uses @tauri-apps/plugin-dialog directly
-    // This is a placeholder for file dialog integration
-    Ok(None)
+fn file_path_to_string(path: FilePath) -> Result<String, String> {
+    let path = path
+        .into_path()
+        .map_err(|e| format!("Invalid path from dialog: {e}"))?;
+    if path.as_os_str().is_empty() {
+        return Err("Invalid path from dialog: empty path".to_string());
+    }
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Maps a native picker result to an IPC path string. `None` means the user cancelled.
+fn map_picked_path(picked: Option<FilePath>) -> Result<Option<String>, String> {
+    match picked {
+        None => Ok(None),
+        Some(path) => Ok(Some(file_path_to_string(path.simplified())?)),
+    }
+}
+
+async fn pick_path<F>(window: WebviewWindow, pick: F) -> Result<Option<String>, String>
+where
+    F: FnOnce(&WebviewWindow) -> Option<FilePath> + Send + 'static,
+{
+    let picked = tauri::async_runtime::spawn_blocking(move || pick(&window))
+        .await
+        .map_err(|e| format!("Dialog task failed: {e}"))?;
+
+    map_picked_path(picked)
 }
 
 #[tauri::command]
-pub async fn open_folder_dialog() -> Result<Option<String>, String> {
-    Ok(None)
+pub async fn open_file_dialog(window: WebviewWindow) -> Result<Option<String>, String> {
+    pick_path(window, |window| {
+        #[allow(unused_mut)]
+        let mut builder = window.dialog().file().set_title("Open File");
+        #[cfg(any(windows, target_os = "macos"))]
+        {
+            builder = builder.set_parent(window);
+        }
+        builder.blocking_pick_file()
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn open_folder_dialog(window: WebviewWindow) -> Result<Option<String>, String> {
+    pick_path(window, |window| {
+        #[allow(unused_mut)]
+        let mut builder = window
+            .dialog()
+            .file()
+            .set_title("Open Workspace Folder");
+        #[cfg(any(windows, target_os = "macos"))]
+        {
+            builder = builder.set_parent(window);
+        }
+        builder.blocking_pick_folder()
+    })
+    .await
 }
 
 fn list_files_in_dir(dir: &str) -> Result<Vec<FileEntry>, String> {
@@ -144,4 +192,29 @@ fn list_files_in_dir(dir: &str) -> Result<Vec<FileEntry>, String> {
     }
 
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn map_picked_path_none_is_cancel_not_empty_string() {
+        assert_eq!(map_picked_path(None).unwrap(), None);
+    }
+
+    #[test]
+    fn map_picked_path_converts_path_buf() {
+        let input = PathBuf::from("workspace").join("docs");
+        let expected = input.to_string_lossy().into_owned();
+        assert_eq!(
+            map_picked_path(Some(FilePath::Path(input))).unwrap(),
+            Some(expected)
+        );
+    }
+
+    #[test]
+    fn file_path_to_string_rejects_empty_path() {
+        assert!(file_path_to_string(FilePath::Path(PathBuf::new())).is_err());
+    }
 }
