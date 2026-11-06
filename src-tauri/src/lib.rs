@@ -121,18 +121,29 @@ pub fn run_with_context(context: tauri::Context) {
 
             let embedder_loader = default_embedder_loader();
 
-            let embedder_cell = Arc::new(Mutex::new(None));
-            let embedder_init_error_cell = Arc::new(Mutex::new(None));
-
-            if is_self_test.is_some() {
+            let (embedder, embedder_init_error) = if is_self_test.is_some() {
                 eprintln!("[selftest] setup: skipping embedder (selftest mode)");
-            }
+                (None, None)
+            } else {
+                eprintln!("[selftest] setup: initializing embedder...");
+                let (emb, err) = initialize_embedder_at_startup(&embedder_loader);
+                if emb.is_some() {
+                    eprintln!("[selftest] setup: embedder ready");
+                } else if let Some(ref msg) = err {
+                    log::error!(
+                        "Failed to initialize embedder: {}. Knowledge base features will be unavailable.",
+                        msg
+                    );
+                    eprintln!("Warning: embedder init failed ({}), KB features disabled", msg);
+                }
+                (emb, err)
+            };
 
             let state = AppState {
                 db: Arc::new(Mutex::new(db)),
-                embedder: embedder_cell.clone(),
-                embedder_init_error: embedder_init_error_cell.clone(),
-                embedder_loader: embedder_loader.clone(),
+                embedder: Arc::new(Mutex::new(embedder)),
+                embedder_init_error: Arc::new(Mutex::new(embedder_init_error)),
+                embedder_loader,
                 embedder_init_flight: Arc::new(StdMutex::new(None)),
                 workspace_path: Arc::new(Mutex::new(None)),
                 cancel_stream: Arc::new(AtomicBool::new(false)),
@@ -151,43 +162,6 @@ pub fn run_with_context(context: tauri::Context) {
             eprintln!("[selftest] setup: CLI args parsed");
 
             app.manage(state);
-
-            // Defer embedder init so the main thread is not blocked by model download / ONNX load
-            // (WKWebView can stay blank until the run loop pumps).
-            if is_self_test.is_none() {
-                let emb_cell = embedder_cell.clone();
-                let err_cell = embedder_init_error_cell.clone();
-                let loader = embedder_loader.clone();
-                tauri::async_runtime::spawn(async move {
-                    eprintln!("[startup] background: initializing embedder...");
-                    let join = tokio::task::spawn_blocking(move || initialize_embedder_at_startup(&loader));
-                    match join.await {
-                        Ok((emb, err)) => {
-                            let has_emb = emb.is_some();
-                            let err_for_log = err.clone();
-                            *emb_cell.lock().await = emb;
-                            *err_cell.lock().await = err;
-                            if has_emb {
-                                eprintln!("[startup] background: embedder ready");
-                            } else if let Some(ref msg) = err_for_log {
-                                log::error!(
-                                    "Failed to initialize embedder: {}. Knowledge base features will be unavailable.",
-                                    msg
-                                );
-                                eprintln!(
-                                    "Warning: embedder init failed ({}), KB features disabled",
-                                    msg
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            let msg = format!("Embedder init task failed: {}", e);
-                            log::error!("{}", msg);
-                            *err_cell.lock().await = Some(msg);
-                        }
-                    }
-                });
-            }
 
             // Diagnostics: after startup, report whether a window/webview exists and attempt
             // to invoke a Tauri command from JS via eval.
