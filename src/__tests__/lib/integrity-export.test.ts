@@ -406,7 +406,9 @@ describe("export includes priority/confidence/rationale", () => {
         },
       ],
     };
-    const md = formatMarkdown(makePayload({ healthCheck: emptyHealthCheck, summary: emptyHealthCheck.counts, entries: [] }));
+    const md = formatMarkdown(
+      makePayload({ healthCheck: emptyHealthCheck, summary: emptyHealthCheck.counts, entries: [] }),
+    );
     expect(md).toContain("**Current health:** Empty (unscored)");
     expect(md).toContain("**Key risk:** Add your first document");
   });
