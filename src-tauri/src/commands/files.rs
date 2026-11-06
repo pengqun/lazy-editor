@@ -2,7 +2,8 @@ use crate::AppState;
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
-use tauri::State;
+use tauri::{State, WebviewWindow};
+use tauri_plugin_dialog::{DialogExt, FilePath};
 
 #[derive(Serialize)]
 pub struct FileEntry {
@@ -98,17 +99,48 @@ pub async fn set_workspace_path(path: String, state: State<'_, AppState>) -> Res
     Ok(())
 }
 
-#[tauri::command]
-pub async fn open_file_dialog() -> Result<Option<String>, String> {
-    
-    // For now, return None — the frontend uses @tauri-apps/plugin-dialog directly
-    // This is a placeholder for file dialog integration
-    Ok(None)
+fn file_path_to_string(path: FilePath) -> Result<String, String> {
+    path.into_path()
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| format!("Invalid path from dialog: {e}"))
+}
+
+async fn pick_path<F>(window: WebviewWindow, pick: F) -> Result<Option<String>, String>
+where
+    F: FnOnce(WebviewWindow) -> Option<FilePath> + Send + 'static,
+{
+    let picked = tauri::async_runtime::spawn_blocking(move || pick(window))
+        .await
+        .map_err(|e| format!("Dialog task failed: {e}"))?;
+
+    match picked {
+        Some(path) => Ok(Some(file_path_to_string(path)?)),
+        None => Ok(None),
+    }
 }
 
 #[tauri::command]
-pub async fn open_folder_dialog() -> Result<Option<String>, String> {
-    Ok(None)
+pub async fn open_file_dialog(window: WebviewWindow) -> Result<Option<String>, String> {
+    pick_path(window, |window| {
+        window
+            .dialog()
+            .file()
+            .set_title("Open File")
+            .blocking_pick_file()
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn open_folder_dialog(window: WebviewWindow) -> Result<Option<String>, String> {
+    pick_path(window, |window| {
+        window
+            .dialog()
+            .file()
+            .set_title("Open Workspace Folder")
+            .blocking_pick_folder()
+    })
+    .await
 }
 
 fn list_files_in_dir(dir: &str) -> Result<Vec<FileEntry>, String> {
@@ -144,4 +176,24 @@ fn list_files_in_dir(dir: &str) -> Result<Vec<FileEntry>, String> {
     }
 
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_path_to_string_uses_path_buf() {
+        let input = PathBuf::from("workspace").join("docs");
+        let expected = input.to_string_lossy().into_owned();
+        let path = FilePath::Path(input);
+        assert_eq!(file_path_to_string(path).unwrap(), expected);
+    }
+
+    #[test]
+    fn dialog_commands_use_native_picker_not_stub() {
+        let src = include_str!("files.rs");
+        assert!(src.contains("blocking_pick_folder"));
+        assert!(src.contains("blocking_pick_file"));
+    }
 }
