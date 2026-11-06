@@ -1,11 +1,29 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
 const host = process.env.TAURI_DEV_HOST;
 
+/**
+ * WKWebView loads the Tauri `tauri://` / `http://tauri.localhost` document;
+ * module scripts and CSS are fetched from the `asset://` custom protocol.
+ * Vite injects `crossorigin` so preloads use CORS fetches; for opaque
+ * bundled origins this can prevent the main bundle from executing (blank web
+ * surface, no AXWebArea). Strip it in production HTML only.
+ */
+function tauriProductionStripCrossorigin(): Plugin {
+  return {
+    name: "tauri-production-strip-crossorigin",
+    apply: "build",
+    enforce: "post",
+    transformIndexHtml(html) {
+      return html.replace(/\s+crossorigin(?:="anonymous")?/g, "");
+    },
+  };
+}
+
 export default defineConfig(async ({ command }) => ({
-  plugins: [react()],
+  plugins: [react(), ...(command === "build" ? [tauriProductionStripCrossorigin()] : [])],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -16,6 +34,7 @@ export default defineConfig(async ({ command }) => ({
   base: command === "build" ? "./" : undefined,
   clearScreen: false,
   build: {
+    modulePreload: false,
     rollupOptions: {
       output: {
         manualChunks(id) {

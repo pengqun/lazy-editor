@@ -1,5 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
 import { Activity, Settings } from "lucide-react";
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { CriticalAlert } from "./components/CriticalAlert";
 import { ToastContainer } from "./components/Toast";
 import { FindReplaceBar } from "./components/editor/FindReplaceBar";
@@ -14,6 +15,7 @@ import { modKey } from "./lib/shortcuts";
 import { openFolderDialog, setWorkspacePath } from "./lib/tauri";
 import { checkForAppUpdate } from "./lib/updater";
 import { useAiStore } from "./stores/ai";
+import { useAppShellStore } from "./stores/appShell";
 import { useEditorStore } from "./stores/editor";
 import { useFilesStore } from "./stores/files";
 import { useKnowledgeStore } from "./stores/knowledge";
@@ -78,28 +80,93 @@ export default function App() {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Load workspace + AI settings on mount; detect first-run
+  const appPhase = useAppShellStore((s) => s.phase);
+  const appShellError = useAppShellStore((s) => s.error);
+  const setAppShellPhase = useAppShellStore((s) => s.setPhase);
+  const setAppShellError = useAppShellStore((s) => s.setError);
+  const bootStarted = useRef(false);
+
+  // Load workspace + AI settings on mount; detect first-run; fail closed on hung IPC
   useEffect(() => {
+    if (bootStarted.current) return;
+    bootStarted.current = true;
+
+    const LOAD_TIMEOUT_MS = 12_000;
+    let finished = false;
+
+    const timeoutId = window.setTimeout(() => {
+      if (finished) return;
+      setAppShellError(
+        import.meta.env.DEV
+          ? "Startup is taking longer than expected."
+          : "The editor did not finish loading in time. If this persists after a restart, capture WebKit console output from the Diagnostics panel.",
+      );
+      setAppShellPhase("error");
+    }, LOAD_TIMEOUT_MS);
+
+    const markReady = () => {
+      finished = true;
+      window.clearTimeout(timeoutId);
+      setAppShellPhase("ready");
+    };
+
+    const markFailed = (message: string) => {
+      finished = true;
+      window.clearTimeout(timeoutId);
+      setAppShellError(message);
+      setAppShellPhase("error");
+    };
+
     const init = async () => {
-      await loadWorkspace();
-      await useAiStore.getState().loadSettings();
-      void checkForAppUpdate();
+      try {
+        await loadWorkspace();
+        await useAiStore.getState().loadSettings();
 
-      const ws = useFilesStore.getState().workspacePath;
-      // Sync workspace path to knowledge store for workspace-level retrieval defaults
-      useKnowledgeStore.getState().setWorkspacePath(ws);
-      const { claudeApiKey, openaiApiKey, provider } = useAiStore.getState().settings;
-      const hasApiKey =
-        provider === "ollama" ||
-        (provider === "claude" && claudeApiKey.length > 0) ||
-        (provider === "openai" && openaiApiKey.length > 0);
+        try {
+          const BACKEND_PING_MS = 8000;
+          await Promise.race([
+            invoke("get_startup_params"),
+            new Promise<never>((_, rej) =>
+              setTimeout(
+                () => rej(new Error("Native backend did not respond in time")),
+                BACKEND_PING_MS,
+              ),
+            ),
+          ]);
+        } catch (err) {
+          markFailed(
+            `Cannot reach the native backend (${String(err)}). The UI cannot load safely.`,
+          );
+          return;
+        }
 
-      if (!ws && !hasApiKey) {
-        setShowOnboarding(true);
+        const ws = useFilesStore.getState().workspacePath;
+        useKnowledgeStore.getState().setWorkspacePath(ws);
+        const { claudeApiKey, openaiApiKey, provider } = useAiStore.getState().settings;
+        const hasApiKey =
+          provider === "ollama" ||
+          (provider === "claude" && claudeApiKey.length > 0) ||
+          (provider === "openai" && openaiApiKey.length > 0);
+
+        if (!ws && !hasApiKey) {
+          setShowOnboarding(true);
+        }
+
+        void checkForAppUpdate().catch((e) => {
+          console.warn("[updater] startup check skipped:", e);
+        });
+        markReady();
+      } catch (err) {
+        markFailed(`Startup failed: ${String(err)}`);
       }
     };
-    init();
-  }, [loadWorkspace]);
+
+    void init();
+    return () => {
+      finished = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [loadWorkspace, setAppShellError, setAppShellPhase]);
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -270,6 +337,37 @@ export default function App() {
       setShowSettings(true);
     }
   };
+
+  if (appPhase === "loading") {
+    return (
+      <div
+        className="flex h-screen w-screen items-center justify-center"
+        style={{ background: "var(--surface-0)", color: "var(--text-secondary)" }}
+      >
+        <div className="text-center text-sm">Starting Lazy Editor…</div>
+      </div>
+    );
+  }
+
+  if (appPhase === "error") {
+    return (
+      <div
+        className="flex h-screen w-screen flex-col items-center justify-center gap-4 px-8 text-center"
+        style={{ background: "var(--surface-0)", color: "var(--text-primary)" }}
+      >
+        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+          Lazy Editor could not start
+        </h1>
+        <p className="max-w-md text-sm" style={{ color: "var(--text-secondary)" }}>
+          {appShellError ?? "An unexpected error occurred during startup."}
+        </p>
+        <p className="max-w-md text-xs" style={{ color: "var(--text-tertiary)" }}>
+          Open Diagnostics ({modKey}⇧D) for details, or restart the app. Knowledge Base features
+          stay unavailable when the embedding model cannot load; that is separate from this screen.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-surface-0">
