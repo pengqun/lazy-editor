@@ -383,8 +383,11 @@ fn embedder_failure_hint(error: &str) -> String {
         || lower.contains("timed out")
         || lower.contains("timeout")
         || lower.contains("http")
+        || lower.contains("retrieve")
+        || lower.contains("model.onnx")
+        || lower.contains("onnx/")
     {
-        "The model may need to download on first use — check your network connection and press Re-run in Diagnostics to retry"
+        "The AllMiniLML6V2 embedding model must download from Hugging Face on first use — check network access (set HF_ENDPOINT if you use a mirror), confirm the model cache path above is writable, then press Re-run in Diagnostics"
             .into()
     } else if lower.contains("permission")
         || lower.contains("denied")
@@ -608,6 +611,19 @@ mod tests {
         let detail2 = format_embedder_unavailable_detail(false, Some("permission denied"), true);
         assert!(!detail2.to_lowercase().contains("network"));
         assert!(detail2.to_lowercase().contains("writable"));
+    }
+
+    #[test]
+    fn embedder_unavailable_retrieve_onnx_error_suggests_download_and_cache() {
+        let detail = format_embedder_unavailable_detail(
+            false,
+            Some("Failed to retrieve model.onnx"),
+            true,
+        );
+        assert!(detail.contains("Failed to retrieve model.onnx"));
+        assert!(detail.to_lowercase().contains("hugging face"));
+        assert!(detail.to_lowercase().contains("hf_endpoint"));
+        assert!(detail.contains("Re-run"));
     }
 
     #[test]
@@ -876,6 +892,28 @@ mod tests {
         );
         assert!(!info.embedder_loaded);
         assert_eq!(info.embedder_last_error.as_deref(), Some("injected boom"));
+    }
+
+    #[tokio::test]
+    async fn health_check_embedder_retry_after_completed_flight_reruns_loader() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_in_loader = Arc::clone(&calls);
+        let loader: EmbedderLoader = Arc::new(move || {
+            calls_in_loader.fetch_add(1, Ordering::SeqCst);
+            Err("Failed to retrieve model.onnx".into())
+        });
+
+        let state = test_app_state_with_loader(loader);
+        *state.embedder_init_error.lock().await =
+            Some("Failed to retrieve model.onnx".into());
+        *state.embedder_init_flight.lock().unwrap() =
+            Some(crate::knowledge::embedder_init::EmbedderInitFlight::Completed);
+
+        let report = health_check_inner(&state, None, true).await;
+        let emb = report.subsystems.iter().find(|s| s.name == "embedder").unwrap();
+        assert!(!emb.ok);
+        assert!(emb.detail.contains("Failed to retrieve model.onnx"));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
