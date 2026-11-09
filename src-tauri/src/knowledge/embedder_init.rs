@@ -1,13 +1,30 @@
 use crate::knowledge::embedder::Embedder;
 use crate::AppState;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::Notify;
 
 /// Pluggable embedder construction (production loads fastembed; tests inject stubs).
 pub type EmbedderLoader = Arc<dyn Fn() -> Result<Embedder, String> + Send + Sync>;
 
+/// Subdirectory under the Tauri app data dir where fastembed caches Hugging Face model files.
+pub const EMBEDDER_CACHE_DIR_NAME: &str = "fastembed_cache";
+
+pub fn embedder_loader_for_cache(cache_dir: PathBuf) -> EmbedderLoader {
+    if let Err(e) = std::fs::create_dir_all(&cache_dir) {
+        let display = cache_dir.display().to_string();
+        return Arc::new(move || {
+            Err(format!(
+                "Cannot create embedding model cache at {}: {}",
+                display, e
+            ))
+        });
+    }
+    Arc::new(move || Embedder::initialize_with_cache(&cache_dir))
+}
+
 pub fn default_embedder_loader() -> EmbedderLoader {
-    Arc::new(|| Embedder::initialize())
+    embedder_loader_for_cache(PathBuf::from(".fastembed_cache"))
 }
 
 /// Synchronous startup init (Tauri `setup` hook).
@@ -303,6 +320,14 @@ mod tests {
             assert!(!task.await.unwrap());
         }
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn embedder_loader_for_cache_creates_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("fastembed_cache");
+        let _loader = embedder_loader_for_cache(cache.clone());
+        assert!(cache.is_dir(), "loader setup should ensure cache dir exists");
     }
 
     #[tokio::test]

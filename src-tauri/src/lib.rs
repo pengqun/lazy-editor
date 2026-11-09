@@ -6,7 +6,8 @@ mod web;
 use knowledge::db::Database;
 use knowledge::embedder::Embedder;
 use knowledge::embedder_init::{
-    default_embedder_loader, initialize_embedder_at_startup, EmbedderInitFlight,
+    embedder_loader_for_cache, initialize_embedder_at_startup, EmbedderInitFlight,
+    EMBEDDER_CACHE_DIR_NAME,
 };
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -119,7 +120,8 @@ pub fn run_with_context(context: tauri::Context) {
             })?;
             eprintln!("[selftest] setup: database ready");
 
-            let embedder_loader = default_embedder_loader();
+            let embedder_cache_dir = app_data_dir.join(EMBEDDER_CACHE_DIR_NAME);
+            let embedder_loader = embedder_loader_for_cache(embedder_cache_dir);
 
             let (embedder, embedder_init_error) = if is_self_test.is_some() {
                 eprintln!("[selftest] setup: skipping embedder (selftest mode)");
